@@ -12,8 +12,11 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
-import { addCategory, deleteCategory, editCategory, resetCategories, setCategories } from '../store/categorySlice';
-import { getCategories as fetchCategories } from '../database/database';
+import { deleteCategory, editCategory, resetCategories, setCategories, addNewCategory } from '../store/categorySlice';
+import { getCategories as fetchCategories, addCategory as addCategoryToDatabase, Category } from '../database/database';
+import { theme } from '../utils/theme';
+import { useRefreshStore } from '../store/refreshStore';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const CategoryScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
@@ -21,6 +24,8 @@ const CategoryScreen = () => {
   const [categoryName, setCategoryName] = useState('');
   const [error, setError] = useState('');
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
 
   useEffect(() => {
     loadCategories();
@@ -34,8 +39,10 @@ const CategoryScreen = () => {
     try {
       const dbCategories = await fetchCategories();
       const formattedCategories = dbCategories.map(cat => ({
-        id: cat.id!.toString(),
-        name: cat.name
+        id: cat.id!,
+        name: cat.name,
+        createdAt: cat.createdAt,
+        updatedAt: cat.updatedAt
       }));
       dispatch(setCategories(formattedCategories));
     } catch (error) {
@@ -44,14 +51,38 @@ const CategoryScreen = () => {
     }
   };
 
-  const dispatch = useDispatch();
   const categories = useSelector((state: RootState) => state.categories.categories);
 
-  const handleAddCategory = () => {
-    setEditingId(null);
-    setCategoryName('');
-    setError('');
-    setModalVisible(true);
+  const handleAddCategory = async () => {
+    if (!newCategory.name.trim()) {
+      Alert.alert('Erreur', 'Le nom de la catégorie est requis');
+      return;
+    }
+
+    try {
+      const categoryId = await addCategoryToDatabase({
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim()
+      });
+
+      const now = new Date().toISOString();
+      const categoryWithId = {
+        id: categoryId,
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim(),
+        createdAt: now,
+        updatedAt: now
+      };
+
+      dispatch(addNewCategory(categoryWithId));
+      setNewCategory({ name: '', description: '' });
+      setModalVisible(false);
+      Alert.alert('Succès', 'Catégorie ajoutée avec succès');
+      useRefreshStore.getState().triggerRefresh();
+    } catch (error) {
+      console.error('Erreur:', error);
+      Alert.alert('Erreur', 'Impossible d\'ajouter la catégorie');
+    }
   };
 
   const handleEditCategory = (id: string, name: string) => {
@@ -63,15 +94,11 @@ const CategoryScreen = () => {
 
   const handleDeleteCategory = (id: string) => {
     Alert.alert(
-      'Delete Category',
-      'Are you sure you want to delete this category?',
+      'Supprimer la catégorie',
+      'Êtes-vous sûr de vouloir supprimer cette catégorie ?',
       [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => dispatch(deleteCategory(id)),
-        },
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', onPress: () => dispatch(deleteCategory(parseInt(id))), style: 'destructive' },
       ]
     );
   };
@@ -83,9 +110,16 @@ const CategoryScreen = () => {
     }
 
     if (editingId) {
-      dispatch(editCategory({ id: editingId, name: categoryName.trim() }));
+      dispatch(editCategory({ id: parseInt(editingId), name: categoryName.trim() }));
     } else {
-      dispatch(addCategory(categoryName.trim()));
+      // Créer un objet Category complet au lieu d'une simple chaîne
+      const now = new Date().toISOString();
+      dispatch(addNewCategory({
+        id: Date.now(), // ID temporaire
+        name: categoryName.trim(),
+        createdAt: now,
+        updatedAt: now
+      }));
     }
 
     setModalVisible(false);
@@ -109,21 +143,21 @@ const CategoryScreen = () => {
     );
   };
 
-  const renderItem = ({ item }: { item: { id: string; name: string } }) => (
+  const renderItem = ({ item }: { item: Category }) => (
     <View style={styles.categoryItem}>
       <Text style={styles.categoryName}>{item.name}</Text>
       <View style={styles.actionButtons}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditCategory(item.id, item.name)}
+          style={styles.actionButton}
+          onPress={() => handleEditCategory(item.id!.toString(), item.name)}
         >
-          <Text style={styles.actionButtonText}>Edit</Text>
+          <Icon name="edit" size={20} color="#007AFF" />
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteCategory(item.id)}
+          style={styles.actionButton}
+          onPress={() => handleDeleteCategory(item.id!.toString())}
         >
-          <Text style={styles.actionButtonText}>Delete</Text>
+          <Icon name="delete" size={20} color="#FF3B30" />
         </TouchableOpacity>
       </View>
     </View>
@@ -131,54 +165,59 @@ const CategoryScreen = () => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.addButton} onPress={handleAddCategory}>
-        <Text style={styles.addButtonText}>Add Category</Text>
+      <Text style={styles.title}>Gestion des Catégories</Text>
+      <TouchableOpacity 
+        style={styles.addButton}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.addButtonText}>+ Ajouter une catégorie</Text>
       </TouchableOpacity>
 
       <FlatList
-        style={styles.list}
         data={categories}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id?.toString() || Math.random().toString()}
+        style={styles.list}
       />
-
-      <TouchableOpacity style={styles.resetButton} onPress={handleResetCategories}>
-        <Text style={styles.resetButtonText}>Reset All Categories</Text>
-      </TouchableOpacity>
 
       <Modal
         visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
+        animationType="slide"
+        transparent={true}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <View style={styles.formContainer}>
-              <Text style={styles.formTitle}>
-                {editingId ? 'Edit Category' : 'Add Category'}
-              </Text>
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <TextInput
-                style={styles.input}
-                value={categoryName}
-                onChangeText={setCategoryName}
-                placeholder="Enter category name"
-                autoFocus
-              />
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                  <Text style={styles.submitButtonText}>
-                    {editingId ? 'Update' : 'Add'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Nom de la catégorie"
+              value={newCategory.name}
+              onChangeText={(text) => setNewCategory(prev => ({ ...prev, name: text }))}
+            />
+            
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Description"
+              value={newCategory.description}
+              onChangeText={(text) => setNewCategory(prev => ({ ...prev, description: text }))}
+              multiline
+            />
+
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={[styles.button, styles.cancelButton]}
+                onPress={() => {
+                  setModalVisible(false);
+                  setNewCategory({ name: '', description: '' });
+                }}
+              >
+                <Text style={styles.buttonText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.button, styles.submitButton]}
+                onPress={handleAddCategory}
+              >
+                <Text style={styles.buttonText}>Ajouter</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -190,33 +229,26 @@ const CategoryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
     backgroundColor: '#fff',
   },
-  addButton: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    margin: 10,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   list: {
     flex: 1,
   },
   categoryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#eee',
   },
   categoryName: {
     fontSize: 16,
+    fontWeight: 'bold',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -227,92 +259,61 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 5,
   },
-  editButton: {
-    backgroundColor: '#4CAF50',
-  },
-  deleteButton: {
-    backgroundColor: '#f44336',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-  },
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: 'white',
     padding: 20,
-    width: '80%',
-    maxWidth: 400,
-  },
-  formContainer: {
-    width: '100%',
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
+    borderRadius: 10,
   },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 5,
     padding: 10,
-    marginBottom: 15,
+    marginBottom: 10,
+    borderRadius: 5,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    marginTop: 20,
+  },
+  button: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginHorizontal: 5,
   },
   submitButton: {
-    flex: 1,
     backgroundColor: '#007AFF',
-    padding: 12,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   cancelButton: {
-    flex: 1,
     backgroundColor: '#6c757d',
-    padding: 12,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+    padding: 15,
     borderRadius: 5,
     alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  errorText: {
-    color: 'red',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  resetButton: {
-    backgroundColor: '#ff4444',
-    padding: 15,
-    borderRadius: 8,
-    marginHorizontal: 20,
     marginBottom: 20,
-    alignItems: 'center',
   },
-  resetButtonText: {
+  addButtonText: {
     color: 'white',
-    fontSize: 16,
     fontWeight: 'bold',
-  }
+  },
 });
 
 export default CategoryScreen;

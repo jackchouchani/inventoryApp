@@ -4,9 +4,10 @@ import JSZip from 'jszip';
 import { Buffer } from 'buffer';
 import { getItems, getCategories, getContainers, addItem, addCategory, addContainer, getDatabase } from '../database/database';
 import { exportPhotos, importPhotos } from './photoManager';
+import * as SQLite from 'expo-sqlite';
 
 const BACKUP_DIR = `${FileSystem.documentDirectory}backups`;
-const PHOTOS_DIR = 'photos';
+const PHOTOS_DIR = `${FileSystem.documentDirectory}photos`;
 const DB_FILENAME = 'database.json';
 
 // Interface for tracking restoration state
@@ -71,191 +72,136 @@ const restoreOriginalState = async (originalState: RestorationState['originalBac
     }
 };
 
-export const createBackup = async () => {
-    const tempDir = `${FileSystem.cacheDirectory}backup_temp_${Date.now()}`;
-    let tempBackupPath: string | undefined;
-
+export const createBackup = async (): Promise<string> => {
     try {
-        await initBackupStorage();
+        // Créer le répertoire de sauvegarde
+        const dirInfo = await FileSystem.getInfoAsync(BACKUP_DIR);
+        if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(BACKUP_DIR, { intermediates: true });
+        }
 
-        const backupFileName = `inventory_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
-        tempBackupPath = `${FileSystem.cacheDirectory}${backupFileName}`;
-        
-        await FileSystem.makeDirectoryAsync(tempDir, { intermediates: true });
-        const photosBackupDir = `${tempDir}/${PHOTOS_DIR}`;
-        await FileSystem.makeDirectoryAsync(photosBackupDir);
+        // Créer le ZIP
+        const zip = new JSZip();
 
-        // Backup database and photos
-        const dbData = {
+        // Récupérer toutes les données
+        const data = {
             items: await getItems(),
             categories: await getCategories(),
             containers: await getContainers()
         };
-        
-        await FileSystem.writeAsStringAsync(
-            `${tempDir}/${DB_FILENAME}`,
-            JSON.stringify(dbData, null, 2)
-        );
 
-        const exportedPhotos = await exportPhotos(photosBackupDir);
-        const zip = new JSZip();
-        
-        // Add database to zip
-        const dbContent = await FileSystem.readAsStringAsync(`${tempDir}/${DB_FILENAME}`);
-        zip.file(DB_FILENAME, dbContent);
+        // Ajouter les données au ZIP
+        zip.file(DB_FILENAME, JSON.stringify(data, null, 2));
 
-        // Add photos to zip
-        for (const photo of exportedPhotos) {
-            const photoContent = await FileSystem.readAsStringAsync(
-                `${photosBackupDir}/${photo}`,
-                { encoding: FileSystem.EncodingType.Base64 }
-            );
-            zip.file(`${PHOTOS_DIR}/${photo}`, photoContent, { base64: true });
+        // Ajouter les photos
+        const photos = data.items
+            .filter(item => item.photoUri)
+            .map(item => item.photoUri as string);
+
+        for (const photoUri of photos) {
+            try {
+                const photoContent = await FileSystem.readAsStringAsync(photoUri, {
+                    encoding: FileSystem.EncodingType.Base64
+                });
+                const photoName = photoUri.split('/').pop();
+                zip.file(`${PHOTOS_DIR}/${photoName}`, photoContent, { base64: true });
+            } catch (error) {
+                console.warn(`Impossible de lire la photo: ${photoUri}`, error);
+            }
         }
 
+        // Générer le ZIP
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = `${BACKUP_DIR}/backup-${timestamp}.zip`;
         const zipContent = await zip.generateAsync({ type: 'base64' });
-        await FileSystem.writeAsStringAsync(tempBackupPath, zipContent, {
+
+        // Sauvegarder le ZIP
+        await FileSystem.writeAsStringAsync(backupPath, zipContent, {
             encoding: FileSystem.EncodingType.Base64
         });
 
-        if (!(await Sharing.isAvailableAsync())) {
-            throw new Error('Sharing is not available on this platform');
-        }
-
-        await Sharing.shareAsync(tempBackupPath, {
-            mimeType: 'application/zip',
-            dialogTitle: 'Save Backup File',
-            UTI: 'public.zip-archive'
-        });
-
-        return tempBackupPath;
+        return backupPath;
     } catch (error) {
-        console.error('Error creating backup:', error);
+        console.error('Erreur lors de la création de la sauvegarde:', error);
         throw error;
-    } finally {
-        // Clean up temporary files
-        if (tempDir) {
-            await FileSystem.deleteAsync(tempDir, { idempotent: true });
-        }
-        if (tempBackupPath) {
-            await FileSystem.deleteAsync(tempBackupPath, { idempotent: true });
-        }
     }
 };
 
 export const restoreBackup = async (backupPath: string): Promise<void> => {
-    const state: RestorationState = {
-        transactionStarted: false,
-        originalDataBackedUp: false,
-        tempDirCreated: false,
-        tempDir: `${FileSystem.cacheDirectory}restore_temp_${Date.now()}`
-    };
-
     try {
-        // Step 1: Create temporary directory
-        await FileSystem.makeDirectoryAsync(state.tempDir, { intermediates: true });
-        state.tempDirCreated = true;
+        // Créer le dossier photos s'il n'existe pas
+        const photosInfo = await FileSystem.getInfoAsync(PHOTOS_DIR);
+        if (!photosInfo.exists) {
+            await FileSystem.makeDirectoryAsync(PHOTOS_DIR, { intermediates: true });
+        }
 
-        // Step 2: Backup current state
-        state.originalBackup = await backupCurrentState();
-        state.originalDataBackedUp = true;
-
-        // Step 3: Read and validate backup file
+        // Lire le fichier de sauvegarde
         const zipContent = await FileSystem.readAsStringAsync(backupPath, {
             encoding: FileSystem.EncodingType.Base64
         });
 
+        // Extraire le ZIP
         const zip = new JSZip();
         await zip.loadAsync(zipContent, { base64: true });
 
+        // Restaurer la base de données
         const dbFile = zip.file(DB_FILENAME);
-        if (!dbFile) throw new Error('Database file not found in backup');
+        if (!dbFile) throw new Error('Fichier de base de données non trouvé dans la sauvegarde');
 
         const dbContent = await dbFile.async('string');
-        const dbData = JSON.parse(dbContent);
+        const data = JSON.parse(dbContent);
 
-        if (!dbData.categories || !dbData.containers || !dbData.items) {
-            throw new Error('Invalid backup file structure');
-        }
-
-        // Step 4: Extract photos
-        const photosDir = `${state.tempDir}/${PHOTOS_DIR}`;
-        await FileSystem.makeDirectoryAsync(photosDir);
-
-        const photoFiles: string[] = [];
+        // Restaurer les photos
         for (const file of Object.keys(zip.files)) {
-            if (file.startsWith(PHOTOS_DIR + '/')) {
+            if (file.startsWith('photos/')) {
                 const photoFile = zip.file(file);
                 if (photoFile) {
                     const photoContent = await photoFile.async('base64');
                     const photoName = file.split('/').pop()!;
+                    const newPhotoPath = `${PHOTOS_DIR}/${photoName}`;
                     await FileSystem.writeAsStringAsync(
-                        `${photosDir}/${photoName}`,
+                        newPhotoPath,
                         photoContent,
                         { encoding: FileSystem.EncodingType.Base64 }
                     );
-                    photoFiles.push(photoName);
                 }
             }
         }
 
-        // Step 5: Begin database transaction
+        // Nettoyer la base de données existante
         const db = getDatabase();
         await db.runAsync('BEGIN TRANSACTION');
-        state.transactionStarted = true;
+        
+        try {
+            await db.runAsync('DELETE FROM items');
+            await db.runAsync('DELETE FROM categories');
+            await db.runAsync('DELETE FROM containers');
 
-        // Step 6: Restore data
-        await clearDatabase();
-        await importPhotos(photosDir, photoFiles);
+            // Restaurer les données
+            for (const category of data.categories) {
+                await addCategory(category);
+            }
 
-        for (const category of dbData.categories) {
-            await addCategory(category);
+            for (const container of data.containers) {
+                await addContainer(container);
+            }
+
+            for (const item of data.items) {
+                if (item.photoUri) {
+                    const photoName = item.photoUri.split('/').pop();
+                    item.photoUri = `${PHOTOS_DIR}/${photoName}`;
+                }
+                await addItem(item);
+            }
+
+            await db.runAsync('COMMIT');
+        } catch (error) {
+            await db.runAsync('ROLLBACK');
+            throw error;
         }
-
-        for (const container of dbData.containers) {
-            await addContainer(container);
-        }
-
-        for (const item of dbData.items) {
-            await addItem(item);
-        }
-
-        // Step 7: Commit transaction
-        await db.runAsync('COMMIT');
-        state.transactionStarted = false;
 
     } catch (error) {
-        console.error('Error during backup restoration:', error);
-
-        // Handle transaction rollback if needed
-        if (state.transactionStarted) {
-            try {
-                const db = getDatabase();
-                await db.runAsync('ROLLBACK');
-            } catch (rollbackError) {
-                console.error('Error during transaction rollback:', rollbackError);
-            }
-        }
-
-        // Attempt to restore original state if we have a backup
-        if (state.originalDataBackedUp && state.originalBackup) {
-            try {
-                await restoreOriginalState(state.originalBackup);
-            } catch (restoreError) {
-                console.error('Error restoring original state:', restoreError);
-                throw new Error('Critical error: Failed to restore original state after backup failure');
-            }
-        }
-
-        throw error;
-    } finally {
-        // Clean up temporary directory
-        if (state.tempDirCreated) {
-            try {
-                await FileSystem.deleteAsync(state.tempDir, { idempotent: true });
-            } catch (cleanupError) {
-                console.error('Error cleaning up temporary files:', cleanupError);
-            }
-        }
+        console.error('Erreur pendant la restauration:', error);
+        throw new Error(`Échec de la restauration: ${error instanceof Error ? error.message : String(error)}`);
     }
 };

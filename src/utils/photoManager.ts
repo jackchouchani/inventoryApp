@@ -2,8 +2,8 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
-const PHOTO_DIR = `${FileSystem.documentDirectory}photos`;
-const TEMP_DIR = `${FileSystem.cacheDirectory}temp_photos`;
+const PHOTO_DIR = FileSystem.documentDirectory + 'photos';
+const TEMP_DIR = FileSystem.cacheDirectory + 'temp_photos';
 
 // Helper function to ensure directory exists with proper permissions
 const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
@@ -12,13 +12,6 @@ const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
         if (!dirInfo.exists) {
             await FileSystem.makeDirectoryAsync(dirPath, { 
                 intermediates: true 
-            });
-        }
-        
-        // On Android, explicitly set write permissions
-        if (Platform.OS === 'android') {
-            await FileSystem.makeDirectoryAsync(dirPath, {
-                intermediates: true
             });
         }
     } catch (error) {
@@ -30,21 +23,13 @@ const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
 // Helper function to safely copy a file with proper permissions
 const safeCopyFile = async (sourceUri: string, destUri: string): Promise<void> => {
     try {
-        // First, copy to temporary location
-        const tempUri = `${TEMP_DIR}/${Date.now()}_${sourceUri.split('/').pop()}`;
         await FileSystem.copyAsync({
             from: sourceUri,
-            to: tempUri
-        });
-
-        // Then move to final destination
-        await FileSystem.moveAsync({
-            from: tempUri,
             to: destUri
         });
     } catch (error) {
-        console.error(`Error during safe file copy (${sourceUri} -> ${destUri}):`, error);
-        throw new Error(`Failed to safely copy file: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`Error during file copy (${sourceUri} -> ${destUri}):`, error);
+        throw new Error(`Failed to copy file: ${error instanceof Error ? error.message : String(error)}`);
     }
 };
 
@@ -84,7 +69,7 @@ export const deletePhoto = async (uri: string): Promise<void> => {
         if (fileInfo.exists) {
             await FileSystem.deleteAsync(uri, { idempotent: true });
         }
-    } catch (error: unknown) {
+    } catch (error) {
         console.error('Error deleting photo:', error);
         throw new Error(`Failed to delete photo: ${error instanceof Error ? error.message : String(error)}`);
     }

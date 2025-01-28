@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "inventoryApp",
-    "slug": "inventoryApp",
+    "slug": "inventory-cv",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,6 +15,12 @@
           "photosPermission": "The app needs access to your photos to let you share them with your friends.",
           "cameraPermission": "The app needs access to your camera to let you take photos."
         }
+      ],
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "L'application a besoin d'accéder à votre caméra pour scanner les QR codes."
+        }
       ]
     ],
     "splash": {
@@ -23,16 +29,28 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.inventoryApp"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.inventoryApp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
+      }
+    },
+    "owner": "jackch"
   }
 }

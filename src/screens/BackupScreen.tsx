@@ -5,12 +5,14 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useDispatch } from 'react-redux';
 import { createBackup, restoreBackup } from '../utils/backupManager';
-import { getItems, getCategories, getContainers } from '../database/database';
+import { getItems, getCategories, getContainers, resetDatabase } from '../database/database';
+import { useRefreshStore } from '../store/refreshStore';
 
 const BackupScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dispatch = useDispatch();
+  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
 
   useEffect(() => {
     checkSharingAvailability();
@@ -24,31 +26,38 @@ const BackupScreen = () => {
   };
 
   const handleCreateBackup = async () => {
-    setIsLoading(true);
-    setError(null);
     try {
-      const backupPath = await createBackup();
+      setIsLoading(true);
       
-      // Ensure the backup file exists
-      const fileInfo = await FileSystem.getInfoAsync(backupPath);
-      if (!fileInfo.exists) {
-        throw new Error('Backup file was not created successfully');
+      // Vérifier si le partage est disponible
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Erreur', 'Le partage n\'est pas disponible sur cet appareil');
+        return;
       }
 
-      // Share the backup file
+      // Créer la sauvegarde
+      const backupPath = await createBackup();
+      
+      // Vérifier que le fichier existe
+      const fileInfo = await FileSystem.getInfoAsync(backupPath);
+      if (!fileInfo.exists) {
+        throw new Error('Le fichier de sauvegarde n\'a pas été créé');
+      }
+
+      // Partager le fichier
       await Sharing.shareAsync(backupPath, {
         mimeType: 'application/zip',
-        dialogTitle: 'Save your backup file'
+        dialogTitle: 'Sauvegarder la base de données',
+        UTI: 'public.zip-archive' // pour iOS
       });
 
+    } catch (error: any) {
+      console.error('Erreur lors de la création de la sauvegarde:', error);
       Alert.alert(
-        'Backup Created',
-        'Backup has been created and shared successfully',
-        [{ text: 'OK' }]
+        'Erreur',
+        'Impossible de créer ou partager la sauvegarde: ' + error.message
       );
-    } catch (err) {
-      console.error('Backup creation failed:', err);
-      setError('Failed to create or share backup. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -74,34 +83,58 @@ const BackupScreen = () => {
 
   const handleRestoreBackup = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/zip',
-        copyToCacheDirectory: true
-      });
+      const result = await DocumentPicker.getDocumentAsync();
+      if (result.canceled) return;
 
-      if (result.assets && result.assets.length > 0) {
-        setIsLoading(true);
-        setError(null);
-        try {
-          await restoreBackup(result.assets[0].uri);
-          await reloadAppData(); // Reload all data after restore
-          
-          Alert.alert(
-            'Backup Restored',
-            'Your backup has been restored successfully.',
-            [{ text: 'OK' }]
-          );
-        } catch (err) {
-          console.error('Backup restoration failed:', err);
-          setError('Failed to restore backup. Please try again.');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    } catch (err) {
-      console.error('Document picking failed:', err);
-      setError('Failed to select backup file. Please try again.');
+      await restoreBackup(result.assets[0].uri);
+
+      // Recharger toutes les données
+      const [containers, categories, items] = await Promise.all([
+        getContainers(),
+        getCategories(),
+        getItems()
+      ]);
+
+      // Mettre à jour le store Redux
+      dispatch({ type: 'containers/setContainers', payload: containers });
+      dispatch({ type: 'categories/setCategories', payload: categories });
+      dispatch({ type: 'items/setItems', payload: items });
+
+      triggerRefresh();
+      Alert.alert('Succès', 'Sauvegarde restaurée avec succès');
+    } catch (error: any) {
+      console.error('Erreur lors de la restauration:', error);
+      Alert.alert('Erreur', 'Impossible de restaurer la sauvegarde: ' + error.message);
     }
+  };
+
+  const handleResetDatabase = async () => {
+    Alert.alert(
+      'Réinitialiser la base de données',
+      'Êtes-vous sûr de vouloir réinitialiser la base de données ? Toutes les données seront perdues.',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel'
+        },
+        {
+          text: 'Réinitialiser',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetDatabase();
+              dispatch({ type: 'categories/setCategories', payload: [] });
+              dispatch({ type: 'containers/setContainers', payload: [] });
+              dispatch({ type: 'items/setItems', payload: [] });
+              Alert.alert('Succès', 'Base de données réinitialisée avec succès');
+            } catch (error) {
+              console.error('Erreur lors de la réinitialisation:', error);
+              Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -133,6 +166,13 @@ const BackupScreen = () => {
           )}
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity 
+        style={styles.resetButton}
+        onPress={handleResetDatabase}
+      >
+        <Text style={styles.resetButtonText}>Réinitialiser la base de données</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -169,6 +209,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
   },
+  resetButton: {
+    backgroundColor: '#ff4444',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  resetButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  }
 });
 
 export default BackupScreen;

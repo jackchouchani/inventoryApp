@@ -1,9 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-
-interface Category {
-  id: string;
-  name: string;
-}
+import { Category, addCategory } from '../database/database';
 
 interface CategoryState {
   categories: Category[];
@@ -20,21 +16,18 @@ const categorySlice = createSlice({
     setCategories: (state, action: PayloadAction<Category[]>) => {
       state.categories = action.payload;
     },
-    addCategory: (state, action: PayloadAction<string>) => {
-      state.categories.push({
-        id: Date.now().toString(),
-        name: action.payload
-      });
+    addNewCategory: (state, action: PayloadAction<Category>) => {
+      state.categories.push(action.payload);
     },
-    editCategory: (state, action: PayloadAction<{ id: string; name: string }>) => {
+    editCategory: (state, action: PayloadAction<{ id: number; name: string }>) => {
       const { id, name } = action.payload;
-      const category = state.categories.find(cat => cat.id === id);
+      const category = state.categories.find((cat: Category) => cat.id === id);
       if (category) {
         category.name = name;
       }
     },
-    deleteCategory: (state, action: PayloadAction<string>) => {
-      state.categories = state.categories.filter(cat => cat.id !== action.payload);
+    deleteCategory: (state, action: PayloadAction<number>) => {
+      state.categories = state.categories.filter((cat: Category) => cat.id !== action.payload);
     },
     resetCategories: (state) => {
       state.categories = [];
@@ -42,5 +35,5 @@ const categorySlice = createSlice({
   }
 });
 
-export const { setCategories, addCategory, editCategory, deleteCategory, resetCategories } = categorySlice.actions;
+export const { setCategories, addNewCategory, editCategory, deleteCategory, resetCategories } = categorySlice.actions;
 export default categorySlice.reducer;

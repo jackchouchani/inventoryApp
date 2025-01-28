@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Container } from '../database/database';
 import { theme } from '../utils/theme';
+import { QRCodeGenerator } from './QRCodeGenerator';
+import { generateQRValue } from '../utils/qrCodeManager';
 
 interface ContainerFormProps {
   container?: Container;
   onSubmit: (container: Omit<Container, 'id'>) => void;
+  onCancel: () => void;
 }
 
 export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmit }) => {
-  const [name, setName] = useState(container?.name || '');
-  const [number, setNumber] = useState(container?.number?.toString() || '');
-  const [description, setDescription] = useState(container?.description || '');
+  const [formData, setFormData] = useState({
+    name: container?.name || '',
+    number: container?.number?.toString() || '',
+    description: container?.description || '',
+    qrCode: container?.qrCode || generateQRValue('CONTAINER')
+  });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setError('');
-    if (!name.trim() || !number.trim()) {
+    if (!formData.name.trim() || !formData.number.trim()) {
       setError('Name and number are required');
       return;
     }
@@ -25,9 +31,10 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmi
     try {
       setIsSubmitting(true);
       await onSubmit({
-        name: name.trim(),
-        number: parseInt(number.trim(), 10),
-        description: description.trim(),
+        name: formData.name.trim(),
+        number: parseInt(formData.number.trim(), 10),
+        description: formData.description.trim(),
+        qrCode: formData.qrCode,
         createdAt: container?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -45,8 +52,8 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmi
       <Text style={styles.label}>Container Number *</Text>
       <TextInput
         style={styles.input}
-        value={number}
-        onChangeText={setNumber}
+        value={formData.number}
+        onChangeText={(text) => setFormData(prev => ({ ...prev, number: text }))}
         placeholder="Container number"
         keyboardType="numeric"
       />
@@ -54,20 +61,25 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmi
       <Text style={styles.label}>Name *</Text>
       <TextInput
         style={styles.input}
-        value={name}
-        onChangeText={setName}
+        value={formData.name}
+        onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
         placeholder="Container name"
       />
 
       <Text style={styles.label}>Description (Optional)</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
-        value={description}
-        onChangeText={setDescription}
+        value={formData.description}
+        onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
         placeholder="Container description"
         multiline
         numberOfLines={4}
       />
+
+      <View style={styles.qrCodeContainer}>
+        <Text style={styles.label}>QR Code du container</Text>
+        <QRCodeGenerator value={formData.qrCode} size={150} />
+      </View>
 
       <TouchableOpacity 
         style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
@@ -129,5 +141,12 @@ const styles = StyleSheet.create({
     color: theme.colors.error,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
+  },
+  qrCodeContainer: {
+    alignItems: 'center',
+    marginVertical: 15,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
   },
 });

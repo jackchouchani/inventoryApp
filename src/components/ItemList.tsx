@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import { Item, Container, Category } from '../database/database';
+import { useRefreshStore } from '../store/refreshStore';
 
 interface ItemListProps {
   items: Item[];
@@ -30,6 +31,13 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
   });
 
   const [showFilters, setShowFilters] = useState(false);
+
+  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+
+  const handleMarkAsSold = async (itemId: number) => {
+    await onMarkAsSold(itemId);
+    triggerRefresh();
+  };
 
   const filteredItems = items.filter((item) => {
     // Text search
@@ -99,7 +107,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       {item.status === 'available' && (
         <TouchableOpacity
           style={styles.soldButton}
-          onPress={() => onMarkAsSold(item.id!)}
+          onPress={() => handleMarkAsSold(item.id!)}
         >
           <Text style={styles.soldButtonText}>Mark as Sold</Text>
         </TouchableOpacity>

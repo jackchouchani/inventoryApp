@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { getItems, Item } from '../database/database';
+import { useRefreshStore } from '../store/refreshStore';
 
 interface Stats {
   totalItems: number;
@@ -16,10 +17,11 @@ const StatsScreen = () => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [refreshTimestamp]);
 
   const loadStats = async () => {
     try {

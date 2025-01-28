@@ -9,15 +9,19 @@ import { initDatabase, Item, Container, Category, getItems, addItem, updateItemS
 import { initPhotoStorage } from './src/utils/photoManager';
 import { initBackupStorage } from './src/utils/backupManager';
 import { ItemList } from './src/components/ItemList';
-import { ItemForm } from './src/components/ItemForm';
+import ItemForm from './src/components/ItemForm';
 import { ContainerScreen } from './src/screens/ContainerScreen';
 import CategoryScreen from './src/screens/CategoryScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import BackupScreen from './src/screens/BackupScreen';
+import { useRefreshStore } from './src/store/refreshStore';
+import { ScanScreen } from './src/screens/ScanScreen';
+import { Ionicons } from '@expo/vector-icons';
 
-type RootTabParamList = {
+export type RootTabParamList = {
   Stock: undefined;
   Add: undefined;
+  Scan: undefined;
   Containers: undefined;
   Categories: undefined;
   Stats: undefined;
@@ -83,11 +87,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ navigation }) => {
 const AddScreen: React.FC<{ navigation: BottomTabNavigationProp<RootTabParamList, 'Add'> }> = ({ navigation }) => {
   const [containers, setContainers] = useState<Container[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [error, setError] = useState<string>('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   const loadData = async () => {
     try {
@@ -99,41 +99,34 @@ const AddScreen: React.FC<{ navigation: BottomTabNavigationProp<RootTabParamList
       setCategories(loadedCategories);
     } catch (error) {
       console.error('Error loading data:', error);
-      setError('Failed to load data. Please try again.');
     }
   };
 
-  const handleSubmit = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => {
-    setError('');
-    try {
-      const newItemId = await addItem(item);
-      if (newItemId) {
-        navigation.navigate('Stock');
-      } else {
-        setError('Failed to add item. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error adding item:', error);
-      setError('Failed to add item. Please try again.');
-    }
-  };
+  // Rafraîchir lors de la navigation
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadData();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  // Rafraîchir lors du changement de refreshTimestamp
+  useEffect(() => {
+    loadData();
+  }, [refreshTimestamp]);
 
   return (
     <View style={{ flex: 1 }}>
-      {error ? (
-        <Text style={{ color: 'red', padding: 10, textAlign: 'center' }}>{error}</Text>
-      ) : null}
-      <ItemForm
-        containers={containers}
+      <ItemForm 
+        containers={containers} 
         categories={categories}
-        onSubmit={handleSubmit}
+        onSuccess={() => navigation.navigate('Stock')}
       />
     </View>
   );
 };
 
-
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export default function App() {
   useEffect(() => {
@@ -152,6 +145,14 @@ export default function App() {
         <Tab.Navigator>
           <Tab.Screen name="Stock" component={StockScreen} />
           <Tab.Screen name="Add" component={AddScreen} />
+          <Tab.Screen name="Scan" component={ScanScreen}
+            options={{
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="qr-code" size={size} color={color} />
+              ),
+              title: 'Scanner'
+            }}
+          />
           <Tab.Screen name="Containers" component={ContainerScreen} />
           <Tab.Screen name="Categories" component={CategoryScreen} />
           <Tab.Screen name="Stats" component={StatsScreen} />

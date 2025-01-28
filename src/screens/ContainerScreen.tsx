@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
 import { Container, Item, getContainers, getItems, addContainer, updateItem } from '../database/database';
 import { ContainerGrid } from '../components/ContainerGrid';
 import { ContainerForm } from '../components/ContainerForm';
 import { ItemList } from '../components/ItemList';
+import { useRefreshStore } from '../store/refreshStore';
 
 export const ContainerScreen = () => {
   const [containers, setContainers] = useState<Container[]>([]);
@@ -11,10 +12,7 @@ export const ContainerScreen = () => {
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   const loadData = async () => {
     try {
@@ -25,9 +23,13 @@ export const ContainerScreen = () => {
       setContainers(loadedContainers);
       setItems(loadedItems);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading containers data:', error);
     }
   };
+
+  useEffect(() => {
+    loadData();
+  }, [refreshTimestamp]);
 
   const handleContainerPress = (containerId: number) => {
     const container = containers.find(c => c.id === containerId);
@@ -70,12 +72,12 @@ export const ContainerScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <TouchableOpacity 
         style={styles.addButton} 
         onPress={() => setShowContainerForm(true)}
       >
-        <Text style={styles.addButtonText}>Add Container</Text>
+        <Text style={styles.addButtonText}>Ajouter un Container</Text>
       </TouchableOpacity>
 
       <ContainerGrid
@@ -85,53 +87,59 @@ export const ContainerScreen = () => {
       />
 
       <Modal
+        visible={showContainerForm}
+        animationType="slide"
+        onRequestClose={() => setShowContainerForm(false)}
+      >
+        <SafeAreaView style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setShowContainerForm(false)}
+            >
+              <Text style={styles.cancelButtonText}>Annuler</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Nouveau Container</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          
+          <View style={styles.formWrapper}>
+            <ContainerForm
+              onSubmit={handleContainerSubmit}
+              onCancel={() => setShowContainerForm(false)}
+            />
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal
         visible={!!selectedContainer}
         animationType="slide"
         onRequestClose={() => setSelectedContainer(null)}
       >
-        <View style={styles.modalContent}>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => setSelectedContainer(null)}
-          >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
+        <SafeAreaView style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setSelectedContainer(null)}
+            >
+              <Text style={styles.cancelButtonText}>Retour</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>
+              {selectedContainer?.name || 'Container'}
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          
           <ItemList
             items={items.filter(item => item.containerId === selectedContainer?.id)}
             containers={containers}
             categories={[]}
             onMarkAsSold={() => {}}
           />
-        </View>
+        </SafeAreaView>
       </Modal>
-
-      <Modal
-        visible={showContainerForm}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowContainerForm(false);
-          setEditingContainer(null);
-        }}
-      >
-        <View style={styles.modalContent}>
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => {
-              setShowContainerForm(false);
-              setEditingContainer(null);
-            }}
-          >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-          <View style={styles.formWrapper}>
-            <ContainerForm
-              container={editingContainer || undefined}
-              onSubmit={handleContainerSubmit}
-            />
-          </View>
-        </View>
-      </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -144,26 +152,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  closeButton: {
-    padding: 15,
+  modalHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#6c757d',
+    justifyContent: 'space-between',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  headerSpacer: {
+    width: 70, // même largeur que le bouton annuler pour centrer le titre
+  },
+  cancelButton: {
+    padding: 8,
+  },
+  cancelButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
   },
   formWrapper: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+    padding: 20,
   },
   addButton: {
     backgroundColor: '#007AFF',
     padding: 15,
     margin: 10,
-    borderRadius: 5,
+    borderRadius: 8,
     alignItems: 'center',
   },
   addButtonText: {
