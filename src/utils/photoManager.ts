@@ -44,7 +44,7 @@ const safeCopyFile = async (sourceUri: string, destUri: string): Promise<void> =
         });
     } catch (error) {
         console.error(`Error during safe file copy (${sourceUri} -> ${destUri}):`, error);
-        throw new Error(`Failed to safely copy file: ${error.message}`);
+        throw new Error(`Failed to safely copy file: ${error instanceof Error ? error.message : String(error)}`);
     }
 };
 
