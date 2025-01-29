@@ -21,6 +21,12 @@
         {
           "cameraPermission": "L'application a besoin d'accéder à votre caméra pour scanner les QR codes."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
+        }
       ]
     ],
     "splash": {

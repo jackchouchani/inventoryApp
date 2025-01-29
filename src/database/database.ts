@@ -22,7 +22,7 @@ export interface Item {
   status: 'available' | 'sold';
   photoUri?: string;
   qrCode: string;
-  containerId: number;
+  containerId: number | null;
   categoryId: number;
   createdAt: string;
   updatedAt: string;
