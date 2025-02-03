@@ -50,7 +50,15 @@
       "package": "com.anonymous.inventoryApp"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Inventory App",
+      "shortName": "Inventory",
+      "lang": "en",
+      "themeColor": "#000000",
+      "backgroundColor": "#ffffff",
+      "startUrl": "/",
+      "display": "standalone",
+      "orientation": "portrait"
     },
     "extra": {
       "eas": {
