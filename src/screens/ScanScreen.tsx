@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Scanner from '../components/Scanner';
 import { Container, Item, updateItem, getContainers, getItems } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
+
+// Ajouter un type pour les props de l'item
+interface ItemProps {
+  item: Item;
+}
 
 export const ScanScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -13,9 +18,14 @@ export const ScanScreen: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [showOtherContainers, setShowOtherContainers] = useState(false);
 
   const loadData = async () => {
     try {
+      setError(null);
       const [loadedContainers, loadedItems] = await Promise.all([
         getContainers(),
         getItems()
@@ -23,6 +33,7 @@ export const ScanScreen: React.FC = () => {
       setContainers(loadedContainers);
       setItems(loadedItems);
     } catch (error) {
+      setError("Erreur lors du chargement des données");
       console.error('Erreur lors du chargement des données:', error);
     }
   };
@@ -38,16 +49,12 @@ export const ScanScreen: React.FC = () => {
       const item = items.find(i => i.id === itemId);
       if (!item) return;
       
+      // Au lieu de mettre null, on met 0 ou -1 pour indiquer qu'aucun container n'est assigné
+      const newContainerId = item.containerId === selectedContainer.id ? 0 : selectedContainer.id;
+      
       const updateData = {
-        name: item.name,
-        purchasePrice: item.purchasePrice,
-        sellingPrice: item.sellingPrice,
-        status: item.status,
-        photoUri: item.photoUri,
-        categoryId: item.categoryId,
-        containerId: selectedContainer.id,
-        qrCode: item.qrCode,
-        createdAt: item.createdAt,
+        ...item,
+        containerId: newContainerId,
         updatedAt: new Date().toISOString()
       };
       
@@ -58,13 +65,30 @@ export const ScanScreen: React.FC = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: Item }) => (
+  // Fonction pour filtrer les articles selon les critères
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (showOnlySelected) {
+      return matchesSearch && item.containerId === selectedContainer?.id;
+    }
+    
+    if (showOtherContainers) {
+      return matchesSearch;
+    }
+    
+    return matchesSearch && (item.containerId === 0 || item.containerId === selectedContainer?.id);
+  });
+
+  // Extraire le rendu de l'item dans un composant séparé pour améliorer la lisibilité
+  const renderItem = ({ item }: ItemProps) => (
     <TouchableOpacity
       style={[
         styles.itemRow,
         item.containerId === selectedContainer?.id && styles.itemSelected
       ]}
       onPress={() => handleManualAssignment(item.id!)}
+      disabled={!selectedContainer}
     >
       <Text style={styles.itemText}>{item.name}</Text>
       <Text style={styles.itemStatus}>
@@ -109,9 +133,63 @@ export const ScanScreen: React.FC = () => {
               <Text style={styles.sectionTitle}>
                 Articles à assigner à {selectedContainer.name}:
               </Text>
+              
+              {/* Barre de recherche */}
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Rechercher un article..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              {/* Filtres */}
+              <View style={styles.filterContainer}>
+                <TouchableOpacity
+                  style={[styles.filterButton, showOnlySelected && styles.filterButtonActive]}
+                  onPress={() => setShowOnlySelected(!showOnlySelected)}
+                >
+                  <Text style={[styles.filterButtonText, showOnlySelected && styles.filterButtonTextActive]}>
+                    Articles assignés
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.filterButton, showOtherContainers && styles.filterButtonActive]}
+                  onPress={() => setShowOtherContainers(!showOtherContainers)}
+                >
+                  <Text style={[styles.filterButtonText, showOtherContainers && styles.filterButtonTextActive]}>
+                    Tous les articles
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <FlatList
-                data={items.filter(item => item.status === 'available')}
-                renderItem={renderItem}
+                data={filteredItems}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.itemRow,
+                      item.containerId === selectedContainer?.id && styles.itemSelected,
+                      item.containerId !== 0 && item.containerId !== selectedContainer?.id && styles.itemInOtherContainer
+                    ]}
+                    onPress={() => handleManualAssignment(item.id!)}
+                    disabled={!selectedContainer}
+                  >
+                    <View>
+                      <Text style={styles.itemText}>{item.name}</Text>
+                      {item.containerId !== 0 && item.containerId !== selectedContainer?.id && (
+                        <Text style={styles.containerInfo}>
+                          Dans: {containers.find(c => c.id === item.containerId)?.name}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.itemStatus}>
+                      {item.containerId === selectedContainer?.id ? '✓' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 keyExtractor={item => item.id!.toString()}
                 style={styles.itemList}
               />
@@ -216,5 +294,46 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  searchContainer: {
+    marginVertical: 10,
+    paddingHorizontal: 5,
+  },
+  searchInput: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    gap: 10,
+  },
+  filterButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  filterButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  filterButtonText: {
+    color: '#007AFF',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
+  },
+  itemInOtherContainer: {
+    backgroundColor: '#fff3e0',
+  },
+  containerInfo: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
 }); 

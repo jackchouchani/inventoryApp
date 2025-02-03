@@ -21,11 +21,12 @@ export interface Item {
   sellingPrice: number;
   status: 'available' | 'sold';
   photoUri?: string;
+  containerId?: number;
+  categoryId?: number;
   qrCode: string;
-  containerId: number | null;
-  categoryId: number;
-  createdAt: string;
-  updatedAt: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Container {
@@ -94,6 +95,7 @@ export const initDatabase = async () => {
       CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        description TEXT,
         purchasePrice REAL NOT NULL,
         sellingPrice REAL NOT NULL,
         status TEXT NOT NULL,
@@ -164,17 +166,36 @@ export const deleteCategory = async (id: number): Promise<void> => {
 };
 
 export const addItem = async (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> => {
-    try {
-        const now = formatDate();
-        const result = await db.runAsync(
-            'INSERT INTO items (name, purchasePrice, sellingPrice, status, photoUri, qrCode, containerId, categoryId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [item.name, item.purchasePrice, item.sellingPrice, item.status, item.photoUri || null, item.qrCode, item.containerId, item.categoryId, now, now]
-        );
-        return result.lastInsertRowId;
-    } catch (error) {
-        console.error('Error adding item:', error);
-        throw error;
-    }
+    const now = formatDate();
+    const result = await db.runAsync(
+        `INSERT INTO items (
+            name, 
+            description, 
+            purchasePrice, 
+            sellingPrice, 
+            status,
+            photoUri, 
+            qrCode, 
+            categoryId, 
+            containerId, 
+            createdAt, 
+            updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            item.name,
+            item.description || '',
+            item.purchasePrice,
+            item.sellingPrice,
+            item.status,
+            item.photoUri || '',
+            item.qrCode,
+            item.categoryId || 0,
+            item.containerId || 0,
+            now,
+            now
+        ]
+    );
+    return result.lastInsertRowId;
 };
 
 export const updateItem = async (id: number, item: Omit<Item, 'id'>): Promise<void> => {
@@ -182,7 +203,18 @@ export const updateItem = async (id: number, item: Omit<Item, 'id'>): Promise<vo
         const now = formatDate();
         await db.runAsync(
             'UPDATE items SET name = ?, purchasePrice = ?, sellingPrice = ?, status = ?, photoUri = ?, qrCode = ?, containerId = ?, categoryId = ?, updatedAt = ? WHERE id = ?',
-            [item.name, item.purchasePrice, item.sellingPrice, item.status, item.photoUri || null, item.qrCode, item.containerId, item.categoryId, now, id]
+            [
+                item.name,
+                item.purchasePrice,
+                item.sellingPrice,
+                item.status,
+                item.photoUri || '',
+                item.qrCode,
+                item.containerId || 0,
+                item.categoryId || 0,
+                now,
+                id
+            ]
         );
     } catch (error) {
         console.error('Error updating item:', error);

@@ -11,6 +11,11 @@ interface ScannerProps {
     onClose: () => void;
 }
 
+const VIBRATION_DURATION = 100;
+const VIBRATION_ERROR_PATTERN = [100, 100, 100];
+const SCAN_DELAY = 500;
+const MAX_HISTORY_ITEMS = 5;
+
 const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
     const [scanned, setScanned] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
@@ -22,11 +27,11 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
     const [scanCount, setScanCount] = useState(0);
 
     const signalSuccess = () => {
-        Vibration.vibrate(100); // vibration courte
+        Vibration.vibrate(VIBRATION_DURATION);
     };
 
     const signalError = () => {
-        Vibration.vibrate([100, 100, 100]); // trois vibrations courtes
+        Vibration.vibrate(VIBRATION_ERROR_PATTERN);
     };
 
     useEffect(() => {
@@ -34,6 +39,58 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
             requestPermission();
         }
     }, [permission]);
+
+    const processScan = async (type: string, uuid: string) => {
+        if (!assignmentMode) {
+            return handleContainerScan(type, uuid);
+        }
+        return handleItemScan(type, uuid);
+    };
+
+    const handleContainerScan = async (type: string, uuid: string) => {
+        if (type === 'CONTAINER') {
+            signalSuccess();
+            setCurrentContainer(`${QR_CODE_TYPES.CONTAINER}_${uuid}`);
+            setAssignmentMode(true);
+            Alert.alert('Succès', 'Container sélectionné. Scannez les articles à assigner.');
+        } else {
+            signalError();
+            Alert.alert('Erreur', 'Veuillez d\'abord scanner un container');
+        }
+    };
+
+    const handleItemScan = async (type: string, uuid: string) => {
+        if (type !== 'ITEM') {
+            signalError();
+            Alert.alert('Erreur', 'Veuillez scanner un article');
+            return;
+        }
+
+        const qrCode = `${QR_CODE_TYPES.ITEM}_${uuid}`;
+        const item = await getItemByQRCode(qrCode);
+        if (!item?.id) {
+            signalError();
+            Alert.alert('Erreur', 'Article non trouvé');
+            return;
+        }
+
+        const container = await getContainerByQRCode(currentContainer!);
+        if (!container?.id) {
+            signalError();
+            Alert.alert('Erreur', 'Container non trouvé');
+            return;
+        }
+
+        await updateItem(item.id, { ...item, containerId: undefined });
+        signalSuccess();
+        triggerRefresh();
+        setScanHistory(prev => [qrCode, ...prev.slice(0, MAX_HISTORY_ITEMS - 1)]);
+        setScanCount(prev => prev + 1);
+
+        Alert.alert('Succès', 'Article assigné au container', [
+            { text: 'OK', onPress: () => continuousMode && setScanned(false) }
+        ]);
+    };
 
     const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
         if (scanned && !continuousMode) return;
@@ -47,46 +104,10 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
                 return;
             }
 
-            if (!assignmentMode) {
-                if (type === 'CONTAINER') {
-                    signalSuccess();
-                    setCurrentContainer(data);
-                    setAssignmentMode(true);
-                    Alert.alert('Succès', 'Container sélectionné. Scannez les articles à assigner.');
-                } else {
-                    signalError();
-                    Alert.alert('Erreur', 'Veuillez d\'abord scanner un container');
-                }
-            } else {
-                if (type === 'ITEM') {
-                    const item = await getItemByQRCode(`${QR_CODE_TYPES.ITEM}_${uuid}`);
-                    if (!item || !item.id) {
-                        signalError();
-                        Alert.alert('Erreur', 'Article non trouvé');
-                        return;
-                    }
-                    const container = await getContainerByQRCode(currentContainer!);
-                    if (!container || !container.id) {
-                        signalError();
-                        Alert.alert('Erreur', 'Container non trouvé');
-                        return;
-                    }
-                    await updateItem(item.id, { ...item, containerId: container.id });
-                    signalSuccess();
-                    Alert.alert('Succès', 'Article assigné au container', [
-                        { text: 'OK', onPress: () => continuousMode && setScanned(false) }
-                    ]);
-                    triggerRefresh();
-                    setScanHistory(prev => [data, ...prev.slice(0, 4)]);
-                    setScanCount(prev => prev + 1);
-                } else {
-                    signalError();
-                    Alert.alert('Erreur', 'Veuillez scanner un article');
-                }
-            }
+            await processScan(type, uuid);
 
             if (continuousMode) {
-                setTimeout(() => setScanned(false), 500);
+                setTimeout(() => setScanned(false), SCAN_DELAY);
             } else {
                 setScanned(true);
             }
@@ -103,7 +124,7 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
             if (type === 'ITEM') {
                 const item = await getItemByQRCode(qrValue);
                 if (item?.id) {
-                    await updateItem(item.id, { ...item, containerId: null });
+                    await updateItem(item.id, { ...item, containerId: undefined });
                     setScanHistory(prev => prev.filter(i => i !== qrValue));
                     setScanCount(prev => prev - 1);
                     triggerRefresh();

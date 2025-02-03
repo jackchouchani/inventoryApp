@@ -15,6 +15,7 @@ interface ItemFormProps {
 
 interface ItemFormState {
     name: string;
+    description: string;
     purchasePrice: string;
     sellingPrice: string;
     status: 'available' | 'sold';
@@ -29,6 +30,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>({
         name: '',
+        description: '',
         purchasePrice: '',
         sellingPrice: '',
         status: 'available',
@@ -61,6 +63,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
             // Ajout dans la base de données
             const newItemId = await addItem({
                 name: item.name.trim(),
+                description: item.description,
                 purchasePrice: parseFloat(item.purchasePrice),
                 sellingPrice: parseFloat(item.sellingPrice),
                 status: 'available',
@@ -86,6 +89,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
             // Reset du formulaire et refresh
             setItem({
                 name: '',
+                description: '',
                 purchasePrice: '',
                 sellingPrice: '',
                 status: 'available',
@@ -124,6 +128,15 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                     placeholder="Nom de l'article"
                     value={item.name}
                     onChangeText={(text) => setItem(prev => ({ ...prev, name: text }))}
+                />
+
+                <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Description de l'article"
+                    value={item.description}
+                    onChangeText={(text) => setItem(prev => ({ ...prev, description: text }))}
+                    multiline
+                    numberOfLines={4}
                 />
 
                 <View style={styles.priceContainer}>
@@ -269,6 +282,10 @@ const styles = StyleSheet.create({
         padding: 10,
         backgroundColor: '#f5f5f5',
         borderRadius: 8,
+    },
+    textArea: {
+        height: 100,
+        textAlignVertical: 'top',
     },
 });
 

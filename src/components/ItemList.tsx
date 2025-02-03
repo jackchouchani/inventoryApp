@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, Modal } from 'react-native';
 import { Item, Container, Category } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
+import { ItemEditForm } from './ItemEditForm';
 
 interface ItemListProps {
   items: Item[];
@@ -33,6 +34,8 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
   const [showFilters, setShowFilters] = useState(false);
 
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
   const handleMarkAsSold = async (itemId: number) => {
     await onMarkAsSold(itemId);
@@ -79,7 +82,10 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
   });
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.itemCard}>
+    <TouchableOpacity
+      style={styles.itemCard}
+      onPress={() => setSelectedItem(item)}
+    >
       <Image source={{ uri: item.photoUri }} style={styles.itemImage} />
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
@@ -112,8 +118,13 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           <Text style={styles.soldButtonText}>Mark as Sold</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
+
+  const handleEditSuccess = () => {
+    setSelectedItem(null);
+    triggerRefresh();
+  };
 
   return (
     <View style={styles.container}>
@@ -230,6 +241,25 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
         keyExtractor={(item) => item.id!.toString()}
         style={styles.list}
       />
+
+      <Modal
+        visible={!!selectedItem}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedItem(null)}
+      >
+        {selectedItem && (
+          <View style={styles.modalOverlay}>
+            <ItemEditForm
+              item={selectedItem}
+              containers={containers}
+              categories={categories}
+              onSuccess={handleEditSuccess}
+              onCancel={() => setSelectedItem(null)}
+            />
+          </View>
+        )}
+      </Modal>
     </View>
   );
 };
@@ -333,7 +363,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#ddd'
   },
   itemImage: {
     width: 80,
@@ -358,5 +388,9 @@ const styles = StyleSheet.create({
   soldButtonText: {
     color: '#fff',
     fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
 });
