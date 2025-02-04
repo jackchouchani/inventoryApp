@@ -6,15 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "plugins": [
       "expo-router",
       "expo-sqlite",
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you share them with your friends.",
-          "cameraPermission": "The app needs access to your camera to let you take photos."
+          "photosPermission": "L'application nécessite l'accès à vos photos.",
+          "cameraPermission": "L'application nécessite l'accès à votre caméra."
         }
       ],
       [
@@ -37,7 +37,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.inventoryApp"
+      "bundleIdentifier": "com.anonymous.inventoryApp",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "UIStatusBarHidden": false,
+        "NSCameraUsageDescription": "L'application nécessite l'accès à la caméra.",
+        "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
+        "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -54,19 +65,22 @@
       "favicon": "./assets/favicon.png",
       "name": "Inventory App",
       "shortName": "Inventory",
-      "lang": "en",
+      "lang": "fr",
       "themeColor": "#000000",
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
       "orientation": "portrait"
     },
+    "owner": "jackch",
+    "scheme": "inventoryapp",
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
-    },
-    "owner": "jackch",
-    "scheme": "inventoryapp"
+    }
   }
 }
