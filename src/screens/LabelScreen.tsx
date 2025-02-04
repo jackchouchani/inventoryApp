@@ -7,10 +7,14 @@ import * as Sharing from 'expo-sharing';
 import QRCode from 'react-native-qrcode-svg';
 import * as FileSystem from 'expo-file-system';
 import { Buffer } from 'buffer';
+import { HiddenQRCode } from '../components/HiddenQRCode';
 
 const LabelScreen = () => {
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const items = useSelector((state: any) => state.items.items);
+
+  const [qrCaptureValue, setQrCaptureValue] = useState<string | null>(null);
+  const [qrCaptureResolve, setQrCaptureResolve] = useState<((data: string) => void) | null>(null);
 
   const toggleItemSelection = (itemId: number) => {
     setSelectedItems(prev => 
@@ -20,42 +24,30 @@ const LabelScreen = () => {
     );
   };
 
-  const getQRCodeBase64 = async (value: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const qrRef = React.createRef();
-      const qrCode = (
-        <QRCode
-          value={value}
-          size={150}
-          getRef={(c) => {
-            if (c) {
-              c.toDataURL((base64: string) => {
-                resolve(`data:image/png;base64,${base64}`);
-              });
-            }
-          }}
-          onError={(err: any) => reject(err)}
-        />
-      );
-      
-      // Force le rendu du QR code
-      const RootComponent = () => qrCode;
-      require('react-native').AppRegistry.registerComponent('QRTemp', () => RootComponent);
+  const getQRCodeBase64Local = (value: string): Promise<string> => {
+    return new Promise((resolve) => {
+      setQrCaptureResolve(() => resolve);
+      setQrCaptureValue(value);
     });
+  };
+
+  const handleQRCodeCapture = (data: string) => {
+    if (qrCaptureResolve) {
+      qrCaptureResolve(`data:image/png;base64,${data}`);
+      setQrCaptureResolve(null);
+      setQrCaptureValue(null);
+    }
   };
 
   const generateLabels = async () => {
     try {
-      console.log('Début génération labels');
       
-      // Vérifier le partage
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
         Alert.alert('Erreur', 'Le partage n\'est pas disponible sur cet appareil');
         return;
       }
 
-      // Sélectionner les items
       const itemsToGenerate = selectedItems.length > 0 
         ? items.filter((item: Item) => selectedItems.includes(item.id!))
         : items;
@@ -65,7 +57,6 @@ const LabelScreen = () => {
         return;
       }
 
-      // Générer le HTML
       const labelsPerPage = 44;
       const pages = Math.ceil(itemsToGenerate.length / labelsPerPage);
       
@@ -75,33 +66,66 @@ const LabelScreen = () => {
           <head>
             <meta charset="UTF-8">
             <style>
+              /* Le PDF est généré en portrait en A4 */
               @page { 
-                size: A4 portrait; 
-                margin: 0; 
+                size: A4 portrait;
+                margin: 0;
               }
               body { 
-                margin: 0; 
-                padding: 0; 
+                margin: 0;
+                padding: 0;
                 width: 210mm;
                 height: 297mm;
+                position: relative;
               }
               .page {
                 width: 210mm;
                 height: 297mm;
+                position: relative;
+              }
+              /* 
+                Ce conteneur sera transformé pour simuler un Landscape Top Left.
+                Il occupe la zone utilisable en paysage (dans le PDF portrait, la zone effective est de 287mm x 200mm)
+                et est positionné dès 5mm depuis le bord gauche et en bas (en portrait, le coin inférieur gauche correspond à (5,292))
+              */
+              .rotated-container {
+                position: absolute;
+                top: 5mm;
+                left: 5mm;
+                width: 287mm;
+                height: 200mm;
+                /* 
+                  Pour que le coin (0,0) de la zone de 287x200 soit rendu en bas à gauche (5,292 en portrait),
+                  on effectue : translate(-287mm, 0) suivi d'une rotation de -90°.
+                */
+                transform: rotate(-90deg) translate(-287mm, 0);
+                transform-origin: top left;
+              }
+              /* 
+                La grille dans le conteneur tourné.
+                Dans la vue finale, chaque cellule aura : 
+                  - 25.4mm de largeur (ce qui correspond à la dimension courte de l'étiquette)
+                  - 48.5mm de hauteur (la dimension longue)
+                Les gaps ont été calculés pour que la grille occupe exactement 287 x 200 mm.
+                L'ordre de remplissage est "par colonne" (de haut en bas).
+              */
+              .grid-container {
+                width: 287mm;
+                height: 200mm;
                 display: grid;
-                grid-template-columns: repeat(4, 48.5mm);
-                grid-template-rows: repeat(11, 25.4mm);
-                gap: 0;
-                padding: 5mm 8mm;
-                box-sizing: border-box;
-                page-break-after: always;
+                grid-template-columns: repeat(11, 25.4mm);
+                grid-template-rows: repeat(4, 48.5mm);
+                column-gap: 0.76mm;
+                row-gap: 2mm;
+                grid-auto-flow: column;
               }
-              .page:last-child {
-                page-break-after: auto;
-              }
+              /* Chaque étiquette est conçue pour s'afficher dans une cellule de la grille.
+                 Ainsi, dans la vue finale (après rotation), elle occupera 25.4mm (largeur) x 48.5mm (hauteur).
+                 Vous pouvez ajuster le padding ou le contenu intérieur au besoin.
+              */
               .label {
-                width: 48.5mm;
-                height: 25.4mm;
+                width: 25.4mm;
+                height: 48.5mm;
                 padding: 2mm;
                 box-sizing: border-box;
                 border: 1px solid #000;
@@ -151,57 +175,50 @@ const LabelScreen = () => {
             </style>
           </head>
           <body>
-    `;
+            <div class="page">
+              <div class="rotated-container">
+                <div class="grid-container">
+      `;
 
-      // Générer les pages
-      for (let page = 0; page < pages; page++) {
-        fullHTML += '<div class="page">';
-        const start = page * labelsPerPage;
-        const end = start + labelsPerPage;
-        const currentLabels = itemsToGenerate.slice(start, end);
-
-        // Générer les étiquettes
-        for (let i = 0; i < labelsPerPage; i++) {
-          if (i < currentLabels.length) {
-            const label = currentLabels[i];
-            try {
-              const qrCodeBase64 = await getQRCodeBase64(label.qrCode);
-              
-              fullHTML += `
-                <div class="label">
-                  <div class="label-content">
-                    <div class="title">${label.name}</div>
-                    <div class="separator"></div>
-                    <div class="description">${label.description || ''}</div>
-                    <div class="price">Prix: ${label.sellingPrice}€</div>
-                  </div>
-                  <div class="qr-code">
-                    <img src="${qrCodeBase64}" alt="QR Code" />
-                  </div>
+      for (let i = 0; i < labelsPerPage; i++) {
+        if (i < itemsToGenerate.length) {
+          const label = itemsToGenerate[i];
+          try {
+            const qrCodeBase64 = await getQRCodeBase64Local(label.qrCode);
+            fullHTML += `
+              <div class="label">
+                <div class="label-content">
+                  <div class="title">${label.name}</div>
+                  <div class="separator"></div>
+                  <div class="description">${label.description || ''}</div>
+                  <div class="price">Prix: ${label.sellingPrice}€</div>
                 </div>
-              `;
-            } catch (error) {
-              console.error('Erreur génération QR code pour', label.name, error);
-            }
-          } else {
-            fullHTML += '<div class="label"></div>';
+                <div class="qr-code">
+                  <img src="${qrCodeBase64}" alt="QR Code" />
+                </div>
+              </div>
+            `;
+          } catch (error) {
+            console.error('Erreur génération QR code pour', label.name, error);
           }
+        } else {
+          fullHTML += `<div class="label"></div>`;
         }
-        fullHTML += '</div>';
       }
 
       fullHTML += `
+                </div> <!-- fermeture grid-container -->
+              </div> <!-- fermeture rotated-container -->
+            </div> <!-- fermeture page -->
           </body>
         </html>
       `;
 
-      // Générer le PDF
       const { uri: pdfUri } = await Print.printToFileAsync({
         html: fullHTML,
         base64: false
       });
 
-      // Copier dans le dossier Documents
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const fileName = `etiquettes-${timestamp}.pdf`;
       const destinationUri = `${FileSystem.documentDirectory}${fileName}`;
@@ -211,7 +228,6 @@ const LabelScreen = () => {
         to: destinationUri
       });
 
-      // Partager le fichier
       await Sharing.shareAsync(destinationUri, {
         mimeType: 'application/pdf',
         dialogTitle: 'Sauvegarder les étiquettes',
@@ -226,6 +242,9 @@ const LabelScreen = () => {
 
   return (
     <View style={styles.container}>
+      {qrCaptureValue && (
+        <HiddenQRCode value={qrCaptureValue} onCapture={handleQRCodeCapture} />
+      )}
       <View style={styles.header}>
         <Text style={styles.title}>Génération d'étiquettes</Text>
         <TouchableOpacity 

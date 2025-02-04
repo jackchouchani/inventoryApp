@@ -27,7 +27,8 @@
         {
           "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
         }
-      ]
+      ],
+      "expo-router"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -58,13 +59,15 @@
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
-      "orientation": "portrait"
+      "orientation": "portrait",
+      "bundler": "metro"
     },
     "extra": {
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
     },
-    "owner": "jackch"
+    "owner": "jackch",
+    "scheme": "inventoryapp"
   }
 }
