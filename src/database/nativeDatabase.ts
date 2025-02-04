@@ -1,9 +1,15 @@
-import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 import { DatabaseInterface, Item, Container, Category } from './types';
 
-// Updated type definitions
-type SQLiteDatabase = SQLite.SQLiteDatabase;
+let ExpoSQLite: any = null;
+let sqliteDb: any = null;
+
+if (Platform.OS !== 'web') {
+  ExpoSQLite = require('expo-sqlite');
+}
+
+// Définitions de types mises à jour
+type SQLiteDatabase = ReturnType<typeof ExpoSQLite.openDatabaseSync>;
 type SQLiteRunResult = {
   insertId: number;
   rowsAffected: number;
@@ -14,22 +20,20 @@ export const formatDate = (date: Date = new Date()): string => {
     return date.toISOString().slice(0, 19).replace('T', ' ');
 };
 
-let sqliteDb: SQLiteDatabase | null = null;
-
-export const getDatabase = (): SQLiteDatabase => {
-    if (Platform.OS === 'web') {
-        return null as any; // Pour le web, on utilisera webDatabase
+export const getDatabase = () => {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  
+  if (!sqliteDb && ExpoSQLite) {
+    try {
+      sqliteDb = ExpoSQLite.openDatabaseSync('vintage_store.db');
+    } catch (error) {
+      console.error('Error opening database:', error);
+      throw error;
     }
-    
-    if (!sqliteDb) {
-        try {
-            sqliteDb = SQLite.openDatabaseSync('vintage_store.db');
-        } catch (error) {
-            console.error('Error opening database:', error);
-            throw error;
-        }
-    }
-    return sqliteDb;
+  }
+  return sqliteDb;
 };
 
 export const initDatabase = async () => {
@@ -108,13 +112,12 @@ export const getCategory = async (id: number): Promise<Category | null> => {
     if (!sqliteDb) {
         sqliteDb = getDatabase();
     }
-    
     try {
-        const result = await sqliteDb.getFirstAsync<Category>(
+        const result = await sqliteDb.getFirstAsync(
             'SELECT * FROM categories WHERE id = ?',
             [id]
         );
-        return result || null;
+        return result as Category || null;
     } catch (error) {
         console.error('Error getting category:', error);
         throw error;
@@ -242,9 +245,8 @@ export const getContainers = async (): Promise<Container[]> => {
     if (!sqliteDb) {
         sqliteDb = getDatabase();
     }
-    
     try {
-        return await sqliteDb.getAllAsync<Container>('SELECT * FROM containers');
+        return await sqliteDb.getAllAsync('SELECT * FROM containers') as Container[];
     } catch (error) {
         console.error('Error getting containers:', error);
         throw error;
@@ -255,9 +257,8 @@ export const getCategories = async (): Promise<Category[]> => {
     if (!sqliteDb) {
         sqliteDb = getDatabase();
     }
-    
     try {
-        return await sqliteDb.getAllAsync<Category>('SELECT * FROM categories');
+        return await sqliteDb.getAllAsync('SELECT * FROM categories') as Category[];
     } catch (error) {
         console.error('Error getting categories:', error);
         throw error;
@@ -286,10 +287,9 @@ export const getItems = async (): Promise<Item[]> => {
     if (!sqliteDb) {
         sqliteDb = getDatabase();
     }
-    
     try {
-        const result = await sqliteDb.getAllAsync<Item>('SELECT * FROM items');
-        return result;
+        const result = await sqliteDb.getAllAsync('SELECT * FROM items');
+        return result as Item[];
     } catch (error) {
         console.error('Error fetching items:', error);
         throw error;
@@ -346,10 +346,10 @@ export const getItemByQRCode = async (qrCode: string): Promise<Item | null> => {
   }
   
   try {
-    const result = await sqliteDb.getFirstAsync<Item>(
+    const result = await sqliteDb.getFirstAsync(
       'SELECT * FROM items WHERE qrCode = ?',
       [qrCode]
-    );
+    ) as Item | undefined;
     return result || null;
   } catch (error) {
     console.error('Error getting item by QR code:', error);
@@ -361,12 +361,11 @@ export const getContainerByQRCode = async (qrCode: string): Promise<Container | 
   if (!sqliteDb) {
     sqliteDb = getDatabase();
   }
-  
   try {
-    const result = await sqliteDb.getFirstAsync<Container>(
+    const result = await sqliteDb.getFirstAsync(
       'SELECT * FROM containers WHERE qrCode = ?',
       [qrCode]
-    );
+    ) as Container | undefined;
     return result || null;
   } catch (error) {
     console.error('Error getting container by QR code:', error);
@@ -375,12 +374,17 @@ export const getContainerByQRCode = async (qrCode: string): Promise<Container | 
 };
 
 const nativeDatabase: DatabaseInterface = {
-    getItems,
-    getContainers,
-    getCategories,
-    addItem,
-    updateItem,
-    // ... autres méthodes de l'interface
+  initDatabase,
+  getItems,
+  getContainers,
+  getCategories,
+  addItem,
+  updateItem,
+  updateItemStatus,
+  addContainer,
+  addCategory,
+  resetDatabase,
+  getDatabase
 };
 
 export default nativeDatabase;

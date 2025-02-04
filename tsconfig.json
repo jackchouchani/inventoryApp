@@ -16,12 +16,14 @@
     "baseUrl": "src",
     "paths": {
       "*": ["*"]
-    }
+    },
+    "types": ["jest", "node"]
   },
   "include": [
     "src/**/*",
     "index.ts",
-    "App.tsx"
+    "App.tsx",
+    "src/types/*.d.ts"
   ],
   "exclude": [
     "node_modules",

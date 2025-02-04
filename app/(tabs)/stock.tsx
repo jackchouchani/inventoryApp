@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { ItemList } from '../src/components/ItemList';
-import { getItems, getContainers, getCategories, updateItem, Item, Container, Category } from '../src/database/database';
-import { setItems } from '../src/store/itemsSlice';
+import { ItemList } from '../../src/components/ItemList';
+import { getItems, getContainers, getCategories, updateItemStatus } from '../../src/database/database';
+import { setItems } from '../../src/store/itemsSlice';
 
 export default function Stock() {
-  const [localItems, setLocalItems] = useState<Item[]>([]);
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [localItems, setLocalItems] = useState([]);
+  const [containers, setContainers] = useState([]);
+  const [categories, setCategories] = useState([]);
   const dispatch = useDispatch();
 
   const loadData = async () => {
@@ -33,7 +33,7 @@ export default function Stock() {
 
   const handleMarkAsSold = async (itemId) => {
     try {
-      await updateItem(itemId, { status: 'sold' });
+      await updateItemStatus(itemId, 'sold');
       await loadData();
     } catch (error) {
       console.error('Error marking item as sold:', error);
@@ -41,11 +41,13 @@ export default function Stock() {
   };
 
   return (
-    <ItemList
-      items={localItems}
-      containers={containers}
-      categories={categories}
-      onMarkAsSold={handleMarkAsSold}
-    />
+    <View style={{ flex: 1 }}>
+      <ItemList
+        items={localItems}
+        containers={containers}
+        categories={categories}
+        onMarkAsSold={handleMarkAsSold}
+      />
+    </View>
   );
-} 
+}

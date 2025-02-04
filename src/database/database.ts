@@ -1,34 +1,22 @@
 import { Platform } from 'react-native';
 import { Container, DatabaseInterface, Item } from './types';
 import webDatabase from './webDatabase';
-import nativeDatabase, {
-  initDatabase as nativeInitDatabase,
-  getItems as nativeGetItems,
-  addItem as nativeAddItem,
-  updateItem as nativeUpdateItem,
-  getContainers as nativeGetContainers,
-  getCategories as nativeGetCategories,
-  resetDatabase,
-  addCategory,
-  addContainer,
-  getDatabase,
-} from './nativeDatabase';
+import nativeDatabase from './nativeDatabase';
 
 const isWeb = Platform.OS === 'web';
-const chosenDatabase = isWeb ? webDatabase : nativeDatabase;
 
-export default chosenDatabase;
-
-// Pour la version web, on peut faire des stubs si nécessaire
-export const initDatabase = isWeb ? async () => {} : nativeInitDatabase;
-export const getItems = isWeb ? webDatabase.getItems.bind(webDatabase) : nativeGetItems;
-export const addItem = isWeb ? webDatabase.addItem.bind(webDatabase) : nativeAddItem;
-export const updateItem = isWeb ? webDatabase.updateItem.bind(webDatabase) : nativeUpdateItem;
-export const getContainers = isWeb ? webDatabase.getContainers.bind(webDatabase) : nativeGetContainers;
-export const getCategories = isWeb ? webDatabase.getCategories.bind(webDatabase) : nativeGetCategories;
-
-// Exportez également les fonctions supplémentaires utilisées par vos backups et autres
-export { resetDatabase, addCategory, addContainer, getDatabase };
+// Définir les fonctions de base de données en fonction de la plateforme
+export const initDatabase = isWeb ? webDatabase.initDatabase.bind(webDatabase) : nativeDatabase.initDatabase;
+export const getItems = isWeb ? webDatabase.getItems.bind(webDatabase) : nativeDatabase.getItems;
+export const addItem = isWeb ? webDatabase.addItem.bind(webDatabase) : nativeDatabase.addItem;
+export const updateItem = isWeb ? webDatabase.updateItem.bind(webDatabase) : nativeDatabase.updateItem;
+export const getContainers = isWeb ? webDatabase.getContainers.bind(webDatabase) : nativeDatabase.getContainers;
+export const getCategories = isWeb ? webDatabase.getCategories.bind(webDatabase) : nativeDatabase.getCategories;
+export const addContainer = isWeb ? webDatabase.addContainer.bind(webDatabase) : nativeDatabase.addContainer;
+export const addCategory = isWeb ? webDatabase.addCategory.bind(webDatabase) : nativeDatabase.addCategory;
+export const resetDatabase = isWeb ? webDatabase.resetDatabase.bind(webDatabase) : nativeDatabase.resetDatabase;
+export const getDatabase = isWeb ? webDatabase.getDatabase.bind(webDatabase) : nativeDatabase.getDatabase;
+export const updateItemStatus = isWeb ? webDatabase.updateItemStatus.bind(webDatabase) : nativeDatabase.updateItemStatus;
 
 export const getContainerByQRCode = async (qrCode: string): Promise<Container | null> => {
     const containers = await getContainers();
@@ -40,4 +28,4 @@ export const getItemByQRCode = async (qrCode: string): Promise<Item | null> => {
     return items.find(item => item.qrCode === qrCode) || null;
 };
 
-export * from './types';
+export type { Item, Container, Category } from './types';

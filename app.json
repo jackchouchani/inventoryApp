@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "plugins": [
+      "expo-router",
       "expo-sqlite",
       [
         "expo-image-picker",
@@ -27,8 +28,7 @@
         {
           "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
         }
-      ],
-      "expo-router"
+      ]
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -59,8 +59,7 @@
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
-      "orientation": "portrait",
-      "bundler": "metro"
+      "orientation": "portrait"
     },
     "extra": {
       "eas": {

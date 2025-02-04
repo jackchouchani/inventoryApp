@@ -32,9 +32,15 @@ export interface Category {
 }
 
 export interface DatabaseInterface {
+  initDatabase(): Promise<void>;
   getItems(): Promise<Item[]>;
   getContainers(): Promise<Container[]>;
   getCategories(): Promise<Category[]>;
   addItem(item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<number>;
-  updateItem(id: number, item: Omit<Item, 'id'>): Promise<void>;
+  updateItem(id: number, item: Partial<Item>): Promise<void>;
+  updateItemStatus(id: number, status: 'available' | 'sold'): Promise<void>;
+  addContainer(container: Omit<Container, 'id' | 'createdAt' | 'updatedAt'>): Promise<number>;
+  addCategory(category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<number>;
+  resetDatabase(): Promise<void>;
+  getDatabase(): any;
 } 

@@ -1,58 +1,132 @@
 import { DatabaseInterface, Item, Container, Category } from './types';
 
 class WebDatabase implements DatabaseInterface {
-  private storage: Storage;
+  private storage: Storage | null = null;
 
   constructor() {
-    if (typeof window !== 'undefined') {
+    // Check if we're in a browser environment
+    if (typeof window !== 'undefined' && window.localStorage) {
       this.storage = window.localStorage;
-    } else {
-      // Créer un storage vide pour l'environnement non-web
-      this.storage = {
+    }
+  }
+
+  private getStorage(): Storage {
+    if (!this.storage) {
+      // Fallback storage for non-browser environments
+      return {
         getItem: () => null,
         setItem: () => {},
         removeItem: () => {},
         clear: () => {},
-        length: 0,
         key: () => null,
-      };
+        length: 0
+      } as Storage;
     }
-    this.initializeStorage();
+    return this.storage;
   }
 
-  private initializeStorage() {
-    if (!this.storage.getItem('items')) this.storage.setItem('items', '[]');
-    if (!this.storage.getItem('containers')) this.storage.setItem('containers', '[]');
-    if (!this.storage.getItem('categories')) this.storage.setItem('categories', '[]');
+  async initDatabase(): Promise<void> {
+    const storage = this.getStorage();
+    if (!storage.getItem('items')) storage.setItem('items', '[]');
+    if (!storage.getItem('containers')) storage.setItem('containers', '[]');
+    if (!storage.getItem('categories')) storage.setItem('categories', '[]');
   }
 
   async getItems(): Promise<Item[]> {
-    return JSON.parse(this.storage.getItem('items') || '[]');
+    const storage = this.getStorage();
+    const items = storage.getItem('items');
+    return items ? JSON.parse(items) : [];
   }
 
   async getContainers(): Promise<Container[]> {
-    return JSON.parse(this.storage.getItem('containers') || '[]');
+    const storage = this.getStorage();
+    const containers = storage.getItem('containers');
+    return containers ? JSON.parse(containers) : [];
   }
 
   async getCategories(): Promise<Category[]> {
-    return JSON.parse(this.storage.getItem('categories') || '[]');
+    const storage = this.getStorage();
+    const categories = storage.getItem('categories');
+    return categories ? JSON.parse(categories) : [];
   }
 
   async addItem(item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const storage = this.getStorage();
     const items = await this.getItems();
     const newId = items.length > 0 ? Math.max(...items.map(i => i.id || 0)) + 1 : 1;
-    items.push({ ...item, id: newId });
-    this.storage.setItem('items', JSON.stringify(items));
+    const newItem = { 
+      ...item, 
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    items.push(newItem);
+    storage.setItem('items', JSON.stringify(items));
     return newId;
   }
 
-  async updateItem(id: number, item: Omit<Item, 'id'>): Promise<void> {
+  async updateItem(id: number, item: Partial<Item>): Promise<void> {
+    const storage = this.getStorage();
     const items = await this.getItems();
     const index = items.findIndex(i => i.id === id);
     if (index !== -1) {
-      items[index] = { ...items[index], ...item };
-      this.storage.setItem('items', JSON.stringify(items));
+      items[index] = { 
+        ...items[index], 
+        ...item,
+        updatedAt: new Date().toISOString()
+      };
+      storage.setItem('items', JSON.stringify(items));
     }
+  }
+
+  async addContainer(container: Omit<Container, 'id'>): Promise<number> {
+    const storage = this.getStorage();
+    const containers = await this.getContainers();
+    const newId = containers.length > 0 ? Math.max(...containers.map(c => c.id || 0)) + 1 : 1;
+    const newContainer = { ...container, id: newId };
+    containers.push(newContainer);
+    storage.setItem('containers', JSON.stringify(containers));
+    return newId;
+  }
+
+  async addCategory(category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+    const storage = this.getStorage();
+    const categories = await this.getCategories();
+    const newId = categories.length > 0 ? Math.max(...categories.map(c => c.id || 0)) + 1 : 1;
+    const newCategory = { 
+      ...category, 
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    categories.push(newCategory);
+    storage.setItem('categories', JSON.stringify(categories));
+    return newId;
+  }
+
+  async resetDatabase(): Promise<void> {
+    const storage = this.getStorage();
+    storage.setItem('items', '[]');
+    storage.setItem('containers', '[]');
+    storage.setItem('categories', '[]');
+  }
+
+  async updateItemStatus(id: number, status: 'available' | 'sold'): Promise<void> {
+    const storage = this.getStorage();
+    const items = await this.getItems();
+    const index = items.findIndex(i => i.id === id);
+    if (index !== -1) {
+      items[index] = {
+        ...items[index],
+        status,
+        updatedAt: new Date().toISOString()
+      };
+      storage.setItem('items', JSON.stringify(items));
+    }
+  }
+
+  getDatabase(): any {
+    return this.getStorage();
   }
 }
 

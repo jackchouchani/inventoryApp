@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Container, Item, getContainers, getItems, addContainer, updateItem } from '../database/database';
 import { ContainerGrid } from '../components/ContainerGrid';
 import { ContainerForm } from '../components/ContainerForm';
@@ -13,6 +14,7 @@ export const ContainerScreen = () => {
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const router = useRouter();
 
   const loadData = async () => {
     try {

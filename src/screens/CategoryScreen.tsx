@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Alert
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { deleteCategory, editCategory, resetCategories, setCategories, addNewCategory } from '../store/categorySlice';
@@ -23,17 +23,13 @@ const CategoryScreen = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [error, setError] = useState('');
-  const navigation = useNavigation();
+  const router = useRouter();
   const dispatch = useDispatch();
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
 
   useEffect(() => {
     loadCategories();
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadCategories();
-    });
-    return unsubscribe;
-  }, [navigation]);
+  }, []);
 
   const loadCategories = async () => {
     try {
@@ -60,28 +56,31 @@ const CategoryScreen = () => {
     }
 
     try {
-      const categoryId = await addCategoryToDatabase({
+      const categoryToAdd = {
         name: newCategory.name.trim(),
         description: newCategory.description.trim()
-      });
-
-      const now = new Date().toISOString();
-      const categoryWithId = {
-        id: categoryId,
-        name: newCategory.name.trim(),
-        description: newCategory.description.trim(),
-        createdAt: now,
-        updatedAt: now
       };
 
-      dispatch(addNewCategory(categoryWithId));
-      setNewCategory({ name: '', description: '' });
-      setModalVisible(false);
-      Alert.alert('Succès', 'Catégorie ajoutée avec succès');
-      useRefreshStore.getState().triggerRefresh();
+      const categoryId = await addCategoryToDatabase(categoryToAdd);
+
+      if (categoryId) {
+        const categoryWithId = {
+          id: categoryId,
+          name: newCategory.name.trim(),
+          description: newCategory.description.trim(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        dispatch(addNewCategory(categoryWithId));
+        setNewCategory({ name: '', description: '' });
+        setModalVisible(false);
+        Alert.alert('Succès', 'Catégorie ajoutée avec succès');
+        useRefreshStore.getState().triggerRefresh();
+      }
     } catch (error) {
       console.error('Erreur:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter la catégorie');
+      Alert.alert('Erreur', 'Impossible d\'ajouter la catégorie. Veuillez réessayer.');
     }
   };
 

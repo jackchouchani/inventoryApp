@@ -6,7 +6,7 @@ module.exports = {
   orientation: 'portrait',
   scheme: 'inventoryapp',
   web: {
-    bundler: 'webpack',
+    bundler: 'metro',
     output: 'static',
     favicon: './assets/favicon.png'
   },

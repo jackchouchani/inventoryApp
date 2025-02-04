@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { getItems, Item } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Stats {
   totalItems: number;
@@ -18,6 +20,7 @@ const StatsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const navigation = useNavigation();
 
   useEffect(() => {
     loadStats();
@@ -80,55 +83,66 @@ const StatsScreen = () => {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Inventory Overview</Text>
-        <View style={styles.statRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats?.totalItems || 0}</Text>
-            <Text style={styles.statLabel}>Total Items</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats?.availableItems || 0}</Text>
-            <Text style={styles.statLabel}>Available</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats?.soldItems || 0}</Text>
-            <Text style={styles.statLabel}>Sold</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="black" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Statistiques</Text>
+      </View>
+      <ScrollView style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Vue d'ensemble</Text>
+          <View style={styles.statRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats?.totalItems || 0}</Text>
+              <Text style={styles.statLabel}>Total Items</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats?.availableItems || 0}</Text>
+              <Text style={styles.statLabel}>Available</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats?.soldItems || 0}</Text>
+              <Text style={styles.statLabel}>Sold</Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Financial Summary</Text>
-        <View style={styles.financialStats}>
-          <View style={styles.financialRow}>
-            <Text style={styles.financialLabel}>Total Purchase Value:</Text>
-            <Text style={styles.financialValue}>
-              {formatCurrency(stats?.totalPurchaseValue || 0)}
-            </Text>
-          </View>
-          <View style={styles.financialRow}>
-            <Text style={styles.financialLabel}>Total Selling Value:</Text>
-            <Text style={styles.financialValue}>
-              {formatCurrency(stats?.totalSellingValue || 0)}
-            </Text>
-          </View>
-          <View style={styles.financialRow}>
-            <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Total Profit:</Text>
-            <Text style={[styles.financialValue, styles.totalProfitValue]}>
-              {formatCurrency(stats?.totalProfit || 0)}
-            </Text>
-          </View>
-          <View style={styles.financialRow}>
-            <Text style={styles.financialLabel}>Average Profit per Item:</Text>
-            <Text style={styles.financialValue}>
-              {formatCurrency(stats?.averageProfit || 0)}
-            </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Financial Summary</Text>
+          <View style={styles.financialStats}>
+            <View style={styles.financialRow}>
+              <Text style={styles.financialLabel}>Total Purchase Value:</Text>
+              <Text style={styles.financialValue}>
+                {formatCurrency(stats?.totalPurchaseValue || 0)}
+              </Text>
+            </View>
+            <View style={styles.financialRow}>
+              <Text style={styles.financialLabel}>Total Selling Value:</Text>
+              <Text style={styles.financialValue}>
+                {formatCurrency(stats?.totalSellingValue || 0)}
+              </Text>
+            </View>
+            <View style={styles.financialRow}>
+              <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Total Profit:</Text>
+              <Text style={[styles.financialValue, styles.totalProfitValue]}>
+                {formatCurrency(stats?.totalProfit || 0)}
+              </Text>
+            </View>
+            <View style={styles.financialRow}>
+              <Text style={styles.financialLabel}>Average Profit per Item:</Text>
+              <Text style={styles.financialValue}>
+                {formatCurrency(stats?.averageProfit || 0)}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -139,28 +153,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    height: 60,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+  backButton: {
+    padding: 8,
   },
-  errorContainer: {
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginLeft: 16,
+  },
+  content: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  errorText: {
-    color: '#ff3b30',
-    fontSize: 16,
-    textAlign: 'center',
   },
   section: {
     padding: 20,
@@ -225,5 +236,28 @@ const styles = StyleSheet.create({
   totalProfitValue: {
     color: '#34c759',
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
