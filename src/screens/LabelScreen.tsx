@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useSelector } from 'react-redux';
 import { Item } from '../database/database';
 import * as Print from 'expo-print';
@@ -41,7 +41,6 @@ const LabelScreen = () => {
 
   const generateLabels = async () => {
     try {
-      
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
         Alert.alert('Erreur', 'Le partage n\'est pas disponible sur cet appareil');
@@ -214,26 +213,88 @@ const LabelScreen = () => {
         </html>
       `;
 
-      const { uri: pdfUri } = await Print.printToFileAsync({
-        html: fullHTML,
-        base64: false
-      });
+      if (Platform.OS === 'web') {
+        const { jsPDF } = await import('jspdf');
+        const doc = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `etiquettes-${timestamp}.pdf`;
-      const destinationUri = `${FileSystem.documentDirectory}${fileName}`;
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 5;
+        
+        let x = margin;
+        let y = margin;
+        let col = 0;
+        let row = 0;
 
-      await FileSystem.copyAsync({
-        from: pdfUri,
-        to: destinationUri
-      });
+        for (const label of itemsToGenerate) {
+          if (row >= 4) {
+            doc.addPage();
+            y = margin;
+            row = 0;
+          }
 
-      await Sharing.shareAsync(destinationUri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Sauvegarder les étiquettes',
-        UTI: 'com.adobe.pdf'
-      });
+          // Dessiner le cadre de l'étiquette
+          doc.rect(x, y, 25.4, 48.5);
+          
+          // Ajouter le contenu texte
+          doc.setFontSize(10);
+          doc.text(label.name, x + 2, y + 4);
+          
+          // Ligne séparatrice
+          doc.line(x + 2, y + 6, x + 23.4, y + 6);
+          
+          // Description
+          doc.setFontSize(8);
+          const description = doc.splitTextToSize(label.description || '', 23);
+          doc.text(description, x + 2, y + 8);
+          
+          // Prix
+          doc.setFontSize(9);
+          doc.text(`Prix: ${label.sellingPrice}€`, x + 2, y + 40);
+          
+          // QR Code
+          const qrCodeBase64 = await getQRCodeBase64Local(label.qrCode);
+          doc.addImage(qrCodeBase64.split(',')[1], 'PNG', x + 15, y + 25, 10, 10);
 
+          // Positionnement suivant
+          col++;
+          if (col >= 11) {
+            col = 0;
+            row++;
+            x = margin;
+            y += 48.5 + 2;
+          } else {
+            x += 25.4 + 0.76;
+          }
+        }
+
+        doc.save(`etiquettes-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`);
+      } else {
+        // Code existant pour mobile
+        const { uri: pdfUri } = await Print.printToFileAsync({
+          html: fullHTML,
+          base64: false
+        });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `etiquettes-${timestamp}.pdf`;
+        const destinationUri = `${FileSystem.documentDirectory}${fileName}`;
+
+        await FileSystem.copyAsync({
+          from: pdfUri,
+          to: destinationUri
+        });
+
+        await Sharing.shareAsync(destinationUri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Sauvegarder les étiquettes',
+          UTI: 'com.adobe.pdf'
+        });
+      }
     } catch (error) {
       console.error('Erreur complète:', error);
       Alert.alert('Erreur', 'Impossible de générer ou partager les étiquettes');

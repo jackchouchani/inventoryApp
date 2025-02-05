@@ -34,6 +34,12 @@ const safeCopyFile = async (sourceUri: string, destUri: string): Promise<void> =
 };
 
 export const initPhotoStorage = async () => {
+    if (Platform.OS === 'web') {
+        // Version web - pas besoin d'initialisation spéciale
+        return;
+    }
+
+    // Version native
     await ensureDirectoryExists(PHOTO_DIR);
     await ensureDirectoryExists(TEMP_DIR);
 };
@@ -43,6 +49,11 @@ const generatePhotoFilename = () => {
 };
 
 export const savePhoto = async (uri: string): Promise<string> => {
+    if (Platform.OS === 'web') {
+        // Pour le web, on retourne simplement l'URI
+        return uri;
+    }
+
     try {
         await initPhotoStorage();
 
@@ -64,6 +75,11 @@ export const savePhoto = async (uri: string): Promise<string> => {
 };
 
 export const deletePhoto = async (uri: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+        // Pour le web, pas besoin de suppression physique
+        return;
+    }
+
     try {
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (fileInfo.exists) {

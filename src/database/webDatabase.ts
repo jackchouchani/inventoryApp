@@ -1,5 +1,7 @@
 import { DatabaseInterface, Item, Container, Category } from './types';
 
+const WEB_PHOTO_STORAGE_KEY = 'photo_uris';
+
 class WebDatabase implements DatabaseInterface {
   private storage: Storage | null = null;
 
@@ -123,6 +125,25 @@ class WebDatabase implements DatabaseInterface {
       };
       storage.setItem('items', JSON.stringify(items));
     }
+  }
+
+  async storePhotoUri(uri: string): Promise<void> {
+    const storage = this.getStorage();
+    const uris = JSON.parse(storage.getItem(WEB_PHOTO_STORAGE_KEY) || '[]');
+    uris.push(uri);
+    storage.setItem(WEB_PHOTO_STORAGE_KEY, JSON.stringify(uris));
+  }
+
+  async getPhotoUris(): Promise<string[]> {
+    const storage = this.getStorage();
+    return JSON.parse(storage.getItem(WEB_PHOTO_STORAGE_KEY) || '[]');
+  }
+
+  async removePhotoUri(uri: string): Promise<void> {
+    const storage = this.getStorage();
+    const uris = JSON.parse(storage.getItem(WEB_PHOTO_STORAGE_KEY) || '[]');
+    const filteredUris = uris.filter((storedUri: string) => storedUri !== uri);
+    storage.setItem(WEB_PHOTO_STORAGE_KEY, JSON.stringify(filteredUris));
   }
 
   getDatabase(): any {

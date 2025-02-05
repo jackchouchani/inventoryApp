@@ -70,7 +70,8 @@
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
-      "orientation": "portrait"
+      "orientation": "portrait",
+      "bundler": "metro"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
@@ -79,7 +80,8 @@
         "origin": false
       },
       "eas": {
-        "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
+        "projectId": "493303ca-8459-4234-b01d-1103a21f67c1",
+        "enableDebugging": true
       }
     }
   }

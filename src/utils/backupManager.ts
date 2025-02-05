@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 import { getItems, getCategories, getContainers, addItem, addCategory, addContainer, getDatabase } from '../database/database';
 import { exportPhotos, importPhotos } from './photoManager';
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 const BACKUP_DIR = `${FileSystem.documentDirectory}backups`;
 const PHOTOS_DIR = `${FileSystem.documentDirectory}photos`;
@@ -25,6 +26,11 @@ interface RestorationState {
 }
 
 export const initBackupStorage = async () => {
+    if (Platform.OS === 'web') {
+        // Version web - pas besoin d'initialisation
+        return;
+    }
+
     const dirInfo = await FileSystem.getInfoAsync(BACKUP_DIR);
     if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(BACKUP_DIR, { intermediates: true });
@@ -73,6 +79,10 @@ const restoreOriginalState = async (originalState: RestorationState['originalBac
 };
 
 export const createBackup = async (): Promise<string> => {
+    if (Platform.OS === 'web') {
+        throw new Error('La fonctionnalité de sauvegarde n\'est pas disponible sur le web');
+    }
+
     try {
         // Créer le répertoire de sauvegarde
         const dirInfo = await FileSystem.getInfoAsync(BACKUP_DIR);
@@ -128,6 +138,10 @@ export const createBackup = async (): Promise<string> => {
 };
 
 export const restoreBackup = async (backupPath: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+        throw new Error('La fonctionnalité de restauration n\'est pas disponible sur le web');
+    }
+
     try {
         // Créer le dossier photos s'il n'existe pas
         const photosInfo = await FileSystem.getInfoAsync(PHOTOS_DIR);

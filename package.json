@@ -23,6 +23,7 @@
     "expo-barcode-scanner": "~13.0.1",
     "expo-camera": "~16.0.14",
     "expo-constants": "~17.0.5",
+    "expo-dev-client": "~5.0.11",
     "expo-document-picker": "~13.0.2",
     "expo-haptics": "~14.0.1",
     "expo-head": "^0.0.20",
@@ -35,6 +36,7 @@
     "expo-sharing": "~13.0.1",
     "expo-sqlite": "~15.1.1",
     "expo-status-bar": "~2.0.1",
+    "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
     "localforage": "^1.10.0",
     "qrcode": "^1.5.4",
@@ -51,8 +53,7 @@
     "react-native-web": "~0.19.13",
     "react-redux": "^9.2.0",
     "uuid": "^11.0.5",
-    "zustand": "^5.0.3",
-    "expo-dev-client": "~5.0.11"
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.26.7",

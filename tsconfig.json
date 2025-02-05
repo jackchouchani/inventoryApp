@@ -22,7 +22,6 @@
   "include": [
     "src/**/*",
     "index.ts",
-    "App.tsx",
     "src/types/*.d.ts"
   ],
   "exclude": [
