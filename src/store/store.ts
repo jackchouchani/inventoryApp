@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import categoryReducer from './categorySlice';
 import itemsReducer from './itemsSlice';
+import containersReducer from './containersSlice';
 
 const initialState = {
   items: {
@@ -12,7 +13,8 @@ const initialState = {
 export const store = configureStore({
   reducer: {
     categories: categoryReducer,
-    items: itemsReducer
+    items: itemsReducer,
+    containers: containersReducer,
   },
   preloadedState: initialState
 });
