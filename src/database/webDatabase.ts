@@ -156,7 +156,7 @@ class WebDatabase implements DatabaseInterface {
     return this.getStorage();
   }
 
-  private async saveDatabase(data: { 
+  public async saveDatabase(data: { 
     items: Item[], 
     containers: Container[], 
     categories: Category[] 
@@ -206,6 +206,62 @@ class WebDatabase implements DatabaseInterface {
       containers: updatedContainers,
       categories: await this.getCategories()
     });
+  }
+
+  async getItemOrContainerByQRCode(type: "ITEM" | "CONTAINER", qrCode: string): Promise<boolean> {
+    const items = await this.getItems();
+    const containers = await this.getContainers();
+    
+    const foundItem = items.some(item => item.qrCode === qrCode);
+    const foundContainer = containers.some(container => container.qrCode === qrCode);
+    
+    return foundItem || foundContainer;
+  }
+
+  async validateQRCode(qrCode: string): Promise<boolean> {
+    const items = await this.getItems();
+    const containers = await this.getContainers();
+    
+    const itemExists = items.some(item => item.qrCode === qrCode);
+    const containerExists = containers.some(container => container.qrCode === qrCode);
+    
+    return itemExists || containerExists;
+  }
+
+  async getItemByQRCode(qrCode: string): Promise<Item | null> {
+    const items = await this.getItems();
+    return items.find(item => item.qrCode === qrCode) || null;
+  }
+
+  async getContainerByQRCode(qrCode: string): Promise<Container | null> {
+    const containers = await this.getContainers();
+    return containers.find(container => container.qrCode === qrCode) || null;
+  }
+
+  async getCategory(id: number): Promise<Category | null> {
+    const categories = await this.getCategories();
+    return categories.find(category => category.id === id) || null;
+  }
+
+  async updateCategory(id: number, name: string): Promise<void> {
+    const storage = this.getStorage();
+    const categories = await this.getCategories();
+    const index = categories.findIndex(c => c.id === id);
+    if (index !== -1) {
+      categories[index] = { 
+        ...categories[index], 
+        name,
+        updatedAt: new Date().toISOString()
+      };
+      storage.setItem('categories', JSON.stringify(categories));
+    }
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    const storage = this.getStorage();
+    const categories = await this.getCategories();
+    const updatedCategories = categories.filter(c => c.id !== id);
+    storage.setItem('categories', JSON.stringify(updatedCategories));
   }
 }
 

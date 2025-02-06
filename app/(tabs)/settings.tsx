@@ -1,19 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useRouter } from 'expo-router';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
-import { RootState } from '../store/store';
-import { Ionicons } from '@expo/vector-icons';
-
-type RootStackParamList = {
-  Labels: undefined;
-  Backup: undefined;
-};
+import { RootState } from '../../src/store/store';
 
 const SettingsScreen = () => {
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const router = useRouter();
   const categories = useSelector((state: RootState) => state.categories.categories);
 
   if (!categories) {
@@ -27,7 +20,7 @@ const SettingsScreen = () => {
       </View>
       <TouchableOpacity 
         style={styles.menuItem}
-        onPress={() => navigation.navigate('Labels')}
+        onPress={() => router.push('/(stack)/labels')}
       >
         <Icon name="label" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Générer des étiquettes</Text>
@@ -36,7 +29,7 @@ const SettingsScreen = () => {
 
       <TouchableOpacity 
         style={styles.menuItem}
-        onPress={() => navigation.navigate('Backup')}
+        onPress={() => router.push('/(stack)/backup')}
       >
         <Icon name="backup" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Sauvegarde</Text>

@@ -46,4 +46,19 @@ export interface DatabaseInterface {
   getDatabase: () => any;
   deleteContainer: (containerId: number) => Promise<void>;
   updateContainer: (containerId: number, containerData: Omit<Container, 'id'>) => Promise<void>;
+  getItemOrContainerByQRCode: (type: 'ITEM' | 'CONTAINER', qrCode: string) => Promise<boolean>;
+  validateQRCode: (type: 'ITEM' | 'CONTAINER', qrCode: string) => Promise<boolean>;
+  getItemByQRCode: (qrCode: string) => Promise<Item | null>;
+  getContainerByQRCode: (qrCode: string) => Promise<Container | null>;
+  getCategory: (id: number) => Promise<Category | null>;
+  updateCategory: (id: number, name: string) => Promise<void>;
+  deleteCategory: (id: number) => Promise<void>;
+  storePhotoUri: (uri: string) => Promise<void>;
+  getPhotoUris: () => Promise<string[]>;
+  removePhotoUri: (uri: string) => Promise<void>;
+  saveDatabase: (data: {
+    items: Item[],
+    containers: Container[],
+    categories: Category[]
+  }) => Promise<void>;
 }

@@ -5,11 +5,12 @@ import { ItemList } from '../../src/components/ItemList';
 import { getItems, getContainers, getCategories, updateItemStatus } from '../../src/database/database';
 import { setItems } from '../../src/store/itemsSlice';
 import { useRefreshStore } from '../../src/store/refreshStore';
+import type { Item, Container, Category } from '../../src/types';
 
 export default function Stock() {
-  const [localItems, setLocalItems] = useState([]);
-  const [containers, setContainers] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [localItems, setLocalItems] = useState<Item[]>([]);
+  const [containers, setContainers] = useState<Container[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const dispatch = useDispatch();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 

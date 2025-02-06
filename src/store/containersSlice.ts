@@ -5,12 +5,16 @@ interface ContainersState {
   containers: Container[];
   loading: boolean;
   error: string | null;
+  status: 'idle' | 'loading' | 'succeeded' | 'failed';
 }
+
+export type { ContainersState };
 
 const initialState: ContainersState = {
   containers: [],
   loading: false,
-  error: null
+  error: null,
+  status: 'idle'
 };
 
 const containersSlice = createSlice({

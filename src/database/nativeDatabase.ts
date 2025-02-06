@@ -404,6 +404,23 @@ export async function updateContainer(
   });
 }
 
+export const getItemOrContainerByQRCode = async (type: 'ITEM' | 'CONTAINER', qrCode: string): Promise<boolean> => {
+  if (!sqliteDb) {
+    sqliteDb = getDatabase();
+  }
+  
+  try {
+    const result = await sqliteDb.getFirstAsync(
+      'SELECT id FROM ' + (type === 'ITEM' ? 'items' : 'containers') + ' WHERE qrCode = ?',
+      [qrCode]
+    );
+    return result !== undefined;
+  } catch (error) {
+    console.error('Error getting item or container by QR code:', error);
+    throw error;
+  }
+};
+
 const nativeDatabase: DatabaseInterface = {
   initDatabase,
   getItems,
@@ -417,7 +434,30 @@ const nativeDatabase: DatabaseInterface = {
   resetDatabase,
   getDatabase,
   deleteContainer,
-  updateContainer
+  updateContainer,
+  validateQRCode,
+  getItemByQRCode,
+  getContainerByQRCode,
+  getItemOrContainerByQRCode,
+  getCategory,
+  updateCategory,
+  deleteCategory,
+  storePhotoUri: async (uri: string): Promise<void> => {
+    const db = getDatabase();
+    await db.runAsync('INSERT INTO photoUris (uri) VALUES (?)', [uri]);
+  },
+  getPhotoUris: async (): Promise<string[]> => {
+    const db = getDatabase();
+    const result = await db.getAllAsync('SELECT uri FROM photoUris');
+    return result.map((row: { uri: string }) => row.uri);
+  },
+  removePhotoUri: async (uri: string): Promise<void> => {
+    const db = getDatabase();
+    await db.runAsync('DELETE FROM photoUris WHERE uri = ?', [uri]);
+  },
+  saveDatabase: async (): Promise<void> => {
+    console.log('Database saved successfully');
+  },
 };
 
 export default nativeDatabase;

@@ -1,16 +1,16 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity } from "react-native";
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 
-export default function TabsLayout() {
+export default function TabLayout() {
   const router = useRouter();
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         tabBarStyle: { height: 60 },
         tabBarActiveTintColor: '#007AFF',
         headerRight: () => (
@@ -32,13 +32,12 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="stock"
+        name="index"
         options={{
-          title: "Stock",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="inventory" size={24} color={color} />
+          title: "Accueil",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
           ),
-          href: "/stock",
         }}
       />
       
@@ -46,28 +45,19 @@ export default function TabsLayout() {
         name="scan"
         options={{
           title: "Scanner",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="qr-code-scanner" size={24} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="scan-outline" size={size} color={color} />
           ),
-          href: "/scan",
         }}
       />
       
       <Tabs.Screen
-        name="add"
+        name="settings"
         options={{
-          title: "Ajouter",
-          tabBarIcon: ({ color }) => (
-            <MaterialIcons name="add-circle" size={24} color={color} />
+          title: "Paramètres",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
-          href: "/add",
-        }}
-      />
-
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null,
         }}
       />
     </Tabs>

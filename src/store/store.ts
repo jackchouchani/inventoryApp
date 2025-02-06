@@ -2,12 +2,25 @@ import { configureStore } from '@reduxjs/toolkit';
 import categoryReducer from './categorySlice';
 import itemsReducer from './itemsSlice';
 import containersReducer from './containersSlice';
+import { ContainersState } from './containersSlice';
 
-const initialState = {
+const initialState: {
+  items: { items: any[] },
+  categories: { categories: any[] },
+  containers: ContainersState
+} = {
   items: {
-    items: []
+    items: [] as any[]
   },
-  // autres états initiaux...
+  categories: {
+    categories: [] as any[]
+  },
+  containers: {
+    containers: [],
+    status: 'idle',
+    error: null,
+    loading: false
+  }
 };
 
 export const store = configureStore({
