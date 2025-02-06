@@ -1,12 +1,18 @@
 {
   "expo": {
     "name": "Inventory App",
-    "slug": "inventory-app",
+    "slug": "inventory-cv",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/Logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
+    "updates": {
+      "assetPatternsToBeBundled": [
+        "**/*.ttf",
+        "**/*.png",
+        "**/*.js"
+      ]},
     "plugins": [
       "expo-router",
       [
@@ -79,8 +85,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "493303ca-8459-4234-b01d-1103a21f67c1",
-        "enableDebugging": true
+        "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
     }
   }
