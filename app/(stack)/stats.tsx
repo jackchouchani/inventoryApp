@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { getItems, Item } from '../../src/database/database';
 import { getCategories, Category } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { LineChart } from 'react-native-chart-kit';
+import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryLegend } from 'victory';
 import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -43,6 +43,101 @@ interface MonthlyStats {
   profit: number;
   itemCount: number;
 }
+
+interface ChartProps {
+  data: {
+    labels: string[];
+    datasets: {
+      data: number[];
+      color: (opacity: number) => string;
+      strokeWidth: number;
+    }[];
+    legend: string[];
+  };
+  width: number;
+  height: number;
+  chartConfig: {
+    backgroundColor: string;
+    backgroundGradientFrom: string;
+    backgroundGradientTo: string;
+    decimalPlaces: number;
+    color: (opacity: number) => string;
+    labelColor: (opacity: number) => string;
+    propsForDots: {
+      r: string;
+      strokeWidth: string;
+      stroke: string;
+    };
+    propsForLabels: {
+      fontSize: number;
+    };
+  };
+  bezier?: boolean;
+  style?: any;
+  decorator?: () => React.ReactNode;
+  onDataPointClick?: (
+    value: number,
+    dataset: {
+      data: number[];
+      color: (opacity: number) => string;
+      strokeWidth: number;
+    },
+    getColor: (opacity: number) => string,
+    x: number,
+    y: number,
+    index: number
+  ) => void;
+}
+
+const Chart: React.FC<ChartProps> = (props) => {
+  const { data, width, height } = props;
+  
+  const formattedData = data.datasets.map((dataset, i) => ({
+    data: data.labels.map((label, index) => ({
+      x: label,
+      y: dataset.data[index]
+    })),
+    color: dataset.color(1)
+  }));
+
+  return (
+    <VictoryChart
+      width={width}
+      height={height}
+      theme={VictoryTheme.material}
+      domainPadding={{ x: 20 }}
+    >
+      <VictoryAxis
+        tickFormat={(t) => t}
+        style={{
+          tickLabels: { angle: -45, fontSize: 8 }
+        }}
+      />
+      <VictoryAxis
+        dependentAxis
+        tickFormat={(t) => `$${t}`}
+      />
+      {formattedData.map((dataset, index) => (
+        <VictoryLine
+          key={index}
+          data={dataset.data}
+          style={{
+            data: { stroke: dataset.color }
+          }}
+        />
+      ))}
+      <VictoryLegend
+        x={width - 100}
+        y={50}
+        orientation="vertical"
+        data={data.legend.map((label, i) => ({
+          name: label,
+          symbol: { fill: formattedData[i].color }
+        }))}
+      />
+    </VictoryChart>
+  );
+};
 
 const StatsScreen = () => {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -224,7 +319,7 @@ const StatsScreen = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Évolution des ventes</Text>
         <ScrollView horizontal={false} showsHorizontalScrollIndicator={false}>
-          <LineChart
+          <Chart
             data={chartData}
             width={screenWidth - 40}
             height={220}
@@ -271,7 +366,18 @@ const StatsScreen = () => {
                 </View>
               ) : null;
             }}
-            onDataPointClick={({value, dataset, getColor, x, y, index}) => {
+            onDataPointClick={(
+              value: number,
+              dataset: {
+                data: number[];
+                color: (opacity: number) => string;
+                strokeWidth: number;
+              },
+              getColor: (opacity: number) => string,
+              x: number,
+              y: number,
+              index: number
+            ) => {
               setTooltipPos({
                 x,
                 y,

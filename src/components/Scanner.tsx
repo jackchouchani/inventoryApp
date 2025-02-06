@@ -43,24 +43,17 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
 
     const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
         if (processing) return;
-        
+        setProcessing(true);
+
         try {
-            setProcessing(true);
             const { type, uuid } = parseQRCode(data);
 
-            if (!type || !uuid) {
-                signalError();
-                Alert.alert('Erreur', 'QR code invalide');
-                setProcessing(false);
-                return;
-            }
-
-            // Si c'est un container, on change de container actif
+            // Si c'est un container
             if (type === 'CONTAINER') {
                 const containerQRCode = `${QR_CODE_TYPES.CONTAINER}_${uuid}`;
                 const container = await getContainerByQRCode(containerQRCode);
                 
-                if (!container?.id) {
+                if (!container) {
                     signalError();
                     Alert.alert('Erreur', 'Container non trouvé');
                     setProcessing(false);
@@ -68,29 +61,8 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
                 }
 
                 setCurrentContainer(containerQRCode);
-                setAssignmentMode(true);
                 signalSuccess();
-                
-                if (continuousMode) {
-                    // En mode continu, on continue automatiquement
-                    setProcessing(false);
-                } else {
-                    // En mode manuel, on attend une action de l'utilisateur
-                    Alert.alert('Container sélectionné', 'Voulez-vous scanner un article ?', [
-                        { 
-                            text: 'Oui',
-                            onPress: () => setProcessing(false)
-                        },
-                        {
-                            text: 'Terminer',
-                            onPress: () => {
-                                setAssignmentMode(false);
-                                setCurrentContainer(null);
-                                setProcessing(false);
-                            }
-                        }
-                    ]);
-                }
+                setProcessing(false);
                 return;
             }
 
@@ -121,39 +93,19 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
                 setScanCount(prev => prev + 1);
 
                 if (continuousMode) {
-                    // En mode continu, on continue automatiquement après un court délai
-                    setTimeout(() => {
-                        setProcessing(false);
-                    }, 500);
+                    setTimeout(() => setProcessing(false), 500);
                 } else {
-                    // En mode manuel, on demande ce qu'on veut faire ensuite
                     Alert.alert('Article assigné', 'Que souhaitez-vous faire ?', [
-                        {
-                            text: 'Scanner un autre article',
-                            onPress: () => setProcessing(false)
-                        },
-                        {
-                            text: 'Scanner un autre container',
-                            onPress: () => {
-                                setCurrentContainer(null);
-                                setProcessing(false);
-                            }
-                        },
-                        {
-                            text: 'Terminer',
-                            onPress: () => {
-                                setAssignmentMode(false);
-                                setCurrentContainer(null);
-                                setProcessing(false);
-                            }
-                        }
+                        { text: 'Scanner un autre article', onPress: () => setProcessing(false) },
+                        { text: 'Scanner un autre container', onPress: () => { setCurrentContainer(null); setProcessing(false); } },
+                        { text: 'Terminer', onPress: () => { setAssignmentMode(false); setCurrentContainer(null); setProcessing(false); } }
                     ]);
                 }
             }
         } catch (error) {
             console.error('Erreur lors du scan:', error);
             signalError();
-            Alert.alert('Erreur', 'Impossible de traiter le scan');
+            Alert.alert('Erreur', 'Erreur lors du scan');
             setProcessing(false);
         }
     };

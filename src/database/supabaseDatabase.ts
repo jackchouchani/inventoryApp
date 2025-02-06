@@ -12,28 +12,61 @@ const supabaseDatabase: DatabaseInterface = {
   async getContainers(): Promise<Container[]> {
     const { data, error } = await supabase
       .from('containers')
-      .select('*');
+      .select('*')
+      .is('deleted', false);
     
     if (error) throw error;
-    return data || [];
+    
+    return (data || []).map(container => ({
+      id: container.id,
+      name: container.name,
+      number: container.number,
+      description: container.description,
+      qrCode: container.qr_code,
+      createdAt: container.created_at,
+      updatedAt: container.updated_at
+    }));
   },
 
   async getCategories(): Promise<Category[]> {
     const { data, error } = await supabase
       .from('categories') 
-      .select('*');
+      .select('*')
+      .is('deleted', false);
 
     if (error) throw error;
-    return data || [];
+    
+    return (data || []).map(category => ({
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      createdAt: category.created_at,
+      updatedAt: category.updated_at
+    }));
   },
 
   async updateItem(id: number, item: Omit<Item, "id">): Promise<void> {
+    const supabaseItem = {
+      name: item.name,
+      description: item.description,
+      purchase_price: item.purchasePrice,
+      selling_price: item.sellingPrice,
+      status: item.status,
+      photo_uri: item.photoUri,
+      container_id: item.containerId,
+      category_id: item.categoryId,
+      qr_code: item.qrCode
+    };
+
     const { error } = await supabase
       .from('items')
-      .update(item)
+      .update(supabaseItem)
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      throw error;
+    }
   },
 
   async updateItemStatus(itemId: number, status: string): Promise<void> {
@@ -49,63 +82,123 @@ const supabaseDatabase: DatabaseInterface = {
     const { data, error } = await supabase
       .from('items')
       .select('*')
+      .is('deleted', false)
       .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    return (data || []).map(item => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      purchasePrice: item.purchase_price,
+      sellingPrice: item.selling_price,
+      status: item.status,
+      photoUri: item.photo_uri,
+      containerId: item.container_id,
+      categoryId: item.category_id,
+      qrCode: item.qr_code,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at
+    }));
   },
 
   async addItem(item: Omit<Item, "id" | "createdAt" | "updatedAt">): Promise<number> {
+    // Convertir les noms de colonnes pour correspondre à la structure Supabase
+    const supabaseItem = {
+      name: item.name,
+      description: item.description,
+      purchase_price: item.purchasePrice,
+      selling_price: item.sellingPrice,
+      status: item.status,
+      photo_uri: item.photoUri,
+      container_id: item.containerId,
+      category_id: item.categoryId,
+      qr_code: item.qrCode
+    };
+
     const { data, error } = await supabase
       .from('items')
-      .insert([item])
+      .insert([supabaseItem])
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      throw error;
+    }
     return data.id;
   },
 
   async addContainer(container: Omit<Container, "id" | "createdAt" | "updatedAt">): Promise<number> {
+    // Convertir les noms de colonnes pour correspondre à la structure Supabase
+    const supabaseContainer = {
+      name: container.name,
+      number: container.number,
+      description: container.description,
+      qr_code: container.qrCode,
+      // Ne pas inclure createdAt et updatedAt car ils sont gérés par Supabase
+    };
+
     const { data, error } = await supabase
       .from('containers')
-      .insert([container])
+      .insert([supabaseContainer])
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      throw error;
+    }
     return data.id;
   },
 
   async addCategory(category: Omit<Category, "id" | "createdAt" | "updatedAt">): Promise<number> {
+    // Convertir les noms de colonnes pour correspondre à la structure Supabase
+    const supabaseCategory = {
+      name: category.name,
+      description: category.description
+    };
+
     const { data, error } = await supabase
       .from('categories')
-      .insert([category])
+      .insert([supabaseCategory])
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur Supabase:', error);
+      throw error;
+    }
     return data.id;
   },
 
   async resetDatabase(): Promise<void> {
-    const { error: itemsError } = await supabase
-      .from('items')
-      .delete()
-      .neq('id', 0); // Supprime tous les items
-    if (itemsError) throw itemsError;
+    try {
+      // Marquer tous les items comme supprimés
+      const { error: itemsError } = await supabase
+        .from('items')
+        .update({ deleted: true })
+        .is('deleted', false);
+      if (itemsError) throw itemsError;
 
-    const { error: containersError } = await supabase
-      .from('containers')
-      .delete()
-      .neq('id', 0); // Supprime tous les containers
-    if (containersError) throw containersError;
+      // Marquer tous les containers comme supprimés
+      const { error: containersError } = await supabase
+        .from('containers')
+        .update({ deleted: true })
+        .is('deleted', false);
+      if (containersError) throw containersError;
 
-    const { error: categoriesError } = await supabase
-      .from('categories')
-      .delete()
-      .neq('id', 0); // Supprime toutes les catégories
-    if (categoriesError) throw categoriesError;
+      // Marquer toutes les catégories comme supprimées
+      const { error: categoriesError } = await supabase
+        .from('categories')
+        .update({ deleted: true })
+        .is('deleted', false);
+      if (categoriesError) throw categoriesError;
+
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation Supabase:', error);
+      throw error;
+    }
   },
 
   async getDatabase(): Promise<{ items: Item[], containers: Container[], categories: Category[] }> {
@@ -132,22 +225,49 @@ const supabaseDatabase: DatabaseInterface = {
     const { data, error } = await supabase
       .from('items')
       .select('*')
-      .eq('qrCode', qrCode)
+      .eq('qr_code', qrCode)
       .single();
-    
+
     if (error) throw error;
-    return data;
+    
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      purchasePrice: data.purchase_price,
+      sellingPrice: data.selling_price,
+      status: data.status,
+      photoUri: data.photo_uri,
+      containerId: data.container_id,
+      categoryId: data.category_id,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
   },
 
   async getContainerByQRCode(qrCode: string): Promise<Container | null> {
     const { data, error } = await supabase
       .from('containers')
       .select('*')
-      .eq('qrCode', qrCode)
+      .eq('qr_code', qrCode)
       .single();
-    
+
     if (error) throw error;
-    return data;
+    
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      number: data.number,
+      description: data.description,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
   },
 
   async deleteContainer(containerId: number): Promise<void> {

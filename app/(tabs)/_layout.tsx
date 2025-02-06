@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { TouchableOpacity } from "react-native";
+import { TouchableOpacity, View } from "react-native";
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 
@@ -10,33 +10,33 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
         tabBarStyle: { height: 60 },
         tabBarActiveTintColor: '#007AFF',
         headerRight: () => (
-          <TouchableOpacity 
-            onPress={() => router.push('/(stack)/settings')}
-            style={{ marginRight: 15 }}
-          >
-            <MaterialIcons name="settings" size={24} color="#007AFF" />
-          </TouchableOpacity>
-        ),
-        headerLeft: () => (
-          <TouchableOpacity 
-            onPress={() => router.push('/(stack)/stats')}
-            style={{ marginLeft: 15 }}
-          >
-            <MaterialIcons name="bar-chart" size={24} color="#007AFF" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity 
+              onPress={() => router.push('/(stack)/stats')}
+              style={{ marginRight: 15 }}
+            >
+              <MaterialIcons name="bar-chart" size={24} color="#007AFF" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => router.push('/(stack)/settings')}
+              style={{ marginRight: 15 }}
+            >
+              <MaterialIcons name="settings" size={24} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
         ),
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="stock"
         options={{
-          title: "Accueil",
+          title: "Stock",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <Ionicons name="cube-outline" size={size} color={color} />
           ),
         }}
       />
@@ -52,15 +52,14 @@ export default function TabLayout() {
       />
       
       <Tabs.Screen
-        name="settings"
+        name="add"
         options={{
-          title: "Paramètres",
+          title: "Ajouter",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="add-circle-outline" size={size} color={color} />
           ),
         }}
       />
     </Tabs>
   );
 }
-

@@ -10,7 +10,7 @@ interface ItemProps {
   item: Item;
 }
 
-export const ScanScreen: React.FC = () => {
+const ScanScreen: React.FC = () => {
   const router = useRouter();
   const [showManualMode, setShowManualMode] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
@@ -43,21 +43,19 @@ export const ScanScreen: React.FC = () => {
   }, [refreshTimestamp]);
 
   const handleManualAssignment = async (itemId: number) => {
-    if (!selectedContainer || !selectedContainer.id) return;
+    if (!selectedContainer) return;
     
     try {
       const item = items.find(i => i.id === itemId);
       if (!item) return;
       
-      // Au lieu de mettre null, on met 0 ou -1 pour indiquer qu'aucun container n'est assigné
-      const newContainerId = item.containerId === selectedContainer.id ? 0 : selectedContainer.id;
-      
       const updateData = {
         ...item,
-        containerId: newContainerId,
+        containerId: item.containerId === selectedContainer.id ? null : selectedContainer.id,
         updatedAt: new Date().toISOString()
       };
       
+      delete updateData.id; // Supprimer l'id car il n'est pas nécessaire pour la mise à jour
       await updateItem(itemId, updateData);
       triggerRefresh();
     } catch (error) {
@@ -77,7 +75,7 @@ export const ScanScreen: React.FC = () => {
       return matchesSearch;
     }
     
-    return matchesSearch && (item.containerId === 0 || item.containerId === selectedContainer?.id);
+    return matchesSearch && (item.containerId === null || item.containerId === selectedContainer?.id);
   });
 
   // Extraire le rendu de l'item dans un composant séparé pour améliorer la lisibilité
@@ -172,14 +170,14 @@ export const ScanScreen: React.FC = () => {
                     style={[
                       styles.itemRow,
                       item.containerId === selectedContainer?.id && styles.itemSelected,
-                      item.containerId !== 0 && item.containerId !== selectedContainer?.id && styles.itemInOtherContainer
+                      item.containerId !== null && item.containerId !== selectedContainer?.id && styles.itemInOtherContainer
                     ]}
                     onPress={() => handleManualAssignment(item.id!)}
                     disabled={!selectedContainer}
                   >
                     <View>
                       <Text style={styles.itemText}>{item.name}</Text>
-                      {item.containerId !== 0 && item.containerId !== selectedContainer?.id && (
+                      {item.containerId !== null && item.containerId !== selectedContainer?.id && (
                         <Text style={styles.containerInfo}>
                           Dans: {containers.find(c => c.id === item.containerId)?.name}
                         </Text>
@@ -336,4 +334,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-}); 
+});
+
+export default ScanScreen; 

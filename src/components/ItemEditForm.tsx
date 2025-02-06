@@ -15,7 +15,7 @@ interface ItemEditFormProps {
         sellingPrice: number;
         status: 'available' | 'sold';
         photoUri?: string;
-        containerId?: number;
+        containerId?: number | null;
         categoryId?: number;
         qrCode: string;
     };
@@ -30,8 +30,8 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [editedItem, setEditedItem] = useState({
         ...item,
-        purchasePrice: item.purchasePrice.toString(),
-        sellingPrice: item.sellingPrice.toString(),
+        purchasePrice: item.purchasePrice?.toString() || '0',
+        sellingPrice: item.sellingPrice?.toString() || '0',
     });
 
     const handleSave = async () => {

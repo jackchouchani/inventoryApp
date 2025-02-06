@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "inventoryApp",
-    "slug": "inventory-cv",
+    "name": "Inventory App",
+    "slug": "inventory-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/Logo.png",
@@ -9,7 +9,6 @@
     "newArchEnabled": false,
     "plugins": [
       "expo-router",
-      "expo-sqlite",
       [
         "expo-image-picker",
         {
@@ -45,7 +44,7 @@
         ],
         "UIViewControllerBasedStatusBarAppearance": false,
         "UIStatusBarHidden": false,
-        "NSCameraUsageDescription": "L'application nécessite l'accès à la caméra.",
+        "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
         "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone."
       }

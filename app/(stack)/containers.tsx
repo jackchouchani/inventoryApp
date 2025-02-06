@@ -7,7 +7,7 @@ import { ContainerForm } from '../../src/components/ContainerForm';
 import { ItemList } from '../../src/components/ItemList';
 import { useRefreshStore } from '../../src/store/refreshStore';
 
-export const ContainerScreen = () => {
+const ContainerScreen = () => {
   const [containers, setContainers] = useState<Container[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
@@ -186,6 +186,8 @@ export const ContainerScreen = () => {
     </SafeAreaView>
   );
 };
+
+export default ContainerScreen;
 
 const styles = StyleSheet.create({
   container: {

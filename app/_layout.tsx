@@ -5,8 +5,6 @@ import { Provider } from "react-redux";
 import { store } from "../src/store/store";
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
 import { initDatabase } from "../src/database/database";
-import { initPhotoStorage } from "../src/utils/photoManager";
-import { initBackupStorage } from "../src/utils/backupManager";
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -20,6 +18,8 @@ export type RootStackParamList = {
   "/(stack)/backup": undefined;
   "/(stack)/categories": undefined;
   "/(stack)/containers": undefined;
+  "/(stack)/settings": undefined;
+  "/(stack)/stats": undefined;
 };
 
 function RootLayoutNav() {
@@ -53,10 +53,6 @@ export default function RootLayout() {
     const initApp = async () => {
       try {
         await initDatabase();
-        if (Platform.OS !== "web") {
-          await initPhotoStorage();
-          await initBackupStorage();
-        }
         setIsInitialized(true);
       } catch (err) {
         console.error("App initialization failed:", err);

@@ -3,19 +3,25 @@ import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-nativ
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter, Link } from 'expo-router';
 
-export default function Login() {
+export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { signIn } = useAuth();
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const { signUp } = useAuth();
   const router = useRouter();
 
-  const handleLogin = async () => {
+  const handleRegister = async () => {
+    if (password !== confirmPassword) {
+      alert('Les mots de passe ne correspondent pas');
+      return;
+    }
+
     try {
-      await signIn(email, password);
+      await signUp(email, password);
       router.replace('/(tabs)');
     } catch (error) {
       console.error(error);
-      alert('Erreur de connexion');
+      alert('Erreur lors de l\'inscription');
     }
   };
 
@@ -36,15 +42,22 @@ export default function Login() {
         onChangeText={setPassword}
         secureTextEntry
       />
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Se connecter</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Confirmer le mot de passe"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        secureTextEntry
+      />
+      <TouchableOpacity style={styles.button} onPress={handleRegister}>
+        <Text style={styles.buttonText}>S'inscrire</Text>
       </TouchableOpacity>
-
+      
       <View style={styles.linkContainer}>
-        <Text style={styles.linkText}>Pas encore de compte ? </Text>
-        <Link href="/(auth)/register" asChild>
+        <Text style={styles.linkText}>Déjà un compte ? </Text>
+        <Link href="/(auth)/login" asChild>
           <TouchableOpacity>
-            <Text style={styles.link}>S'inscrire</Text>
+            <Text style={styles.link}>Se connecter</Text>
           </TouchableOpacity>
         </Link>
       </View>
@@ -88,4 +101,4 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: 'bold',
   },
-});
+}); 
