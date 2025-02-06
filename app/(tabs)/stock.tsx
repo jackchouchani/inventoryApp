@@ -40,6 +40,15 @@ export default function Stock() {
     }
   };
 
+  const handleMarkAsAvailable = async (itemId) => {
+    try {
+      await updateItemStatus(itemId, 'available');
+      await loadData();
+    } catch (error) {
+      console.error('Error marking item as available:', error);
+    }
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <ItemList
@@ -47,6 +56,7 @@ export default function Stock() {
         containers={containers}
         categories={categories}
         onMarkAsSold={handleMarkAsSold}
+        onMarkAsAvailable={handleMarkAsAvailable}
       />
     </View>
   );

@@ -9,6 +9,7 @@ interface ItemListProps {
   containers: Container[];
   categories: Category[];
   onMarkAsSold: (itemId: number) => void;
+  onMarkAsAvailable: (itemId: number) => void;
   onMoveItem?: (itemId: number, newContainerId: number) => void;
 }
 
@@ -21,7 +22,7 @@ interface Filters {
   maxPrice: string;
 }
 
-export const ItemList: React.FC<ItemListProps> = ({ items, containers, categories, onMarkAsSold, onMoveItem }) => {
+export const ItemList: React.FC<ItemListProps> = ({ items, containers, categories, onMarkAsSold, onMarkAsAvailable, onMoveItem }) => {
   const [filters, setFilters] = useState<Filters>({
     search: '',
     categoryId: null,
@@ -37,48 +38,33 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
 
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
-  const handleMarkAsSold = async (itemId: number) => {
-    await onMarkAsSold(itemId);
+  const handleStatusToggle = async (itemId: number, currentStatus: string) => {
+    if (currentStatus === 'available') {
+      await onMarkAsSold(itemId);
+    } else {
+      await onMarkAsAvailable(itemId);
+    }
     triggerRefresh();
   };
 
-  const filteredItems = items.filter((item) => {
-    // Text search
-    if (
-      filters.search &&
-      !item.name.toLowerCase().includes(filters.search.toLowerCase())
-    ) {
-      return false;
-    }
+  const filteredItems = items.filter((item: Item) => {
+    const searchLower = filters.search.toLowerCase();
+    const matchesSearch = 
+      item.name.toLowerCase().includes(searchLower) ||
+      (item.description && item.description.toLowerCase().includes(searchLower));
 
-    // Category filter
-    if (filters.categoryId && item.categoryId !== filters.categoryId) {
-      return false;
-    }
-
-    // Container filter
-    if (filters.containerId && item.containerId !== filters.containerId) {
-      return false;
-    }
-
-    // Status filter
-    if (filters.status !== 'all' && item.status !== filters.status) {
-      return false;
-    }
-
-    // Price range filter
+    const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
+    const matchesContainer = !filters.containerId || item.containerId === filters.containerId;
+    const matchesStatus = filters.status === 'all' || item.status === filters.status;
+    
     const minPrice = parseFloat(filters.minPrice);
     const maxPrice = parseFloat(filters.maxPrice);
+    const matchesPrice = 
+      (!minPrice || item.sellingPrice >= minPrice) &&
+      (!maxPrice || item.sellingPrice <= maxPrice);
 
-    if (!isNaN(minPrice) && item.sellingPrice < minPrice) {
-      return false;
-    }
-
-    if (!isNaN(maxPrice) && item.sellingPrice > maxPrice) {
-      return false;
-    }
-
-    return true;
+    return matchesSearch && matchesCategory && matchesContainer && 
+           matchesStatus && matchesPrice;
   });
 
   const renderItem = ({ item }: { item: Item }) => (
@@ -89,17 +75,25 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       <Image source={{ uri: item.photoUri }} style={styles.itemImage} />
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
-        <Text>Purchase: ${item.purchasePrice}</Text>
-        <Text>Selling: ${item.sellingPrice}</Text>
-        <Text>Status: {item.status}</Text>
+        {item.description && (
+          <Text style={styles.itemDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
+        <Text>Prix d'achat: {item.purchasePrice}€</Text>
+        <Text>Prix de vente: {item.sellingPrice}€</Text>
+        <Text>État: {item.status === 'available' ? 'Disponible' : 'Vendu'}</Text>
         {onMoveItem && (
           <View style={styles.containerPicker}>
-            <Text style={styles.containerLabel}>Move to:</Text>
+            <Text style={styles.containerLabel}>Déplacer vers:</Text>
             <View style={styles.containerOptions}>
               {containers.map((container) => (
                 <TouchableOpacity
                   key={container.id}
-                  style={[styles.containerOption, item.containerId === container.id && styles.containerOptionSelected]}
+                  style={[
+                    styles.containerOption,
+                    item.containerId === container.id && styles.containerOptionSelected
+                  ]}
                   onPress={() => onMoveItem && onMoveItem(item.id!, container.id!)}
                   disabled={item.containerId === container.id}
                 >
@@ -110,14 +104,17 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           </View>
         )}
       </View>
-      {item.status === 'available' && (
-        <TouchableOpacity
-          style={styles.soldButton}
-          onPress={() => handleMarkAsSold(item.id!)}
-        >
-          <Text style={styles.soldButtonText}>Mark as Sold</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={[
+          styles.statusButton,
+          item.status === 'available' ? styles.soldButton : styles.availableButton
+        ]}
+        onPress={() => handleStatusToggle(item.id!, item.status)}
+      >
+        <Text style={styles.statusButtonText}>
+          {item.status === 'available' ? 'Marquer comme vendu' : 'Marquer comme disponible'}
+        </Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -131,7 +128,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search items..."
+          placeholder="Rechercher des articles..."
           value={filters.search}
           onChangeText={(text) => setFilters({ ...filters, search: text })}
         />
@@ -139,14 +136,14 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           style={styles.filterButton}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Text>Filters</Text>
+          <Text>Filtres</Text>
         </TouchableOpacity>
       </View>
 
       {showFilters && (
         <View style={styles.filtersContainer}>
           <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Category</Text>
+            <Text style={styles.filterLabel}>Catégorie</Text>
             <View style={styles.filterOptions}>
               {categories.map((category) => (
                 <TouchableOpacity
@@ -193,20 +190,25 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           </View>
 
           <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Status</Text>
+            <Text style={styles.filterLabel}>État</Text>
             <View style={styles.filterOptions}>
-              {['all', 'available', 'sold'].map((status) => (
+              {[
+                { value: 'all', label: 'Tous' },
+                { value: 'available', label: 'Disponible' },
+                { value: 'sold', label: 'Vendu' }
+              ].map((status) => (
                 <TouchableOpacity
-                  key={status}
+                  key={status.value}
                   style={[
                     styles.filterOption,
-                    filters.status === status && styles.filterOptionSelected,
+                    filters.status === status.value && styles.filterOptionSelected,
                   ]}
-                  onPress={() =>
-                    setFilters({ ...filters, status: status as Filters['status'] })
-                  }
+                  onPress={() => setFilters({ 
+                    ...filters, 
+                    status: status.value as Filters['status'] 
+                  })}
                 >
-                  <Text>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
+                  <Text>{status.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -379,13 +381,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
   },
-  soldButton: {
-    backgroundColor: '#007AFF',
+  itemDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  statusButton: { 
     padding: 8,
     borderRadius: 5,
     justifyContent: 'center',
   },
-  soldButtonText: {
+  soldButton: {
+    backgroundColor: '#f54251',
+  },
+  availableButton: {
+    backgroundColor: '#34C759',
+  },
+  statusButtonText: {
     color: '#fff',
     fontSize: 14,
   },

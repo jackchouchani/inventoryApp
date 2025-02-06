@@ -4,7 +4,7 @@
     "slug": "inventory-cv",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/Logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "plugins": [
@@ -31,7 +31,7 @@
       ]
     ],
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/Logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -52,7 +52,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/Logo.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -62,7 +62,7 @@
       "package": "com.anonymous.inventoryApp"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/Logo.png",
       "name": "Inventory App",
       "shortName": "Inventory",
       "lang": "fr",
