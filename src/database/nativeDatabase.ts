@@ -79,6 +79,7 @@ export const initDatabase = async () => {
         categoryId INTEGER NOT NULL,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
+        soldAt TEXT,
         FOREIGN KEY (containerId) REFERENCES containers (id),
         FOREIGN KEY (categoryId) REFERENCES categories (id)
       )
@@ -231,9 +232,10 @@ export const updateItemStatus = async (id: number, status: Item['status']): Prom
     
     try {
         const now = formatDate();
+        const soldAt = status === 'sold' ? now : null;
         await sqliteDb.runAsync(
-            'UPDATE items SET status = ?, updatedAt = ? WHERE id = ?',
-            [status, now, id]
+            'UPDATE items SET status = ?, updatedAt = ?, soldAt = ? WHERE id = ?',
+            [status, now, soldAt, id]
         );
     } catch (error) {
         console.error('Error updating item status:', error);
@@ -373,6 +375,35 @@ export const getContainerByQRCode = async (qrCode: string): Promise<Container | 
   }
 };
 
+export async function deleteContainer(containerId: number): Promise<void> {
+  const db = await getDatabase();
+  await db.transaction((tx: SQLiteDatabase) => {
+    tx.executeSql(
+      'DELETE FROM containers WHERE id = ?',
+      [containerId]
+    );
+    tx.executeSql(
+      'UPDATE items SET containerId = NULL WHERE containerId = ?',
+      [containerId]
+    );
+  });
+}
+
+export async function updateContainer(
+  containerId: number, 
+  containerData: Omit<Container, 'id'>
+): Promise<void> {
+  const db = await getDatabase();
+  const { name, description, qrCode } = containerData;
+  
+  await db.transaction((tx: SQLiteDatabase) => {
+    tx.executeSql(
+      'UPDATE containers SET name = ?, description = ?, qrCode = ? WHERE id = ?',
+      [name, description, qrCode, containerId]
+    );
+  });
+}
+
 const nativeDatabase: DatabaseInterface = {
   initDatabase,
   getItems,
@@ -384,7 +415,9 @@ const nativeDatabase: DatabaseInterface = {
   addContainer,
   addCategory,
   resetDatabase,
-  getDatabase
+  getDatabase,
+  deleteContainer,
+  updateContainer
 };
 
 export default nativeDatabase;

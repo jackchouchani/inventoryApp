@@ -25,6 +25,7 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
     const [continuousMode, setContinuousMode] = useState(false);
     const [scanHistory, setScanHistory] = useState<string[]>([]);
     const [scanCount, setScanCount] = useState(0);
+    const [processing, setProcessing] = useState(false);
 
     const signalSuccess = () => {
         Vibration.vibrate(VIBRATION_DURATION);
@@ -40,81 +41,120 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
         }
     }, [permission]);
 
-    const processScan = async (type: string, uuid: string) => {
-        if (!assignmentMode) {
-            return handleContainerScan(type, uuid);
-        }
-        return handleItemScan(type, uuid);
-    };
-
-    const handleContainerScan = async (type: string, uuid: string) => {
-        if (type === 'CONTAINER') {
-            signalSuccess();
-            setCurrentContainer(`${QR_CODE_TYPES.CONTAINER}_${uuid}`);
-            setAssignmentMode(true);
-            Alert.alert('Succès', 'Container sélectionné. Scannez les articles à assigner.');
-        } else {
-            signalError();
-            Alert.alert('Erreur', 'Veuillez d\'abord scanner un container');
-        }
-    };
-
-    const handleItemScan = async (type: string, uuid: string) => {
-        if (type !== 'ITEM') {
-            signalError();
-            Alert.alert('Erreur', 'Veuillez scanner un article');
-            return;
-        }
-
-        const qrCode = `${QR_CODE_TYPES.ITEM}_${uuid}`;
-        const item = await getItemByQRCode(qrCode);
-        if (!item?.id) {
-            signalError();
-            Alert.alert('Erreur', 'Article non trouvé');
-            return;
-        }
-
-        const container = await getContainerByQRCode(currentContainer!);
-        if (!container?.id) {
-            signalError();
-            Alert.alert('Erreur', 'Container non trouvé');
-            return;
-        }
-
-        await updateItem(item.id, { ...item, containerId: undefined });
-        signalSuccess();
-        triggerRefresh();
-        setScanHistory(prev => [qrCode, ...prev.slice(0, MAX_HISTORY_ITEMS - 1)]);
-        setScanCount(prev => prev + 1);
-
-        Alert.alert('Succès', 'Article assigné au container', [
-            { text: 'OK', onPress: () => continuousMode && setScanned(false) }
-        ]);
-    };
-
     const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
-        if (scanned && !continuousMode) return;
-
+        if (processing) return;
+        
         try {
+            setProcessing(true);
             const { type, uuid } = parseQRCode(data);
 
             if (!type || !uuid) {
                 signalError();
                 Alert.alert('Erreur', 'QR code invalide');
+                setProcessing(false);
                 return;
             }
 
-            await processScan(type, uuid);
+            // Si c'est un container, on change de container actif
+            if (type === 'CONTAINER') {
+                const containerQRCode = `${QR_CODE_TYPES.CONTAINER}_${uuid}`;
+                const container = await getContainerByQRCode(containerQRCode);
+                
+                if (!container?.id) {
+                    signalError();
+                    Alert.alert('Erreur', 'Container non trouvé');
+                    setProcessing(false);
+                    return;
+                }
 
-            if (continuousMode) {
-                setTimeout(() => setScanned(false), SCAN_DELAY);
-            } else {
-                setScanned(true);
+                setCurrentContainer(containerQRCode);
+                setAssignmentMode(true);
+                signalSuccess();
+                
+                if (continuousMode) {
+                    // En mode continu, on continue automatiquement
+                    setProcessing(false);
+                } else {
+                    // En mode manuel, on attend une action de l'utilisateur
+                    Alert.alert('Container sélectionné', 'Voulez-vous scanner un article ?', [
+                        { 
+                            text: 'Oui',
+                            onPress: () => setProcessing(false)
+                        },
+                        {
+                            text: 'Terminer',
+                            onPress: () => {
+                                setAssignmentMode(false);
+                                setCurrentContainer(null);
+                                setProcessing(false);
+                            }
+                        }
+                    ]);
+                }
+                return;
+            }
+
+            // Si c'est un article
+            if (type === 'ITEM') {
+                if (!currentContainer) {
+                    signalError();
+                    Alert.alert('Erreur', 'Veuillez d\'abord scanner un container');
+                    setProcessing(false);
+                    return;
+                }
+
+                const itemQRCode = `${QR_CODE_TYPES.ITEM}_${uuid}`;
+                const item = await getItemByQRCode(itemQRCode);
+                const container = await getContainerByQRCode(currentContainer);
+
+                if (!item?.id || !container?.id) {
+                    signalError();
+                    Alert.alert('Erreur', 'Article ou container non trouvé');
+                    setProcessing(false);
+                    return;
+                }
+
+                await updateItem(item.id, { ...item, containerId: container.id });
+                signalSuccess();
+                triggerRefresh();
+                setScanHistory(prev => [itemQRCode, ...prev.slice(0, MAX_HISTORY_ITEMS - 1)]);
+                setScanCount(prev => prev + 1);
+
+                if (continuousMode) {
+                    // En mode continu, on continue automatiquement après un court délai
+                    setTimeout(() => {
+                        setProcessing(false);
+                    }, 500);
+                } else {
+                    // En mode manuel, on demande ce qu'on veut faire ensuite
+                    Alert.alert('Article assigné', 'Que souhaitez-vous faire ?', [
+                        {
+                            text: 'Scanner un autre article',
+                            onPress: () => setProcessing(false)
+                        },
+                        {
+                            text: 'Scanner un autre container',
+                            onPress: () => {
+                                setCurrentContainer(null);
+                                setProcessing(false);
+                            }
+                        },
+                        {
+                            text: 'Terminer',
+                            onPress: () => {
+                                setAssignmentMode(false);
+                                setCurrentContainer(null);
+                                setProcessing(false);
+                            }
+                        }
+                    ]);
+                }
             }
         } catch (error) {
             console.error('Erreur lors du scan:', error);
             signalError();
-            Alert.alert('Erreur', 'Impossible de traiter le QR code');
+            Alert.alert('Erreur', 'Impossible de traiter le scan');
+            setProcessing(false);
         }
     };
 
@@ -152,13 +192,18 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
         <View style={styles.container}>
             <View style={styles.statusBar}>
                 <Text style={styles.modeText}>
-                    {assignmentMode ? `Mode Assignation - ${scanCount} articles` : 'Scannez un container'}
+                    {currentContainer 
+                        ? `Container actif - ${scanCount} articles scannés` 
+                        : 'Scannez un container'}
                 </Text>
                 <TouchableOpacity
-                    style={styles.continuousButton}
+                    style={[
+                        styles.modeButton,
+                        continuousMode && styles.modeButtonActive
+                    ]}
                     onPress={() => setContinuousMode(!continuousMode)}>
                     <Text style={styles.buttonText}>
-                        {continuousMode ? '⏺ Scan continu' : '⏹ Scan continu'}
+                        {continuousMode ? '⚡ Mode Rapide' : '🔍 Mode Manuel'}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -242,11 +287,16 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 15,
         backgroundColor: 'rgba(0,0,0,0.7)',
+        zIndex: 2,
+        elevation: 2,
     },
-    continuousButton: {
+    modeButton: {
         backgroundColor: '#4CAF50',
         padding: 8,
         borderRadius: 5,
+    },
+    modeButtonActive: {
+        backgroundColor: '#2E7D32',
     },
     historyPanel: {
         position: 'absolute',

@@ -81,11 +81,16 @@ class WebDatabase implements DatabaseInterface {
     }
   }
 
-  async addContainer(container: Omit<Container, 'id'>): Promise<number> {
+  async addContainer(container: Omit<Container, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
     const storage = this.getStorage();
     const containers = await this.getContainers();
     const newId = containers.length > 0 ? Math.max(...containers.map(c => c.id || 0)) + 1 : 1;
-    const newContainer = { ...container, id: newId };
+    const newContainer = { 
+      ...container, 
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
     containers.push(newContainer);
     storage.setItem('containers', JSON.stringify(containers));
     return newId;
@@ -121,7 +126,8 @@ class WebDatabase implements DatabaseInterface {
       items[index] = {
         ...items[index],
         status,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        soldAt: status === 'sold' ? new Date().toISOString() : null
       };
       storage.setItem('items', JSON.stringify(items));
     }
@@ -148,6 +154,58 @@ class WebDatabase implements DatabaseInterface {
 
   getDatabase(): any {
     return this.getStorage();
+  }
+
+  private async saveDatabase(data: { 
+    items: Item[], 
+    containers: Container[], 
+    categories: Category[] 
+  }): Promise<void> {
+    const storage = this.getStorage();
+    storage.setItem('items', JSON.stringify(data.items));
+    storage.setItem('containers', JSON.stringify(data.containers));
+    storage.setItem('categories', JSON.stringify(data.categories));
+  }
+
+  async deleteContainer(containerId: number): Promise<void> {
+    const storage = this.getStorage();
+    const containers = await this.getContainers();
+    const items = await this.getItems();
+    
+    const updatedContainers = containers.filter(c => c.id !== containerId);
+    const updatedItems = items.map(item => 
+      item.containerId === containerId 
+        ? { ...item, containerId: undefined }
+        : item
+    );
+    
+    await this.saveDatabase({ 
+      items: updatedItems, 
+      containers: updatedContainers,
+      categories: await this.getCategories()
+    });
+  }
+
+  async updateContainer(containerId: number, containerData: Omit<Container, 'id' | 'createdAt' | 'updatedAt'>): Promise<void> {
+    const storage = this.getStorage();
+    const containers = await this.getContainers();
+    
+    const updatedContainers = containers.map(container =>
+      container.id === containerId
+        ? { 
+            ...containerData, 
+            id: containerId,
+            createdAt: container.createdAt,
+            updatedAt: new Date().toISOString()
+          }
+        : container
+    );
+    
+    await this.saveDatabase({ 
+      items: await this.getItems(),
+      containers: updatedContainers,
+      categories: await this.getCategories()
+    });
   }
 }
 

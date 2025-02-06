@@ -51,10 +51,6 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 Alert.alert('Erreur', 'Les prix sont requis');
                 return;
             }
-            if (!item.containerId) {
-                Alert.alert('Erreur', 'Le container est requis');
-                return;
-            }
             if (!item.categoryId) {
                 Alert.alert('Erreur', 'La catégorie est requise');
                 return;
@@ -68,7 +64,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 sellingPrice: parseFloat(item.sellingPrice),
                 status: 'available',
                 photoUri: item.photoUri,
-                containerId: item.containerId,
+                containerId: item.containerId || undefined,
                 categoryId: item.categoryId,
                 qrCode: item.qrCode
             });

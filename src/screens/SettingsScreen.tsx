@@ -23,12 +23,6 @@ const SettingsScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="black" />
-        </TouchableOpacity>
         <Text style={styles.title}>Paramètres</Text>
       </View>
       <TouchableOpacity 

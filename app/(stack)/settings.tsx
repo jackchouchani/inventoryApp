@@ -86,16 +86,6 @@ export default function Settings() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="black" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Paramètres</Text>
-      </View>
-      
       <TouchableOpacity 
         style={styles.menuItem}
         onPress={() => router.push('/(stack)/containers')}
@@ -148,23 +138,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    height: 60,
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginLeft: 16,
   },
   menuItem: {
     flexDirection: 'row',

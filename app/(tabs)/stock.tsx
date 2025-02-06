@@ -4,12 +4,14 @@ import { useDispatch } from 'react-redux';
 import { ItemList } from '../../src/components/ItemList';
 import { getItems, getContainers, getCategories, updateItemStatus } from '../../src/database/database';
 import { setItems } from '../../src/store/itemsSlice';
+import { useRefreshStore } from '../../src/store/refreshStore';
 
 export default function Stock() {
   const [localItems, setLocalItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [categories, setCategories] = useState([]);
   const dispatch = useDispatch();
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   const loadData = async () => {
     try {
@@ -29,7 +31,7 @@ export default function Stock() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [refreshTimestamp]);
 
   const handleMarkAsSold = async (itemId) => {
     try {

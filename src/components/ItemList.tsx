@@ -16,7 +16,7 @@ interface ItemListProps {
 interface Filters {
   search: string;
   categoryId: number | null;
-  containerId: number | null;
+  containerId: 'none' | number | null;
   status: 'all' | 'available' | 'sold';
   minPrice: string;
   maxPrice: string;
@@ -35,8 +35,13 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
   const [showFilters, setShowFilters] = useState(false);
 
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+
+  useEffect(() => {
+    // Le composant se rafraîchira automatiquement quand refreshTimestamp change
+  }, [refreshTimestamp, items]);
 
   const handleStatusToggle = async (itemId: number, currentStatus: string) => {
     if (currentStatus === 'available') {
@@ -54,7 +59,10 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       (item.description && item.description.toLowerCase().includes(searchLower));
 
     const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
-    const matchesContainer = !filters.containerId || item.containerId === filters.containerId;
+    const matchesContainer = 
+      !filters.containerId ? true : 
+      filters.containerId === 'none' ? !item.containerId :
+      item.containerId === filters.containerId;
     const matchesStatus = filters.status === 'all' || item.status === filters.status;
     
     const minPrice = parseFloat(filters.minPrice);
@@ -168,6 +176,20 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           <View style={styles.filterSection}>
             <Text style={styles.filterLabel}>Container</Text>
             <View style={styles.filterOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  filters.containerId === 'none' && styles.filterOptionSelected,
+                ]}
+                onPress={() =>
+                  setFilters({
+                    ...filters,
+                    containerId: filters.containerId === 'none' ? null : 'none',
+                  })
+                }
+              >
+                <Text>Sans container</Text>
+              </TouchableOpacity>
               {containers.map((container) => (
                 <TouchableOpacity
                   key={container.id}

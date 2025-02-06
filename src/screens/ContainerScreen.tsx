@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Container, Item, getContainers, getItems, addContainer, updateItem } from '../database/database';
+import { Container, Item, getContainers, getItems, addContainer, updateItem, deleteContainer, updateContainer } from '../database/database';
 import { ContainerGrid } from '../components/ContainerGrid';
 import { ContainerForm } from '../components/ContainerForm';
 import { ItemList } from '../components/ItemList';
@@ -40,12 +40,28 @@ export const ContainerScreen = () => {
     }
   };
 
+  const handleEditContainer = (container: Container) => {
+    setSelectedContainer(null);
+    setTimeout(() => {
+      setEditingContainer(container);
+      setShowContainerForm(true);
+    }, 300);
+  };
+
+  const handleDeleteContainer = async (containerId: number) => {
+    try {
+      await deleteContainer(containerId);
+      await loadData();
+      setSelectedContainer(null);
+    } catch (error) {
+      console.error('Error deleting container:', error);
+    }
+  };
+
   const handleContainerSubmit = async (containerData: Omit<Container, 'id'>) => {
     try {
       if (editingContainer?.id) {
-        // Import updateContainer from database module first
-        // For now just use addContainer since updateContainer isn't available
-        await addContainer(containerData);
+        await updateContainer(editingContainer.id, containerData);
       } else {
         await addContainer(containerData);
       }
@@ -91,24 +107,36 @@ export const ContainerScreen = () => {
       <Modal
         visible={showContainerForm}
         animationType="slide"
-        onRequestClose={() => setShowContainerForm(false)}
+        onRequestClose={() => {
+          setShowContainerForm(false);
+          setEditingContainer(null);
+        }}
       >
         <SafeAreaView style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <TouchableOpacity 
               style={styles.cancelButton}
-              onPress={() => setShowContainerForm(false)}
+              onPress={() => {
+                setShowContainerForm(false);
+                setEditingContainer(null);
+              }}
             >
               <Text style={styles.cancelButtonText}>Annuler</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Nouveau Container</Text>
+            <Text style={styles.modalTitle}>
+              {editingContainer ? 'Modifier Container' : 'Nouveau Container'}
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
           
           <View style={styles.formWrapper}>
             <ContainerForm
+              initialData={editingContainer}
               onSubmit={handleContainerSubmit}
-              onCancel={() => setShowContainerForm(false)}
+              onCancel={() => {
+                setShowContainerForm(false);
+                setEditingContainer(null);
+              }}
             />
           </View>
         </SafeAreaView>
@@ -130,7 +158,20 @@ export const ContainerScreen = () => {
             <Text style={styles.modalTitle}>
               {selectedContainer?.name || 'Container'}
             </Text>
-            <View style={styles.headerSpacer} />
+            <View style={styles.headerActions}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => selectedContainer && handleEditContainer(selectedContainer)}
+              >
+                <Text style={styles.actionButtonText}>Modifier</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => selectedContainer?.id && handleDeleteContainer(selectedContainer.id)}
+              >
+                <Text style={styles.deleteButtonText}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           
           <ItemList
@@ -138,6 +179,7 @@ export const ContainerScreen = () => {
             containers={containers}
             categories={[]}
             onMarkAsSold={() => {}}
+            onMarkAsAvailable={() => {}}
           />
         </SafeAreaView>
       </Modal>
@@ -191,5 +233,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButton: {
+    padding: 8,
+  },
+  actionButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+  },
+  deleteButton: {
+    marginLeft: 10,
+  },
+  deleteButtonText: {
+    color: '#FF3B30',
+    fontSize: 16,
   },
 });

@@ -6,17 +6,17 @@ import { QRCodeGenerator } from './QRCodeGenerator';
 import { generateQRValue } from '../utils/qrCodeManager';
 
 interface ContainerFormProps {
-  container?: Container;
+  initialData?: Container | null;
   onSubmit: (container: Omit<Container, 'id'>) => void;
   onCancel: () => void;
 }
 
-export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmit }) => {
+export const ContainerForm: React.FC<ContainerFormProps> = ({ initialData, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
-    name: container?.name || '',
-    number: container?.number?.toString() || '',
-    description: container?.description || '',
-    qrCode: container?.qrCode || generateQRValue('CONTAINER')
+    number: initialData?.number?.toString() || '',
+    name: initialData?.name || '',
+    description: initialData?.description || '',
+    qrCode: initialData?.qrCode || generateQRValue('CONTAINER')
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +35,7 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmi
         number: parseInt(formData.number.trim(), 10),
         description: formData.description.trim(),
         qrCode: formData.qrCode,
-        createdAt: container?.createdAt || new Date().toISOString(),
+        createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
     } catch (err) {
@@ -90,7 +90,7 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ container, onSubmi
           <ActivityIndicator color={theme.colors.text.inverse} />
         ) : (
           <Text style={styles.submitButtonText}>
-            {container ? 'Update Container' : 'Create Container'}
+            {initialData ? 'Update Container' : 'Create Container'}
           </Text>
         )}
       </TouchableOpacity>

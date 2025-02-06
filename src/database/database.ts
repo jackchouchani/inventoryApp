@@ -17,6 +17,8 @@ export const addCategory = isWeb ? webDatabase.addCategory.bind(webDatabase) : n
 export const resetDatabase = isWeb ? webDatabase.resetDatabase.bind(webDatabase) : nativeDatabase.resetDatabase;
 export const getDatabase = isWeb ? webDatabase.getDatabase.bind(webDatabase) : nativeDatabase.getDatabase;
 export const updateItemStatus = isWeb ? webDatabase.updateItemStatus.bind(webDatabase) : nativeDatabase.updateItemStatus;
+export const deleteContainer = isWeb ? webDatabase.deleteContainer.bind(webDatabase) : nativeDatabase.deleteContainer;
+export const updateContainer = isWeb ? webDatabase.updateContainer.bind(webDatabase) : nativeDatabase.updateContainer;
 
 export const getContainerByQRCode = async (qrCode: string): Promise<Container | null> => {
     const containers = await getContainers();
