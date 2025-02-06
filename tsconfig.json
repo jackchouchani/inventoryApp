@@ -22,8 +22,9 @@
   "include": [
     "src/**/*",
     "index.ts",
-    "src/types/*.d.ts"
-, "app/(stack)/labels.tsx", "app/(stack)/backup.tsx", "app/(tabs)/settings.tsx", "app/(tabs)/scan.tsx", "app/(stack)/containers.tsx", "app/(stack)/categories.tsx", "app/(stack)/stats.tsx"  ],
+    "src/types/*.d.ts",
+    "app/**/*"
+  ],
   "exclude": [
     "node_modules",
     "babel.config.js",
