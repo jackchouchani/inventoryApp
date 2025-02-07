@@ -1,0 +1,60 @@
+{
+    "short_name": "Inventory",
+    "name": "Inventory App",
+    "description": "Application de gestion d'inventaire",
+    "icons": [
+      {
+        "src": "favicon.ico",
+        "sizes": "64x64 32x32 24x24 16x16",
+        "type": "image/x-icon"
+      },
+      {
+        "src": "icon-192.png",
+        "type": "image/png",
+        "sizes": "192x192",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "icon-512.png",
+        "type": "image/png",
+        "sizes": "512x512",
+        "purpose": "any maskable"
+      }
+    ],
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#007AFF",
+    "background_color": "#ffffff",
+    "orientation": "portrait",
+    "scope": "/",
+    "lang": "fr-FR",
+    "prefer_related_applications": false,
+    "categories": ["productivity", "business"],
+    "screenshots": [
+      {
+        "src": "screenshot1.png",
+        "sizes": "1170x2532",
+        "type": "image/png"
+      }
+    ],
+    "shortcuts": [
+      {
+        "name": "Scanner",
+        "url": "/scan",
+        "icons": [{ "src": "scan-icon.png", "sizes": "96x96" }]
+      },
+      {
+        "name": "Ajouter",
+        "url": "/add",
+        "icons": [{ "src": "add-icon.png", "sizes": "96x96" }]
+      }
+    ],
+    "permissions": [
+      "vibrate"
+    ],
+    "display_override": ["window-controls-overlay", "fullscreen"],
+    "launch_handler": {
+      "client_mode": "focus-existing"
+    },
+    "id": "/"
+}

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Platform, View, Text, ActivityIndicator } from "react-native";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
-import { initDatabase } from "../src/database/database";
+import { useSegments, useRouter } from "expo-router";
+import { supabase } from "../src/config/supabase";
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -29,10 +30,11 @@ function RootLayoutNav() {
 
   useEffect(() => {
     const inAuthGroup = segments[0] === "(auth)";
+    
     if (!user && !inAuthGroup) {
       router.replace("/(auth)/login");
     } else if (user && inAuthGroup) {
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/stock"); // Redirection vers la page stock spécifiquement
     }
   }, [user, segments]);
 
@@ -46,24 +48,30 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const initApp = async () => {
       try {
-        await initDatabase();
-        setIsInitialized(true);
+        // Vérifier si l'application est prête à être utilisée
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.replace('/(auth)/login');
+        }
       } catch (err) {
-        console.error("App initialization failed:", err);
-        setError("Erreur d'initialisation de l'application");
+        console.error("Erreur d'initialisation:", err);
+        setError("Erreur lors de l'initialisation de l'application");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     initApp();
-  }, []);
+  }, [router]);
 
-  if (!isInitialized) {
+  if (isLoading && Platform.OS !== 'web') {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>Chargement des données...</Text>

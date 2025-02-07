@@ -14,7 +14,6 @@ const withLogging = (fn: Function, actionName: string) => {
 
 // Exporter les fonctions avec logging
 export const {
-  initDatabase,
   getItems,
   getCategories,
   getContainers,

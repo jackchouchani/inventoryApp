@@ -3,12 +3,6 @@ import { DatabaseInterface, Item, Container, Category } from './types';
 import { photoService } from '../services/photoService';
 
 const supabaseDatabase: DatabaseInterface = {
-  async initDatabase(): Promise<void> {
-    // Vérifier la connexion à Supabase
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Non authentifié');
-  },
-
   async getContainers(): Promise<Container[]> {
     const { data, error } = await supabase
       .from('containers')

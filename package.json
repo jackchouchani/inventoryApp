@@ -7,7 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web --clear",
-    "build:web": "expo export --platform web"
+    "build:web": "expo export -p web && cp -r public/* dist/"
   },
   "dependencies": {
     "@0no-co/graphql.web": "^1.0.13",
@@ -30,7 +30,7 @@
     "expo-constants": "~17.0.5",
     "expo-dev-client": "~5.0.11",
     "expo-document-picker": "~13.0.2",
-    "expo-haptics": "~14.0.1",
+    "expo-haptics": "^14.0.1",
     "expo-head": "^0.0.20",
     "expo-image-manipulator": "~13.0.6",
     "expo-image-picker": "~16.0.5",

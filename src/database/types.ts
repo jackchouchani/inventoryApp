@@ -33,7 +33,6 @@ export interface Category {
 }
 
 export interface DatabaseInterface {
-  initDatabase: () => Promise<void>;
   getItems: () => Promise<Item[]>;
   getContainers: () => Promise<Container[]>;
   getCategories: () => Promise<Category[]>;

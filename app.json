@@ -52,7 +52,8 @@
         "UIStatusBarHidden": false,
         "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
-        "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone."
+        "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone.",
+        "NSHapticsUsageDescription": "L'application utilise les vibrations pour le retour haptique"
       }
     },
     "android": {
@@ -70,13 +71,17 @@
       "favicon": "./assets/Logo.png",
       "name": "Inventory App",
       "shortName": "Inventory",
-      "lang": "fr",
-      "themeColor": "#000000",
+      "lang": "fr-FR",
+      "themeColor": "#007AFF",
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
       "orientation": "portrait",
-      "bundler": "metro"
+      "splash": {
+        "image": "./assets/Logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff"
+      }
     },
     "owner": "jackch",
     "scheme": "inventoryapp",

@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { Platform } from 'react-native';
 
 export interface AuthUser {
   id: string;
@@ -40,5 +41,20 @@ export const authService = {
       email: user.email!,
       name: user.user_metadata?.name
     } : null;
+  },
+
+  async getSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  },
+
+  async initializeAnonymousSession() {
+    if (Platform.OS === 'web') {
+      return supabase.auth.signInWithPassword({
+        email: process.env.EXPO_PUBLIC_ANONYMOUS_EMAIL || 'anonymous@example.com',
+        password: process.env.EXPO_PUBLIC_ANONYMOUS_PASSWORD || 'anonymous'
+      });
+    }
+    return null;
   }
 };

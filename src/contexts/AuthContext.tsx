@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 interface AuthUser {
   id: string;
@@ -10,8 +11,9 @@ interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
+  session: Session | null;
   isAuthenticated: boolean;
-  loading: boolean;
+  isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
@@ -29,23 +31,53 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const initializeAnonymousSession = async () => {
+    if (Platform.OS === 'web' && !session) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: process.env.EXPO_PUBLIC_ANONYMOUS_EMAIL || 'anonymous@example.com',
+          password: process.env.EXPO_PUBLIC_ANONYMOUS_PASSWORD || 'anonymous'
+        });
+        
+        if (error) throw error;
+        setSession(data.session);
+      } catch (error) {
+        console.error('Erreur session anonyme:', error);
+      }
+    }
+  };
 
   useEffect(() => {
+    // Vérifier la session existante au démarrage
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email ?? '',
+          name: session.user.user_metadata?.name
+        });
+      }
+      setIsLoading(false);
+    });
+
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        setSession(session);
         if (session?.user) {
-          const authUser: AuthUser = {
+          setUser({
             id: session.user.id,
             email: session.user.email ?? '',
             name: session.user.user_metadata?.name
-          };
-          setUser(authUser);
+          });
         } else {
           setUser(null);
         }
-        setLoading(false);
+        setIsLoading(false);
       }
     );
 
@@ -54,30 +86,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     user,
+    session,
     isAuthenticated: !!user,
-    loading,
+    isLoading,
     signIn: async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      setIsLoading(true);
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } finally {
+        setIsLoading(false);
+      }
     },
     signOut: async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      setIsLoading(true);
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+      } finally {
+        setIsLoading(false);
+      }
     },
     signUp: async (email: string, password: string) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-      return data;
-    }
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        return data;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    initializeAnonymousSession
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
