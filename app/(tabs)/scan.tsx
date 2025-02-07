@@ -55,13 +55,27 @@ const ScanScreen: React.FC = () => {
         updatedAt: new Date().toISOString()
       };
       
-      delete updateData.id; // Supprimer l'id car il n'est pas nécessaire pour la mise à jour
       await updateItem(itemId, updateData);
       triggerRefresh();
+      
+      // Ajouter un feedback visuel
+      Alert.alert(
+        'Succès',
+        `Article ${item.name} ${item.containerId === selectedContainer.id ? 'retiré du' : 'ajouté au'} container ${selectedContainer.name}`
+      );
     } catch (error) {
       console.error('Erreur lors de l\'assignation:', error);
+      Alert.alert('Erreur', 'Impossible d\'assigner l\'article');
     }
   };
+
+  // Ajouter un état pour suivre si le scanner est actif
+  const [isScannerActive, setIsScannerActive] = useState(true);
+
+  // Réinitialiser le scanner quand on change de mode
+  useEffect(() => {
+    setIsScannerActive(true);
+  }, [showManualMode]);
 
   // Fonction pour filtrer les articles selon les critères
   const filteredItems = items.filter(item => {
@@ -100,7 +114,10 @@ const ScanScreen: React.FC = () => {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.modeButton}
-          onPress={() => setShowManualMode(!showManualMode)}
+          onPress={() => {
+            setShowManualMode(!showManualMode);
+            setSelectedContainer(null); // Réinitialiser le container sélectionné
+          }}
         >
           <Text style={styles.modeButtonText}>
             {showManualMode ? 'Mode Scanner' : 'Mode Manuel'}
@@ -205,7 +222,16 @@ const ScanScreen: React.FC = () => {
           )}
         </View>
       ) : (
-        <Scanner onClose={() => router.back()} />
+        <Scanner 
+          onClose={() => router.back()} 
+          isActive={isScannerActive}
+          onScan={(result) => {
+            // Désactiver temporairement le scanner après un scan réussi
+            setIsScannerActive(false);
+            // Réactiver le scanner après un délai
+            setTimeout(() => setIsScannerActive(true), 1500);
+          }}
+        />
       )}
     </View>
   );

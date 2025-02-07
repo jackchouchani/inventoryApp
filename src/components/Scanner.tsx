@@ -11,6 +11,8 @@ import { Container } from '../database/types';
 
 interface ScannerProps {
     onClose: () => void;
+    onScan: (result: string) => void;
+    isActive: boolean;
 }
 
 const SCAN_DELAY = 500;
@@ -18,9 +20,9 @@ const MAX_HISTORY_ITEMS = 5;
 
 const isWeb = Platform.OS === 'web';
 
-const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
+const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
+    const [hasPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
-    const [permission, requestPermission] = useCameraPermissions();
     const [currentContainer, setCurrentContainer] = useState<Container | null>(null);
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [continuousMode, setContinuousMode] = useState(false);
@@ -28,108 +30,32 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
     const [scanCount, setScanCount] = useState(0);
     const [processing, setProcessing] = useState(false);
 
-    const signalSuccess = async () => {
-        await haptics.triggerSuccess();
-    };
-
-    const signalError = async () => {
-        await haptics.triggerError();
-    };
-
-    const resetScanner = () => {
-        setCurrentContainer(null);
-        setScanHistory([]);
-        setScanCount(0);
-        setProcessing(false);
-        setScanned(false);
-    };
-
-    const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
-        if (processing) return;
-        setProcessing(true);
-
+    const handleQRCodeScanned = async ({ data }: { data: string }) => {
+        if (!isActive || scanned) return;
+        
         try {
-            const { type, uuid } = parseQRCode(data);
-
-            if (type === 'CONTAINER') {
-                const containerQRCode = `${QR_CODE_TYPES.CONTAINER}_${uuid}`;
-                const container = await getContainerByQRCode(containerQRCode);
+            const parsedData = parseQRCode(data);
+            if (parsedData) {
+                setScanned(true);
+                await haptics.triggerSuccess();
+                onScan(data);
                 
-                if (!container) {
-                    await signalError();
-                    Alert.alert('Erreur', 'Container non trouvé');
-                    setProcessing(false);
-                    return;
-                }
-
-                setCurrentContainer(container);
-                await signalSuccess();
-                setProcessing(false);
-                return;
-            }
-
-            if (type === 'ITEM') {
-                if (!currentContainer) {
-                    await signalError();
-                    Alert.alert('Erreur', 'Veuillez d\'abord scanner un container');
-                    setProcessing(false);
-                    return;
-                }
-
-                const itemQRCode = `${QR_CODE_TYPES.ITEM}_${uuid}`;
-                const item = await getItemByQRCode(itemQRCode);
-
-                if (!item?.id) {
-                    await signalError();
-                    Alert.alert('Erreur', 'Article non trouvé');
-                    setProcessing(false);
-                    return;
-                }
-
-                await updateItem(item.id, { ...item, containerId: currentContainer.id });
-                await signalSuccess();
-                triggerRefresh();
-                setScanHistory(prev => [item.name, ...prev.slice(0, MAX_HISTORY_ITEMS - 1)]);
-                setScanCount(prev => prev + 1);
-
-                if (continuousMode) {
-                    setTimeout(() => {
-                        setProcessing(false);
-                        setScanned(false);
-                    }, SCAN_DELAY);
-                } else {
-                    Alert.alert('Article assigné', 'Que souhaitez-vous faire ?', [
-                        { text: 'Scanner un autre article', onPress: () => { setProcessing(false); setScanned(false); } },
-                        { text: 'Scanner un autre container', onPress: resetScanner },
-                        { text: 'Terminer', onPress: onClose }
-                    ]);
-                }
+                // Réinitialiser l'état scanned après un délai
+                setTimeout(() => {
+                    setScanned(false);
+                }, 1500);
             }
         } catch (error) {
-            console.error('Erreur lors du scan:', error);
-            await signalError();
-            Alert.alert('Erreur', 'Erreur lors du scan');
-            setProcessing(false);
+            console.error('Erreur de scan:', error);
+            await haptics.triggerError();
         }
     };
 
-    useEffect(() => {
-        if (permission && !permission.granted) {
-            requestPermission();
-        }
-    }, [permission]);
-
-    if (!permission) {
-        return <Text>Chargement des permissions...</Text>;
+    if (!hasPermission) {
+        return <Text>Demande d'autorisation de la caméra...</Text>;
     }
-
-    if (!permission.granted) {
-        return (
-            <View style={styles.container}>
-                <Text>Autorisation caméra requise</Text>
-                <Button title="Autoriser" onPress={requestPermission} />
-            </View>
-        );
+    if (hasPermission.status !== 'granted') {
+        return <Text>Pas d'accès à la caméra</Text>;
     }
 
     return (
@@ -144,7 +70,13 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
                     {currentContainer && (
                         <TouchableOpacity 
                             style={styles.resetButton}
-                            onPress={resetScanner}
+                            onPress={() => {
+                                setCurrentContainer(null);
+                                setScanHistory([]);
+                                setScanCount(0);
+                                setProcessing(false);
+                                setScanned(false);
+                            }}
                         >
                             <Text style={styles.resetButtonText}>Réinitialiser</Text>
                         </TouchableOpacity>
@@ -174,13 +106,21 @@ const Scanner: React.FC<ScannerProps> = ({ onClose }) => {
             )}
 
             <CameraView
-                facing="back"
-                onBarcodeScanned={scanned && !continuousMode ? undefined : handleBarcodeScanned}
-                style={StyleSheet.absoluteFill}
+                onBarcodeScanned={scanned ? undefined : handleQRCodeScanned}
                 barcodeScannerSettings={{
-                    barcodeTypes: ["qr"],
+                    barcodeTypes: ['qr'],
                 }}
+                style={StyleSheet.absoluteFillObject}
             />
+
+            {scanned && (
+                <TouchableOpacity
+                    style={styles.rescanButton}
+                    onPress={() => setScanned(false)}
+                >
+                    <Text style={styles.rescanButtonText}>Scanner à nouveau</Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 };
@@ -276,6 +216,19 @@ const styles = StyleSheet.create({
     resetButtonText: {
         color: '#fff',
         fontSize: 14,
+        fontWeight: 'bold',
+    },
+    rescanButton: {
+        position: 'absolute',
+        bottom: 50,
+        alignSelf: 'center',
+        backgroundColor: '#007AFF',
+        padding: 15,
+        borderRadius: 10,
+    },
+    rescanButtonText: {
+        color: 'white',
+        fontSize: 16,
         fontWeight: 'bold',
     },
 });
