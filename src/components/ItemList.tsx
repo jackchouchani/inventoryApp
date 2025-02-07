@@ -81,48 +81,35 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       onPress={() => setSelectedItem(item)}
     >
       <Image source={{ uri: item.photoUri }} style={styles.itemImage} />
-      <View style={styles.itemInfo}>
+      <View style={styles.itemContent}>
         <Text style={styles.itemName}>{item.name}</Text>
         {item.description && (
           <Text style={styles.itemDescription} numberOfLines={2}>
             {item.description}
           </Text>
         )}
-        <Text>Prix d'achat: {item.purchasePrice}€</Text>
-        <Text>Prix de vente: {item.sellingPrice}€</Text>
-        <Text>État: {item.status === 'available' ? 'Disponible' : 'Vendu'}</Text>
-        {onMoveItem && (
-          <View style={styles.containerPicker}>
-            <Text style={styles.containerLabel}>Déplacer vers:</Text>
-            <View style={styles.containerOptions}>
-              {containers.map((container) => (
-                <TouchableOpacity
-                  key={container.id}
-                  style={[
-                    styles.containerOption,
-                    item.containerId === container.id && styles.containerOptionSelected
-                  ]}
-                  onPress={() => onMoveItem && onMoveItem(item.id!, container.id!)}
-                  disabled={item.containerId === container.id}
-                >
-                  <Text>{container.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <View style={styles.priceContainer}>
+          <View>
+            <Text style={styles.priceLabel}>Prix d'achat</Text>
+            <Text style={styles.priceValue}>{item.purchasePrice}€</Text>
           </View>
-        )}
+          <View>
+            <Text style={styles.priceLabel}>Prix de vente</Text>
+            <Text style={styles.priceValue}>{item.sellingPrice}€</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.statusButton,
+            item.status === 'available' ? styles.soldButton : styles.availableButton
+          ]}
+          onPress={() => handleStatusToggle(item.id!, item.status)}
+        >
+          <Text style={styles.statusButtonText}>
+            {item.status === 'available' ? 'Marquer comme vendu' : 'Marquer comme disponible'}
+          </Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={[
-          styles.statusButton,
-          item.status === 'available' ? styles.soldButton : styles.availableButton
-        ]}
-        onPress={() => handleStatusToggle(item.id!, item.status)}
-      >
-        <Text style={styles.statusButtonText}>
-          {item.status === 'available' ? 'Marquer comme vendu' : 'Marquer comme disponible'}
-        </Text>
-      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -167,7 +154,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                     })
                   }
                 >
-                  <Text>{category.name}</Text>
+                  <Text style={styles.filterOptionText}>{category.name}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -188,7 +175,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                   })
                 }
               >
-                <Text>Sans container</Text>
+                <Text style={styles.filterOptionText}>Sans container</Text>
               </TouchableOpacity>
               {containers.map((container) => (
                 <TouchableOpacity
@@ -205,7 +192,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                     })
                   }
                 >
-                  <Text>{container.name}</Text>
+                  <Text style={styles.filterOptionText}>{container.name}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -230,7 +217,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                     status: status.value as Filters['status'] 
                   })}
                 >
-                  <Text>{status.label}</Text>
+                  <Text style={styles.filterOptionText}>{status.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -291,81 +278,137 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
   },
   searchBar: {
     flexDirection: 'row',
-    padding: 10,
+    padding: 16,
+    gap: 8,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginRight: 10,
+    height: 36,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
   },
   filterButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
+    borderColor: '#007AFF',
   },
   filtersContainer: {
-    padding: 10,
+    padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   filterSection: {
-    marginBottom: 15,
+    marginBottom: 20,
   },
   filterLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#000',
   },
   filterOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 8,
   },
   filterOption: {
-    padding: 8,
-    margin: 4,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    backgroundColor: '#f0f0f0',
   },
   filterOptionSelected: {
-    backgroundColor: '#e3e3e3',
+    backgroundColor: '#007AFF',
   },
-  containerPicker: {
-    marginTop: 10,
-  },
-  containerLabel: {
+  filterOptionText: {
+    color: '#000',
     fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 5,
   },
-  containerOptions: {
+  filterOptionTextSelected: {
+    color: '#fff',
+  },
+  itemCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  itemContent: {
+    padding: 16,
+  },
+  itemImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f0f0',
+  },
+  itemInfo: {
+    marginTop: 12,
+  },
+  itemName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#000',
+  },
+  itemDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
+  priceContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 5,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  containerOption: {
-    padding: 5,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 3,
-    marginRight: 5,
-    marginBottom: 5,
+  priceLabel: {
+    fontSize: 14,
+    color: '#666',
   },
-  containerOptionSelected: {
-    backgroundColor: '#e3e3e3',
+  priceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  statusButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  soldButton: {
+    backgroundColor: '#FF3B30',
+  },
+  availableButton: {
+    backgroundColor: '#34C759',
+  },
+  statusButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   priceInputs: {
     flexDirection: 'row',
@@ -382,49 +425,5 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-  },
-  itemCard: {
-    flexDirection: 'row',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd'
-  },
-  itemImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  statusButton: { 
-    padding: 8,
-    borderRadius: 5,
-    justifyContent: 'center',
-  },
-  soldButton: {
-    backgroundColor: '#f54251',
-  },
-  availableButton: {
-    backgroundColor: '#34C759',
-  },
-  statusButtonText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
 });

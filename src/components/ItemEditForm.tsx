@@ -180,10 +180,10 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                            <Text style={styles.cancelButtonText}>Annuler</Text>
+                            <Text style={styles.buttonText}>Annuler</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                            <Text style={styles.saveButtonText}>Mettre à jour</Text>
+                            <Text style={styles.buttonText}>Mettre à jour</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -195,107 +195,127 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
 const styles = StyleSheet.create({
     modalContainer: {
         flex: 1,
-        backgroundColor: 'white',
-        marginTop: 50,
-        marginHorizontal: 20,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: -2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Exemple de style
     },
     container: {
         flex: 1,
+        backgroundColor: '#f5f5f5',
     },
     contentContainer: {
-        padding: 20,
-        paddingBottom: 40,
+        padding: 16,
     },
     input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        padding: 10,
-        marginBottom: 10,
-        borderRadius: 5,
-    },
-    buttonContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 20,
-    },
-    cancelButton: {
-        flex: 1,
-        backgroundColor: '#ff3b30',
-        padding: 15,
-        borderRadius: 5,
-        marginRight: 10,
-    },
-    saveButton: {
-        flex: 1,
-        backgroundColor: '#007AFF',
-        padding: 15,
-        borderRadius: 5,
-    },
-    cancelButtonText: {
-        color: 'white',
-        textAlign: 'center',
-        fontWeight: 'bold',
-    },
-    saveButtonText: {
-        color: 'white',
-        textAlign: 'center',
-        fontWeight: 'bold',
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 16,
+        fontSize: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
     },
     textArea: {
-        height: 100,
+        height: 120,
         textAlignVertical: 'top',
     },
     priceContainer: {
         flexDirection: 'row',
-        gap: 10,
+        gap: 12,
+        marginBottom: 16,
     },
     priceInput: {
         flex: 1,
     },
     imageButton: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        height: 200,
+        justifyContent: 'center',
         alignItems: 'center',
-        padding: 10,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 5,
-        marginVertical: 10,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+        overflow: 'hidden',
     },
     image: {
-        width: 200,
-        height: 150,
-        resizeMode: 'contain',
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     label: {
         fontSize: 16,
-        fontWeight: 'bold',
-        marginVertical: 10,
+        fontWeight: '600',
+        marginBottom: 8,
+        color: '#000',
     },
     optionsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 10,
+        gap: 8,
+        marginBottom: 16,
     },
     option: {
-        padding: 8,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 5,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 1,
     },
     optionSelected: {
-        backgroundColor: '#e3e3e3',
+        backgroundColor: '#007AFF',
+    },
+    optionText: {
+        color: '#000',
+        fontSize: 14,
+    },
+    optionTextSelected: {
+        color: '#fff',
     },
     qrCodeContainer: {
         alignItems: 'center',
-        marginVertical: 15,
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 12,
+        marginVertical: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
     },
-}); 
+    buttonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    saveButton: {
+        flex: 1,
+        backgroundColor: '#007AFF',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    cancelButton: {
+        flex: 1,
+        backgroundColor: '#FF3B30',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+});

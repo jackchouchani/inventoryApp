@@ -197,9 +197,11 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                     <QRCodeGenerator value={item.qrCode} size={150} />
                 </View>
 
-                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                    <Text style={styles.saveButtonText}>Sauvegarder</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                        <Text style={styles.buttonText}>Sauvegarder</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         </ScrollView>
     );
@@ -208,80 +210,122 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#f5f5f5',
     },
     contentContainer: {
-        padding: 20,
-        paddingBottom: 40, // Pour assurer de l'espace en bas
+        padding: 16,
     },
     input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        padding: 10,
-        marginBottom: 10,
-        borderRadius: 5,
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 16,
+        fontSize: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    textArea: {
+        height: 120,
+        textAlignVertical: 'top',
     },
     priceContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: 10,
+        gap: 12,
+        marginBottom: 16,
     },
     priceInput: {
         flex: 1,
     },
     imageButton: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
         height: 200,
-        backgroundColor: '#f0f0f0',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 10,
-        borderRadius: 5,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+        overflow: 'hidden',
     },
     image: {
         width: '100%',
         height: '100%',
-        borderRadius: 5,
+        resizeMode: 'cover',
     },
     label: {
         fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 5,
+        fontWeight: '600',
+        marginBottom: 8,
+        color: '#000',
     },
     optionsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 10,
-        marginBottom: 15,
+        gap: 8,
+        marginBottom: 16,
     },
     option: {
-        padding: 10,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 5,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 1,
     },
     optionSelected: {
-        backgroundColor: '#e3e3e3',
-    },
-    saveButton: {
         backgroundColor: '#007AFF',
-        padding: 15,
-        borderRadius: 5,
-        alignItems: 'center',
     },
-    saveButtonText: {
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: 16,
+    optionText: {
+        color: '#000',
+        fontSize: 14,
+    },
+    optionTextSelected: {
+        color: '#fff',
     },
     qrCodeContainer: {
         alignItems: 'center',
-        marginVertical: 15,
-        padding: 10,
-        backgroundColor: '#f5f5f5',
-        borderRadius: 8,
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 12,
+        marginVertical: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
     },
-    textArea: {
-        height: 100,
-        textAlignVertical: 'top',
+    buttonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    saveButton: {
+        flex: 1,
+        backgroundColor: '#007AFF',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    cancelButton: {
+        flex: 1,
+        backgroundColor: '#FF3B30',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 

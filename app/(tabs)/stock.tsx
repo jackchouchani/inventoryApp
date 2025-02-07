@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { ItemList } from '../../src/components/ItemList';
@@ -57,6 +57,16 @@ export default function StockScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Stock</Text>
+        <View style={styles.searchContainer}>
+          <TextInput 
+            style={styles.searchInput}
+            placeholder="Rechercher des articles..."
+            placeholderTextColor="#8E8E93"
+          />
+          <TouchableOpacity style={styles.filterButton}>
+            <Text>Filtres</Text>
+          </TouchableOpacity>
+        </View>
         <ItemList
           items={localItems}
           containers={containers}
@@ -76,12 +86,43 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#007AFF',
+    fontSize: 34,
+    fontWeight: '700',
+    marginVertical: 16,
+    color: '#000',
+    paddingHorizontal: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  filterButton: {
+    height: 44,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   }
 });
