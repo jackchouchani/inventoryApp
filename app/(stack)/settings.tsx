@@ -15,12 +15,23 @@ import {
 } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { generateQRValue } from 'utils/qrCodeManager';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 const SettingsScreen = () => {
   const router = useRouter();
   const dispatch = useDispatch();
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const categories = useSelector((state: RootState) => state.categories.categories);
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Erreur de déconnexion:', error);
+    }
+  };
 
   const generateTestData = async () => {
     try {
@@ -148,6 +159,15 @@ const SettingsScreen = () => {
         <Text style={[styles.menuText, styles.dangerText]}>Générer données de test</Text>
         <Icon name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.menuItem, { marginTop: 20, borderTopWidth: 1, borderTopColor: '#e5e5e5' }]}
+        onPress={handleLogout}
+      >
+        <Icon name="logout" size={24} color="#FF3B30" />
+        <Text style={[styles.menuText, { color: '#FF3B30' }]}>Se déconnecter</Text>
+        <Icon name="chevron-right" size={24} color="#999" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -179,6 +199,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#fff',
   },
   menuText: {
     flex: 1,
@@ -187,9 +208,13 @@ const styles = StyleSheet.create({
   },
   dangerItem: {
     marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e5e5',
+    backgroundColor: '#fff5f5',
   },
   dangerText: {
     color: '#FF3B30',
+    fontWeight: '500',
   },
 });
 

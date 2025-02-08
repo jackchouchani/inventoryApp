@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { User, Session } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
+import { Platform, Image } from 'react-native';
 
 interface AuthUser {
   id: string;

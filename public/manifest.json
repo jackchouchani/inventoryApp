@@ -23,8 +23,8 @@
     ],
     "start_url": "/",
     "display": "standalone",
-    "theme_color": "#007AFF",
-    "background_color": "#ffffff",
+    "theme_color": "#f5f5f5",
+    "background_color": "#f5f5f5",
     "orientation": "portrait",
     "scope": "/",
     "lang": "fr-FR",
@@ -50,9 +50,14 @@
       }
     ],
     "permissions": [
-      "vibrate"
+      "vibrate",
+      "audio"
     ],
-    "display_override": ["window-controls-overlay", "fullscreen"],
+    "features": [
+      "Vibration",
+      "Audio playback"
+    ],
+    "display_override": ["standalone"],
     "launch_handler": {
       "client_mode": "focus-existing"
     },

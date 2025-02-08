@@ -11,6 +11,7 @@ interface ItemFormProps {
     containers: Container[];
     categories: Category[];
     onSuccess?: () => void;
+    onCancel?: () => void;
 }
 
 interface ItemFormState {
@@ -25,7 +26,7 @@ interface ItemFormState {
     qrCode: string;
 }
 
-const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }) => {
+const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>({
@@ -117,8 +118,18 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
     };
 
     return (
-        <ScrollView style={styles.container}>
-            <View style={styles.contentContainer}>
+        <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={onCancel}>
+                    <Text style={styles.cancelText}>Annuler</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Nouvel Article</Text>
+                <TouchableOpacity onPress={handleSave}>
+                    <Text style={styles.saveText}>Enregistrer</Text>
+                </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
                 <TextInput
                     style={styles.input}
                     placeholder="Nom de l'article"
@@ -196,23 +207,42 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                     <Text style={styles.label}>QR Code</Text>
                     <QRCodeGenerator value={item.qrCode} size={150} />
                 </View>
-
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                        <Text style={styles.buttonText}>Sauvegarder</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </ScrollView>
+            </ScrollView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
+    modalContainer: {
         flex: 1,
         backgroundColor: '#f5f5f5',
     },
-    contentContainer: {
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e5e5',
+    },
+    modalTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+    },
+    cancelText: {
+        color: '#007AFF',
+        fontSize: 17,
+    },
+    saveText: {
+        color: '#007AFF',
+        fontSize: 17,
+        fontWeight: '600',
+    },
+    container: {
+        flex: 1,
+    },
+    scrollContent: {
         padding: 16,
     },
     input: {
@@ -238,6 +268,7 @@ const styles = StyleSheet.create({
     },
     priceInput: {
         flex: 1,
+        maxWidth: '48%',
     },
     imageButton: {
         backgroundColor: '#fff',

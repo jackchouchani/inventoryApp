@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image } from 'react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter, Link } from 'expo-router';
 
@@ -21,6 +21,12 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
+      <Image 
+        source={require('../../assets/Logo.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+      
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -87,5 +93,11 @@ const styles = StyleSheet.create({
   link: {
     color: '#007AFF',
     fontWeight: 'bold',
+  },
+  logo: {
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 40
   },
 });

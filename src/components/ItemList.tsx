@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     flexDirection: 'row',
-    padding: 16,
+    padding: 8,
     gap: 8,
     backgroundColor: '#fff',
     borderBottomWidth: 1,

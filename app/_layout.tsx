@@ -10,6 +10,10 @@ import { supabase } from "../src/config/supabase";
 export const unstable_settings = {
   initialRouteName: "(tabs)",
   disableTutorial: true,
+  android: {
+    navigationBarColor: 'transparent',
+    navigationBarStyle: 'dark',
+  },
 };
 
 export type RootStackParamList = {
@@ -84,7 +88,9 @@ export default function RootLayout() {
   return (
     <Provider store={store}>
       <AuthProvider>
-        <RootLayoutNav />
+        <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+          <RootLayoutNav />
+        </View>
       </AuthProvider>
     </Provider>
   );

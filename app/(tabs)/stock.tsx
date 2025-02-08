@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { ItemList } from '../../src/components/ItemList';
@@ -54,19 +54,8 @@ export default function StockScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <View style={styles.content}>
-        <Text style={styles.title}>Stock</Text>
-        <View style={styles.searchContainer}>
-          <TextInput 
-            style={styles.searchInput}
-            placeholder="Rechercher des articles..."
-            placeholderTextColor="#8E8E93"
-          />
-          <TouchableOpacity style={styles.filterButton}>
-            <Text>Filtres</Text>
-          </TouchableOpacity>
-        </View>
         <ItemList
           items={localItems}
           containers={containers}
@@ -80,9 +69,10 @@ export default function StockScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    paddingTop: 0,
   },
   content: {
     flex: 1,

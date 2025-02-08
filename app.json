@@ -4,9 +4,14 @@
     "slug": "inventory-cv",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/Logo.png",
+    "icon": null,
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
+    "splash": {
+      "image": null,
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "updates": {
       "assetPatternsToBeBundled": [
         "**/*.ttf",
@@ -35,11 +40,6 @@
         }
       ]
     ],
-    "splash": {
-      "image": "./assets/Logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.inventoryApp",
@@ -48,7 +48,7 @@
           "fetch",
           "remote-notification"
         ],
-        "UIViewControllerBasedStatusBarAppearance": false,
+        "UIViewControllerBasedStatusBarAppearance": true,
         "UIStatusBarHidden": false,
         "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
@@ -76,12 +76,7 @@
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
-      "orientation": "portrait",
-      "splash": {
-        "image": "./assets/Logo.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      }
+      "orientation": "portrait"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
@@ -92,6 +87,19 @@
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
+    },
+    "androidStatusBar": {
+      "backgroundColor": "transparent",
+      "translucent": true,
+      "barStyle": "dark-content"
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#f5f5f5",
+      "translucent": false,
+      "barStyle": "dark-content"
+    },
+    "navigationBar": {
+      "visible": "immersive"
     }
   }
 }
