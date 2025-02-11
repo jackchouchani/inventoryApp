@@ -1,21 +1,56 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter, Link } from 'expo-router';
+import { supabase } from '../../src/config/supabase';
+import { handleAuthenticationError, handleAuthValidationError } from '../../src/utils/authErrorHandler';
+import { checkNetworkConnection } from '../../src/utils/errorHandler';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const router = useRouter();
 
+  const validateForm = () => {
+    if (!email.trim()) {
+      handleAuthValidationError('email', 'login.validateForm');
+      return false;
+    }
+    if (!password.trim()) {
+      handleAuthValidationError('password', 'login.validateForm');
+      return false;
+    }
+    return true;
+  };
+
   const handleLogin = async () => {
+    if (!validateForm()) return;
+
     try {
-      await signIn(email, password);
-      router.replace('/(tabs)');
+      setLoading(true);
+
+      // Vérifier la connexion réseau
+      const isConnected = await checkNetworkConnection();
+      if (!isConnected) return;
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.user) {
+        router.replace('/(tabs)/stock');
+      }
     } catch (error) {
-      console.error(error);
-      alert('Erreur de connexion');
+      handleAuthenticationError(error as Error, 'login.handleLogin');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -34,6 +69,7 @@ export default function Login() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        editable={!loading}
       />
       <TextInput
         style={styles.input}
@@ -41,9 +77,18 @@ export default function Login() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        editable={!loading}
       />
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Se connecter</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Se connecter</Text>
+        )}
       </TouchableOpacity>
 
       <View style={styles.linkContainer}>
@@ -77,6 +122,9 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     alignItems: 'center',
     marginBottom: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
   },
   buttonText: {
     color: 'white',

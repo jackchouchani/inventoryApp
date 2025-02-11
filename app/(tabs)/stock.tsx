@@ -1,118 +1,81 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useDispatch } from 'react-redux';
+import React, { useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { ItemList } from '../../src/components/ItemList';
-import { getItems, getContainers, getCategories, updateItemStatus } from '../../src/database/database';
-import { setItems } from '../../src/store/itemsSlice';
-import { useRefreshStore } from '../../src/store/refreshStore';
-import type { Item, Container, Category } from '../../src/database/types';
+import { FilterBar } from '../../src/components/FilterBar';
+import { handleDatabaseError } from '../../src/utils/errorHandler';
 
 export default function StockScreen() {
-  const [localItems, setLocalItems] = useState<Item[]>([]);
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const dispatch = useDispatch();
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const [filter, setFilter] = useState('');
+  const { data: inventoryData, isLoading, error } = useInventoryData();
 
-  const loadData = async () => {
-    try {
-      const [loadedItems, loadedContainers, loadedCategories] = await Promise.all([
-        getItems(),
-        getContainers(),
-        getCategories()
-      ]);
-      setLocalItems(loadedItems);
-      setContainers(loadedContainers);
-      setCategories(loadedCategories);
-      dispatch(setItems(loadedItems));
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-  };
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Chargement de l'inventaire...</Text>
+      </View>
+    );
+  }
 
-  useEffect(() => {
-    loadData();
-  }, [refreshTimestamp]);
+  if (error) {
+    handleDatabaseError(error, 'StockScreen');
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>
+          Une erreur est survenue lors du chargement des données
+        </Text>
+      </View>
+    );
+  }
 
-  const handleMarkAsSold = async (itemId: number) => {
-    try {
-      await updateItemStatus(itemId, 'sold');
-      await loadData();
-    } catch (error) {
-      console.error('Error marking item as sold:', error);
-    }
-  };
-
-  const handleMarkAsAvailable = async (itemId: number) => {
-    try {
-      await updateItemStatus(itemId, 'available');
-      await loadData();
-    } catch (error) {
-      console.error('Error marking item as available:', error);
-    }
-  };
+  const filteredItems = inventoryData?.items.filter(item =>
+    item.name.toLowerCase().includes(filter.toLowerCase())
+  ) || [];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.content}>
-        <ItemList
-          items={localItems}
-          containers={containers}
-          categories={categories}
-          onMarkAsSold={handleMarkAsSold}
-          onMarkAsAvailable={handleMarkAsAvailable}
-        />
-      </View>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <FilterBar
+        value={filter}
+        onChangeText={setFilter}
+        placeholder="Rechercher un article..."
+      />
+      
+      <ItemList
+        items={filteredItems}
+        containers={inventoryData?.containers || []}
+        categories={inventoryData?.categories || []}
+        onMarkAsSold={() => {}}
+        onMarkAsAvailable={() => {}}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingTop: 0,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '700',
-    marginVertical: 16,
-    color: '#000',
-    paddingHorizontal: 4,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 44,
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
-  filterButton: {
-    height: 44,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 10,
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  }
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    textAlign: 'center',
+  },
 });

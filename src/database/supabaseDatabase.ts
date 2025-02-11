@@ -1,149 +1,191 @@
 import { supabase } from '../config/supabase';
 import { DatabaseInterface, Item, Container, Category } from './types';
 import { photoService } from '../services/photoService';
+import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
+import { PostgrestError } from '@supabase/supabase-js';
 
 const supabaseDatabase: DatabaseInterface = {
   async getContainers(): Promise<Container[]> {
-    const { data, error } = await supabase
-      .from('containers')
-      .select('*')
-      .is('deleted', false);
-    
-    if (error) throw error;
-    
-    return (data || []).map(container => ({
-      id: container.id,
-      name: container.name,
-      number: container.number,
-      description: container.description,
-      qrCode: container.qr_code,
-      createdAt: container.created_at,
-      updatedAt: container.updated_at
-    }));
+    try {
+      const { data, error } = await supabase
+        .from('containers')
+        .select('*')
+        .is('deleted', false);
+      
+      if (error) throw error;
+      
+      return (data || []).map(container => ({
+        id: container.id,
+        name: container.name,
+        number: container.number,
+        description: container.description,
+        qrCode: container.qr_code,
+        createdAt: container.created_at,
+        updatedAt: container.updated_at
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'getContainers');
+      return [];
+    }
   },
 
   async getCategories(): Promise<Category[]> {
-    const { data, error } = await supabase
-      .from('categories') 
-      .select('*')
-      .is('deleted', false);
+    try {
+      const { data, error } = await supabase
+        .from('categories') 
+        .select('*')
+        .is('deleted', false);
 
-    if (error) throw error;
-    
-    return (data || []).map(category => ({
-      id: category.id,
-      name: category.name,
-      description: category.description,
-      createdAt: category.created_at,
-      updatedAt: category.updated_at
-    }));
+      if (error) throw error;
+      
+      return (data || []).map(category => ({
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        createdAt: category.created_at,
+        updatedAt: category.updated_at
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'getCategories');
+      return [];
+    }
   },
 
   async updateItem(id: number, item: Omit<Item, "id">): Promise<void> {
-    const supabaseItem = {
-      name: item.name,
-      description: item.description,
-      purchase_price: item.purchasePrice,
-      selling_price: item.sellingPrice,
-      status: item.status,
-      photo_uri: item.photoUri,
-      container_id: item.containerId,
-      category_id: item.categoryId,
-      qr_code: item.qrCode
-    };
+    try {
+      if (!id) {
+        throw handleValidationError('ID de l\'item manquant', 'updateItem');
+      }
 
-    const { error } = await supabase
-      .from('items')
-      .update(supabaseItem)
-      .eq('id', id);
+      const supabaseItem = {
+        name: item.name,
+        description: item.description,
+        purchase_price: item.purchasePrice,
+        selling_price: item.sellingPrice,
+        status: item.status,
+        photo_uri: item.photoUri,
+        container_id: item.containerId,
+        category_id: item.categoryId,
+        qr_code: item.qrCode
+      };
 
-    if (error) {
-      console.error('Erreur Supabase:', error);
+      const { error } = await supabase
+        .from('items')
+        .update(supabaseItem)
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'updateItem');
       throw error;
     }
   },
 
   async updateItemStatus(itemId: number, status: string): Promise<void> {
-    const { error } = await supabase
-      .from('items')
-      .update({ status })
-      .eq('id', itemId);
+    try {
+      if (!itemId) {
+        throw handleValidationError('ID de l\'item manquant', 'updateItemStatus');
+      }
 
-    if (error) throw error;
+      const { error } = await supabase
+        .from('items')
+        .update({ status })
+        .eq('id', itemId);
+
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'updateItemStatus');
+      throw error;
+    }
   },
 
   async getItems(): Promise<Item[]> {
-    const { data, error } = await supabase
-      .from('items')
-      .select('*')
-      .is('deleted', false)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return (data || []).map(item => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      purchasePrice: item.purchase_price,
-      sellingPrice: item.selling_price,
-      status: item.status,
-      photoUri: item.photo_uri,
-      containerId: item.container_id,
-      categoryId: item.category_id,
-      qrCode: item.qr_code,
-      createdAt: item.created_at,
-      updatedAt: item.updated_at
-    }));
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .is('deleted', false)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+
+      return (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        purchasePrice: item.purchase_price,
+        sellingPrice: item.selling_price,
+        status: item.status,
+        photoUri: item.photo_uri,
+        containerId: item.container_id,
+        categoryId: item.category_id,
+        qrCode: item.qr_code,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'getItems');
+      return [];
+    }
   },
 
   async addItem(item: Omit<Item, "id" | "createdAt" | "updatedAt">): Promise<number> {
-    // Convertir les noms de colonnes pour correspondre à la structure Supabase
-    const supabaseItem = {
-      name: item.name,
-      description: item.description,
-      purchase_price: item.purchasePrice,
-      selling_price: item.sellingPrice,
-      status: item.status,
-      photo_uri: item.photoUri,
-      container_id: item.containerId,
-      category_id: item.categoryId,
-      qr_code: item.qrCode
-    };
+    try {
+      if (!item.name) {
+        throw handleValidationError('Le nom de l\'item est requis', 'addItem');
+      }
 
-    const { data, error } = await supabase
-      .from('items')
-      .insert([supabaseItem])
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Erreur Supabase:', error);
+      const supabaseItem = {
+        name: item.name,
+        description: item.description,
+        purchase_price: item.purchasePrice,
+        selling_price: item.sellingPrice,
+        status: item.status,
+        photo_uri: item.photoUri,
+        container_id: item.containerId,
+        category_id: item.categoryId,
+        qr_code: item.qrCode
+      };
+
+      const { data, error } = await supabase
+        .from('items')
+        .insert([supabaseItem])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data.id;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'addItem');
       throw error;
     }
-    return data.id;
   },
 
   async addContainer(container: Omit<Container, "id" | "createdAt" | "updatedAt">): Promise<number> {
-    // Convertir les noms de colonnes pour correspondre à la structure Supabase
-    const supabaseContainer = {
-      name: container.name,
-      number: container.number,
-      description: container.description,
-      qr_code: container.qrCode,
-      // Ne pas inclure createdAt et updatedAt car ils sont gérés par Supabase
-    };
+    try {
+      if (!container.name) {
+        throw handleValidationError('Le nom du container est requis', 'addContainer');
+      }
 
-    const { data, error } = await supabase
-      .from('containers')
-      .insert([supabaseContainer])
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Erreur Supabase:', error);
+      const supabaseContainer = {
+        name: container.name,
+        number: container.number,
+        description: container.description,
+        qr_code: container.qrCode,
+      };
+
+      const { data, error } = await supabase
+        .from('containers')
+        .insert([supabaseContainer])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data.id;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'addContainer');
       throw error;
     }
-    return data.id;
   },
 
   async addCategory(category: Omit<Category, "id" | "createdAt" | "updatedAt">): Promise<number> {

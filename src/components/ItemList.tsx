@@ -3,6 +3,7 @@ import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, M
 import { Item, Container, Category } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { ItemEditForm } from './ItemEditForm';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface ItemListProps {
   items: Item[];
@@ -75,42 +76,71 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
            matchesStatus && matchesPrice;
   });
 
+  const getContainerName = (containerId: number | null) => {
+    if (!containerId) return 'Non assigné';
+    const container = containers.find(c => c.id === containerId);
+    return container ? container.name : 'Non assigné';
+  };
+
+  const getCategoryName = (categoryId: number | null) => {
+    if (!categoryId) return 'Sans catégorie';
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name : 'Sans catégorie';
+  };
+
   const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={styles.itemCard}
-      onPress={() => setSelectedItem(item)}
-    >
-      <Image source={{ uri: item.photoUri }} style={styles.itemImage} />
-      <View style={styles.itemContent}>
+    <View style={styles.itemContainer}>
+      <View style={styles.itemHeader}>
         <Text style={styles.itemName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.itemDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
         <View style={styles.priceContainer}>
-          <View>
-            <Text style={styles.priceLabel}>Prix d'achat</Text>
-            <Text style={styles.priceValue}>{item.purchasePrice}€</Text>
-          </View>
-          <View>
-            <Text style={styles.priceLabel}>Prix de vente</Text>
-            <Text style={styles.priceValue}>{item.sellingPrice}€</Text>
-          </View>
+          <Text style={styles.priceLabel}>Prix: </Text>
+          <Text style={styles.price}>{item.sellingPrice}€</Text>
         </View>
-        <TouchableOpacity
-          style={[
-            styles.statusButton,
-            item.status === 'available' ? styles.soldButton : styles.availableButton
-          ]}
-          onPress={() => handleStatusToggle(item.id!, item.status)}
-        >
-          <Text style={styles.statusButtonText}>
-            {item.status === 'available' ? 'Marquer comme vendu' : 'Marquer comme disponible'}
-          </Text>
-        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+
+      <View style={styles.itemDetails}>
+        <View style={styles.detailRow}>
+          <MaterialIcons name="category" size={16} color="#666" />
+          <Text style={styles.detailText}>
+            {getCategoryName(item.categoryId ?? null)}
+          </Text>
+        </View>
+        <View style={styles.detailRow}>
+          <MaterialIcons name="inbox" size={16} color="#666" />
+          <Text style={styles.detailText}>
+            {getContainerName(item.containerId ?? null)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.actionButtons}>
+        {item.status === 'available' ? (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.soldButton]}
+            onPress={() => {
+              if (typeof item.id === 'number') {
+                onMarkAsSold(item.id);
+              }
+            }}
+          >
+            <MaterialIcons name="shopping-cart" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Marquer comme vendu</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.availableButton]}
+            onPress={() => {
+              if (typeof item.id === 'number') {
+                onMarkAsAvailable(item.id);
+              }
+            }}
+          >
+            <MaterialIcons name="restore" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Remettre en stock</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 
   const handleEditSuccess = () => {
@@ -249,8 +279,9 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       <FlatList
         data={filteredItems}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id!.toString()}
-        style={styles.list}
+        keyExtractor={(item) => `item-${item.id}-${item.updatedAt}`}
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
 
       <Modal
@@ -341,70 +372,79 @@ const styles = StyleSheet.create({
   filterOptionTextSelected: {
     color: '#fff',
   },
-  itemCard: {
+  itemContainer: {
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
+    borderRadius: 8,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    overflow: 'hidden',
+    shadowRadius: 4,
+    elevation: 2,
   },
-  itemContent: {
-    padding: 16,
-  },
-  itemImage: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#f0f0f0',
-  },
-  itemInfo: {
-    marginTop: 12,
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   itemName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: '#000',
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    flex: 1,
   },
   priceContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    alignItems: 'center',
   },
   priceLabel: {
     fontSize: 14,
     color: '#666',
   },
-  priceValue: {
+  price: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontWeight: 'bold',
+    color: '#007AFF',
   },
-  statusButton: {
-    paddingVertical: 12,
-    borderRadius: 10,
+  itemDetails: {
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 4,
+  },
+  detailText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginLeft: 8,
   },
   soldButton: {
     backgroundColor: '#FF3B30',
   },
   availableButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#4CAF50',
   },
-  statusButtonText: {
+  actionButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  separator: {
+    height: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -424,6 +464,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   list: {
-    flex: 1,
+    padding: 16,
   },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { Container, Item } from '../database/database';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Container, Item } from '../database/types';
 
 interface ContainerGridProps {
   containers: Container[];
@@ -14,56 +14,83 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
   onContainerPress,
 }) => {
   const getItemCount = (containerId: number) => {
-    return items.filter((item) => item.containerId === containerId).length;
+    return items.filter(item => item.containerId === containerId).length;
   };
 
-  const renderContainer = (container: Container) => (
-    <TouchableOpacity
-      key={container.id}
-      style={styles.containerBox}
-      onPress={() => onContainerPress(container.id!)}
-    >
-      <Text style={styles.containerNumber}>{container.name}</Text>
-      <Text style={styles.itemCount}>{getItemCount(container.id!)} items</Text>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item: container }: { item: Container }) => {
+    const itemCount = getItemCount(container.id!);
+    
+    return (
+      <TouchableOpacity
+        style={styles.containerCard}
+        onPress={() => container.id && onContainerPress(container.id)}
+      >
+        <Text style={styles.containerName} numberOfLines={2}>
+          {container.name}
+        </Text>
+        <Text style={styles.containerNumber}>#{container.number}</Text>
+        <View style={styles.statsContainer}>
+          <Text style={styles.itemCount}>
+            {itemCount} article{itemCount > 1 ? 's' : ''}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.grid}>
-      {containers.map((container) => renderContainer(container))}
-    </View>
+    <FlatList
+      data={containers}
+      renderItem={renderItem}
+      keyExtractor={(item) => `container-${item.id}`}
+      numColumns={2}
+      contentContainerStyle={styles.grid}
+      columnWrapperStyle={styles.row}
+    />
   );
 };
 
 const { width } = Dimensions.get('window');
-const GRID_PADDING = 10;
-const GRID_SPACING = 8;
-const CONTAINER_SIZE = (width - 2 * GRID_PADDING - 3 * GRID_SPACING) / 4;
+const CARD_MARGIN = 8;
+const CARD_WIDTH = (width - (CARD_MARGIN * 6)) / 2;
 
 const styles = StyleSheet.create({
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: GRID_PADDING,
-    gap: GRID_SPACING,
+    padding: CARD_MARGIN,
   },
-  containerBox: {
-    width: CONTAINER_SIZE,
-    height: CONTAINER_SIZE,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: CARD_MARGIN,
+  },
+  containerCard: {
+    width: CARD_WIDTH,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    margin: CARD_MARGIN,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  containerName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
   },
   containerNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   itemCount: {
     fontSize: 14,
-    color: '#666',
+    color: '#007AFF',
   },
 });

@@ -1,40 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView } from 'react-native';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Container, Item, getContainers, getItems, addContainer, updateItem, deleteContainer, updateContainer } from '../../src/database/database';
+import { Container, Item } from '../../src/database/types';
 import { ContainerGrid } from '../../src/components/ContainerGrid';
 import { ContainerForm } from '../../src/components/ContainerForm';
 import { ItemList } from '../../src/components/ItemList';
+import { useInventoryData, useContainerItems, useContainerMutation, usePrefetchContainerData } from '../../src/hooks/useInventoryData';
+import { handleDatabaseError } from '../../src/utils/errorHandler';
+import { PostgrestError } from '@supabase/supabase-js';
+import { supabase } from '../../src/config/supabase';
 import { useRefreshStore } from '../../src/store/refreshStore';
 
 const ContainerScreen = () => {
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const router = useRouter();
+  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
 
-  const loadData = async () => {
-    try {
-      const [loadedContainers, loadedItems] = await Promise.all([
-        getContainers(),
-        getItems()
-      ]);
-      setContainers(loadedContainers);
-      setItems(loadedItems);
-    } catch (error) {
-      console.error('Error loading containers data:', error);
-    }
-  };
+  // Récupération des données
+  const { data: inventoryData, isLoading: isLoadingInventory } = useInventoryData();
+  const { data: containerItems, isLoading: isLoadingItems } = useContainerItems(selectedContainer?.id || 0);
+  const containerMutation = useContainerMutation();
+  const prefetchContainer = usePrefetchContainerData(selectedContainer?.id || 0);
 
+  // Préchargement des données du container
   useEffect(() => {
-    loadData();
-  }, [refreshTimestamp]);
+    if (selectedContainer?.id) {
+      prefetchContainer();
+    }
+  }, [selectedContainer?.id]);
 
   const handleContainerPress = (containerId: number) => {
-    const container = containers.find(c => c.id === containerId);
+    const container = inventoryData?.containers.find(c => c.id === containerId);
     if (container) {
       setSelectedContainer(container);
     }
@@ -48,46 +46,61 @@ const ContainerScreen = () => {
     }, 300);
   };
 
-  const handleDeleteContainer = async (containerId: number) => {
-    try {
-      await deleteContainer(containerId);
-      await loadData();
-      setSelectedContainer(null);
-    } catch (error) {
-      console.error('Error deleting container:', error);
-    }
-  };
-
   const handleContainerSubmit = async (containerData: Omit<Container, 'id'>) => {
     try {
       if (editingContainer?.id) {
-        await updateContainer(editingContainer.id, containerData);
-      } else {
-        await addContainer(containerData);
+        await containerMutation.mutateAsync({
+          id: editingContainer.id,
+          data: containerData
+        });
+        setShowContainerForm(false);
+        setEditingContainer(null);
       }
-      await loadData();
-      setShowContainerForm(false);
-      setEditingContainer(null);
     } catch (error) {
-      console.error('Error saving container:', error);
+      if (error instanceof Error || error instanceof PostgrestError) {
+        handleDatabaseError(error, 'ContainerScreen.handleContainerSubmit');
+      }
     }
   };
 
-  const handleItemMove = async (itemId: number, newContainerId: number) => {
-    try {
-      const item = items.find(i => i.id === itemId);
-      if (item) {
-        await updateItem(itemId, {
-          ...item,
-          containerId: newContainerId,
-          updatedAt: new Date().toISOString()
-        });
-        await loadData();
-      }
-    } catch (error) {
-      console.error('Error moving item:', error);
-    }
+  const handleDeleteContainer = async (containerId: number) => {
+    Alert.alert(
+      'Supprimer le container',
+      'Êtes-vous sûr de vouloir supprimer ce container ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('containers')
+                .delete()
+                .eq('id', containerId);
+
+              if (error) throw error;
+              
+              setSelectedContainer(null);
+              triggerRefresh();
+            } catch (error) {
+              if (error instanceof Error || error instanceof PostgrestError) {
+                handleDatabaseError(error, 'ContainerScreen.handleDeleteContainer');
+              }
+            }
+          }
+        }
+      ]
+    );
   };
+
+  if (isLoadingInventory) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Chargement des containers...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -99,8 +112,8 @@ const ContainerScreen = () => {
       </TouchableOpacity>
 
       <ContainerGrid
-        containers={containers}
-        items={items}
+        containers={inventoryData?.containers || []}
+        items={containerItems || []}
         onContainerPress={handleContainerPress}
       />
 
@@ -174,13 +187,19 @@ const ContainerScreen = () => {
             </View>
           </View>
           
-          <ItemList
-            items={items.filter(item => item.containerId === selectedContainer?.id)}
-            containers={containers}
-            categories={[]}
-            onMarkAsSold={() => {}}
-            onMarkAsAvailable={() => {}}
-          />
+          {isLoadingItems ? (
+            <View style={styles.loadingContainer}>
+              <Text>Chargement des articles...</Text>
+            </View>
+          ) : (
+            <ItemList
+              items={containerItems || []}
+              containers={inventoryData?.containers || []}
+              categories={inventoryData?.categories || []}
+              onMarkAsSold={() => {}}
+              onMarkAsAvailable={() => {}}
+            />
+          )}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -193,6 +212,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
     flex: 1,
@@ -211,7 +235,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerSpacer: {
-    width: 70, // même largeur que le bouton annuler pour centrer le titre
+    width: 70,
   },
   cancelButton: {
     padding: 8,

@@ -9,17 +9,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as haptics from '../utils/vibrationManager';
 import * as sounds from '../utils/soundManager';
 import { Container, Item } from '../database/types';
+import { BarCodeScanner } from 'expo-barcode-scanner';
+import { handleScannerError } from '../utils/errorHandler';
 
 interface ScannerProps {
     onClose: () => void;
-    onScan: (result: ScanResult) => void;
+    onScan: (result: { success: boolean; message: string; type?: 'container' | 'item'; data?: any }) => void;
     isActive: boolean;
-}
-
-interface ScanResult {
-    success: boolean;
-    message: string;
-    type?: 'container' | 'item';
 }
 
 const SCAN_DELAY = 500;
@@ -27,22 +23,55 @@ const MAX_HISTORY_ITEMS = 5;
 
 const isWeb = Platform.OS === 'web';
 
-const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
-    const [permission, requestPermission] = useCameraPermissions();
+export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
+    const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [scanned, setScanned] = useState(false);
     const [currentContainer, setCurrentContainer] = useState<Container | null>(null);
     const [scanHistory, setScanHistory] = useState<Array<{ name: string; success: boolean }>>([]); 
     const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
-    const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
+    const [lastScanResult, setLastScanResult] = useState<{ success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null>(null);
     const [fadeAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
 
     useEffect(() => {
+        let mounted = true;
+
         (async () => {
-            if (!permission?.granted) {
-                await requestPermission();
+            try {
+                const { status } = await BarCodeScanner.requestPermissionsAsync();
+                if (mounted) {
+                    setHasPermission(status === 'granted');
+                    
+                    if (status !== 'granted') {
+                        handleScannerError(
+                            new Error('Permission de caméra non accordée'),
+                            'Scanner.requestPermissions'
+                        );
+                    }
+                }
+            } catch (error) {
+                if (mounted) {
+                    handleScannerError(
+                        error as Error,
+                        'Scanner.requestPermissions'
+                    );
+                    setHasPermission(false);
+                }
             }
         })();
+
+        // Cleanup function
+        return () => {
+            mounted = false;
+            // Reset all states
+            setScanned(false);
+            setCurrentContainer(null);
+            setScanHistory([]);
+            setScanMode('container');
+            setLastScanResult(null);
+            // Stop any ongoing animations
+            fadeAnim.setValue(0);
+        };
     }, []);
 
     // Animation pour le feedback
@@ -64,7 +93,8 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
                 setLastScanResult({
                     success: true,
                     message: `Container "${container.name}" sélectionné`,
-                    type: 'container'
+                    type: 'container',
+                    data: container
                 });
                 await haptics.vibrate(haptics.SUCCESS_PATTERN);
                 await sounds.playSuccessSound();
@@ -109,7 +139,8 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
                 setLastScanResult({
                     success: true,
                     message: `Article "${item.name}" assigné au container`,
-                    type: 'item'
+                    type: 'item',
+                    data: item
                 });
                 await haptics.vibrate(haptics.SUCCESS_PATTERN);
                 await sounds.playSuccessSound();
@@ -134,27 +165,44 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
         }
     };
 
-    const handleQRCodeScanned = async ({ data }: { data: string }) => {
-        if (!isActive || scanned) return;
-        
-        setScanned(true);
+    const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
         try {
-            const parsedData = parseQRCode(data);
-            if (parsedData) {
-                if (scanMode === 'container') {
-                    await handleContainerScan(data);
-                } else {
-                    await handleItemScan(data);
-                }
-                animateFeedback(true);
+            if (!isActive) return;
+
+            let scanData;
+            try {
+                scanData = JSON.parse(data);
+            } catch {
+                handleScannerError(
+                    new Error('QR code invalide'),
+                    'Scanner.handleBarCodeScanned'
+                );
+                onScan({ success: false, message: 'Format de QR code invalide' });
+                return;
             }
+
+            if (!scanData.type || !scanData.qrCode) {
+                handleScannerError(
+                    new Error('Données de QR code incomplètes'),
+                    'Scanner.handleBarCodeScanned'
+                );
+                onScan({ success: false, message: 'Données de QR code incomplètes' });
+                return;
+            }
+
+            onScan({
+                success: true,
+                message: 'Scan réussi',
+                type: scanData.type,
+                data: scanData
+            });
         } catch (error) {
-            console.error('Erreur de scan:', error);
-            await haptics.vibrate(haptics.ERROR_PATTERN);
-            await sounds.playErrorSound();
+            handleScannerError(
+                error as Error,
+                'Scanner.handleBarCodeScanned'
+            );
+            onScan({ success: false, message: 'Erreur lors du scan' });
         }
-        
-        setTimeout(() => setScanned(false), 1500);
     };
 
     const resetScanner = () => {
@@ -165,15 +213,20 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
         setScanned(false);
     };
 
-    if (!permission) {
-        return <Text>Demande d'autorisation de la caméra...</Text>;
-    }
-    if (!permission.granted) {
+    if (hasPermission === null) {
         return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>Pas d'accès à la caméra</Text>
-                <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-                    <Text style={styles.permissionButtonText}>Autoriser l'accès</Text>
+            <View style={styles.container}>
+                <Text style={styles.text}>Demande d'accès à la caméra...</Text>
+            </View>
+        );
+    }
+
+    if (hasPermission === false) {
+        return (
+            <View style={styles.container}>
+                <Text style={styles.text}>Pas d'accès à la caméra</Text>
+                <TouchableOpacity onPress={onClose} style={styles.button}>
+                    <Text style={styles.buttonText}>Fermer</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -215,11 +268,8 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
             </View>
 
             {/* Camera View */}
-            <CameraView
-                onBarcodeScanned={scanned ? undefined : handleQRCodeScanned}
-                barcodeScannerSettings={{
-                    barcodeTypes: ['qr'],
-                }}
+            <BarCodeScanner
+                onBarCodeScanned={isActive ? handleBarCodeScanned : undefined}
                 style={StyleSheet.absoluteFillObject}
             />
 
@@ -446,6 +496,46 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         gap: 10,
     },
+    text: {
+        color: '#fff',
+        fontSize: 16,
+        textAlign: 'center',
+        marginTop: 40,
+    },
+    button: {
+        backgroundColor: '#007AFF',
+        padding: 15,
+        borderRadius: 8,
+        margin: 20,
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 40,
+        right: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 2,
+    },
+    closeButtonText: {
+        color: '#fff',
+        fontSize: 24,
+        fontWeight: 'bold',
+    },
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scanArea: {
+        width: 250,
+        height: 250,
+        borderWidth: 2,
+        borderColor: '#fff',
+        backgroundColor: 'transparent',
+    },
 });
-
-export default Scanner;
