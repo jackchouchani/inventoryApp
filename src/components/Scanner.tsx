@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, CameraType, BarcodeScanningResult } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { parseQRCode, QR_CODE_TYPES } from '../utils/qrCodeManager';
 import { updateItem, getItemByQRCode, getContainerByQRCode } from '../database/database';
@@ -32,17 +32,18 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     const [lastScanResult, setLastScanResult] = useState<{ success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null>(null);
     const [fadeAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+    const [permission, requestPermission] = useCameraPermissions();
 
     useEffect(() => {
         let mounted = true;
 
         (async () => {
             try {
-                const { status } = await BarCodeScanner.requestPermissionsAsync();
+                const permission = await requestPermission();
                 if (mounted) {
-                    setHasPermission(status === 'granted');
+                    setHasPermission(permission?.granted ?? false);
 
-                    if (status !== 'granted') {
+                    if (!permission?.granted) {
                         handleScannerError(
                             new Error('Permission de caméra non accordée'),
                             'Scanner.requestPermissions'
@@ -60,19 +61,39 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             }
         })();
 
-        // Cleanup function
         return () => {
             mounted = false;
-            // Reset all states
             setScanned(false);
             setCurrentContainer(null);
             setScanHistory([]);
             setScanMode('container');
             setLastScanResult(null);
-            // Stop any ongoing animations
             fadeAnim.setValue(0);
         };
     }, []);
+
+    // Effet pour gérer l'activation/désactivation de la caméra
+    useEffect(() => {
+        if (!isActive) {
+            setScanned(false);
+            setCurrentContainer(null);
+            setScanHistory([]);
+            setScanMode('container');
+            setLastScanResult(null);
+            return;
+        }
+
+        // Réinitialiser les permissions à chaque activation
+        (async () => {
+            try {
+                const permission = await requestPermission();
+                setHasPermission(permission?.granted ?? false);
+            } catch (error) {
+                setHasPermission(false);
+                handleScannerError(error as Error, 'Scanner.checkPermissions');
+            }
+        })();
+    }, [isActive]);
 
     // Animation pour le feedback
     const animateFeedback = (success: boolean) => {
@@ -236,6 +257,19 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         <View style={styles.container}>
             <View style={styles.statusBar}>
                 <View style={styles.containerInfo}>
+                    <TouchableOpacity 
+                        style={styles.closeButton}
+                        onPress={() => {
+                            setScanned(false);
+                            setCurrentContainer(null);
+                            setScanHistory([]);
+                            setScanMode('container');
+                            setLastScanResult(null);
+                            onClose();
+                        }}
+                    >
+                        <MaterialIcons name="close" size={24} color="#fff" />
+                    </TouchableOpacity>
                     <Text style={styles.containerText}>
                         {scanMode === 'container'
                             ? '📦 Scannez un container'
@@ -268,10 +302,16 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             </View>
 
             {/* Camera View */}
-            <BarCodeScanner
-                onBarCodeScanned={isActive ? handleBarCodeScanned : undefined}
-                style={StyleSheet.absoluteFillObject}
-            />
+            {isActive && hasPermission && (
+                <CameraView
+                    style={[StyleSheet.absoluteFillObject, styles.camera]}
+                    facing="back"
+                    barcodeScannerSettings={{
+                        barcodeTypes: ['qr'],
+                    }}
+                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                />
+            )}
 
             {/* Feedback Panel */}
             {lastScanResult && (
@@ -509,16 +549,10 @@ const styles = StyleSheet.create({
         margin: 20,
     },
     closeButton: {
-        position: 'absolute',
-        top: 40,
-        right: 20,
-        width: 40,
-        height: 40,
+        padding: 8,
+        marginRight: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         borderRadius: 20,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 2,
     },
     closeButtonText: {
         color: '#fff',
@@ -536,6 +570,9 @@ const styles = StyleSheet.create({
         height: 250,
         borderWidth: 2,
         borderColor: '#fff',
+        backgroundColor: 'transparent',
+    },
+    camera: {
         backgroundColor: 'transparent',
     },
 });

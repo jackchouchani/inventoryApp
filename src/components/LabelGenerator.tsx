@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { handleLabelGenerationError, handleLabelPrintingError, handleQRCodeError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/errorHandler';
+import { useRouter } from 'expo-router';
 import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 
@@ -20,6 +21,17 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const router = useRouter();
+
+  const handleComplete = () => {
+    if (Platform.OS === 'web') {
+      // Sur le web, on laisse le comportement par défaut
+      onComplete();
+    } else {
+      // Sur mobile, on redirige vers l'écran d'accueil
+      router.replace('/(tabs)');
+    }
+  };
 
   const generateQRCode = async (data: string): Promise<string> => {
     try {
@@ -89,7 +101,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       }
 
       doc.save(`etiquettes-containers-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`);
-      onComplete();
+      handleComplete();
     } catch (error) {
       handleLabelPrintingError(error as Error, 'LabelGenerator.generateContainerPDF');
       onError(error as Error);
@@ -181,7 +193,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       }
 
       doc.save(`etiquettes-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`);
-      onComplete();
+      handleComplete();
     } catch (error) {
       handleLabelGenerationError(error as Error, 'LabelGenerator.generateItemsPDF');
       onError(error as Error);

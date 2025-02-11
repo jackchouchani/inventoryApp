@@ -1,4 +1,5 @@
-import { Container, DatabaseInterface, Item, Category } from './types';
+import { Container, Item, Category } from './types';
+import type { DatabaseInterface } from './types';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -36,7 +37,8 @@ export const {
   storePhotoUri,
   getPhotoUris,
   removePhotoUri,
-  saveDatabase
+  saveDatabase,
+  deleteItem: rawDeleteItem
 } = supabaseDatabase;
 
 // Réexporter les fonctions avec logging
@@ -50,6 +52,7 @@ export const deleteContainer = withLogging(rawDeleteContainer, 'DELETE_CONTAINER
 export const updateContainer = withLogging(rawUpdateContainer, 'UPDATE_CONTAINER');
 export const updateCategory = withLogging(rawUpdateCategory, 'UPDATE_CATEGORY');
 export const deleteCategory = withLogging(rawDeleteCategory, 'DELETE_CATEGORY');
+export const deleteItem = withLogging(rawDeleteItem, 'DELETE_ITEM');
 
 // Réexporter les types
 export type { Item, Container, Category } from './types';
