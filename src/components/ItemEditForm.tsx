@@ -41,21 +41,20 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 return;
             }
 
-            // Validation
-            if (!editedItem.name.trim()) {
-                Alert.alert('Erreur', 'Le nom est requis');
-                return;
-            }
-            if (!editedItem.purchasePrice || !editedItem.sellingPrice) {
-                Alert.alert('Erreur', 'Les prix sont requis');
+            // Validation des prix
+            const purchasePrice = parseFloat(editedItem.purchasePrice);
+            const sellingPrice = parseFloat(editedItem.sellingPrice);
+
+            if (isNaN(purchasePrice) || isNaN(sellingPrice)) {
+                Alert.alert('Erreur', 'Les prix doivent être des nombres valides');
                 return;
             }
 
             // Mise à jour dans la base de données
             await updateItem(item.id, {
                 ...editedItem,
-                purchasePrice: parseFloat(editedItem.purchasePrice),
-                sellingPrice: parseFloat(editedItem.sellingPrice),
+                purchasePrice,
+                sellingPrice,
             });
 
             // Mise à jour du store Redux
@@ -63,8 +62,8 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 type: 'items/updateItem',
                 payload: {
                     ...editedItem,
-                    purchasePrice: parseFloat(editedItem.purchasePrice),
-                    sellingPrice: parseFloat(editedItem.sellingPrice),
+                    purchasePrice,
+                    sellingPrice,
                     updatedAt: new Date().toISOString()
                 }
             });
@@ -111,20 +110,26 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                     />
 
                     <View style={styles.priceContainer}>
-                        <TextInput
-                            style={[styles.input, styles.priceInput]}
-                            placeholder="Prix d'achat"
-                            value={editedItem.purchasePrice}
-                            keyboardType="numeric"
-                            onChangeText={(text) => setEditedItem(prev => ({ ...prev, purchasePrice: text }))}
-                        />
-                        <TextInput
-                            style={[styles.input, styles.priceInput]}
-                            placeholder="Prix de vente"
-                            value={editedItem.sellingPrice}
-                            keyboardType="numeric"
-                            onChangeText={(text) => setEditedItem(prev => ({ ...prev, sellingPrice: text }))}
-                        />
+                        <View style={styles.priceInputWrapper}>
+                            <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="0.00"
+                                value={editedItem.purchasePrice}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, purchasePrice: text }))}
+                            />
+                        </View>
+                        <View style={styles.priceInputWrapper}>
+                            <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="0.00"
+                                value={editedItem.sellingPrice}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, sellingPrice: text }))}
+                            />
+                        </View>
                     </View>
 
                     <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
@@ -223,12 +228,41 @@ const styles = StyleSheet.create({
         textAlignVertical: 'top',
     },
     priceContainer: {
-        flexDirection: 'row',
+        flexDirection: 'column',
         gap: 12,
         marginBottom: 16,
+        backgroundColor: '#fff',
+        borderRadius: 10,
+        padding: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    priceInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        padding: 10,
+    },
+    priceLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        width: '40%',
     },
     priceInput: {
         flex: 1,
+        backgroundColor: '#fff',
+        borderRadius: 6,
+        padding: 8,
+        textAlign: 'right',
+        fontSize: 16,
+        color: '#007AFF',
+        fontWeight: '600',
     },
     imageButton: {
         backgroundColor: '#fff',

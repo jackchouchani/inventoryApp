@@ -34,9 +34,36 @@ const fetchInventoryData = async (): Promise<InventoryData> => {
     if (categoriesResponse.error) throw categoriesResponse.error;
 
     return {
-      items: itemsResponse.data as Item[],
-      containers: containersResponse.data as Container[],
-      categories: categoriesResponse.data as Category[]
+      items: (itemsResponse.data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        purchasePrice: item.purchase_price,
+        sellingPrice: item.selling_price,
+        status: item.status,
+        photoUri: item.photo_uri,
+        containerId: item.container_id,
+        categoryId: item.category_id,
+        qrCode: item.qr_code,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      })),
+      containers: (containersResponse.data || []).map(container => ({
+        id: container.id,
+        name: container.name,
+        number: container.number,
+        description: container.description,
+        qrCode: container.qr_code,
+        createdAt: container.created_at,
+        updatedAt: container.updated_at
+      })),
+      categories: (categoriesResponse.data || []).map(category => ({
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        createdAt: category.created_at,
+        updatedAt: category.updated_at
+      }))
     };
   } catch (error) {
     if (error instanceof Error || 'code' in (error as any)) {

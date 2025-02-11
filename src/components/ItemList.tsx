@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, Modal } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
 import { Item, Container, Category } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { ItemEditForm } from './ItemEditForm';
@@ -89,12 +89,17 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
   };
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.itemContainer}>
+    <TouchableOpacity 
+      style={styles.itemContainer}
+      onPress={() => setSelectedItem(item)}
+    >
       <View style={styles.itemHeader}>
         <Text style={styles.itemName}>{item.name}</Text>
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>Prix: </Text>
-          <Text style={styles.price}>{item.sellingPrice}€</Text>
+          <Text style={styles.price}>
+            {typeof item.sellingPrice === 'number' ? `${item.sellingPrice.toFixed(2)}€` : '0.00€'}
+          </Text>
         </View>
       </View>
 
@@ -109,6 +114,12 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           <MaterialIcons name="inbox" size={16} color="#666" />
           <Text style={styles.detailText}>
             {getContainerName(item.containerId ?? null)}
+          </Text>
+        </View>
+        <View style={styles.detailRow}>
+          <MaterialIcons name="euro" size={16} color="#666" />
+          <Text style={styles.detailText}>
+            Prix d'achat: {typeof item.purchasePrice === 'number' ? `${item.purchasePrice.toFixed(2)}€` : '0.00€'}
           </Text>
         </View>
       </View>
@@ -140,7 +151,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const handleEditSuccess = () => {
@@ -292,13 +303,27 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
       >
         {selectedItem && (
           <View style={styles.modalOverlay}>
-            <ItemEditForm
-              item={selectedItem}
-              containers={containers}
-              categories={categories}
-              onSuccess={handleEditSuccess}
-              onCancel={() => setSelectedItem(null)}
-            />
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Modifier l'article</Text>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setSelectedItem(null)}
+                >
+                  <MaterialIcons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScrollView}>
+                <ItemEditForm
+                  item={selectedItem}
+                  containers={containers}
+                  categories={categories}
+                  onSuccess={handleEditSuccess}
+                  onCancel={() => setSelectedItem(null)}
+                />
+              </ScrollView>
+            </View>
           </View>
         )}
       </Modal>
@@ -374,28 +399,38 @@ const styles = StyleSheet.create({
   },
   itemContainer: {
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
+    marginHorizontal: 2,
+    marginVertical: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
     flex: 1,
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   priceLabel: {
     fontSize: 14,
@@ -403,16 +438,19 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#007AFF',
   },
   itemDetails: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
     marginBottom: 12,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginBottom: 6,
   },
   detailText: {
     marginLeft: 8,
@@ -422,20 +460,20 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 8,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 6,
-    marginLeft: 8,
+    borderRadius: 8,
   },
   soldButton: {
     backgroundColor: '#FF3B30',
   },
   availableButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#34C759',
   },
   actionButtonText: {
     color: '#fff',
@@ -444,11 +482,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   separator: {
-    height: 12,
+    height: 8,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    maxHeight: '80%',
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 5,
   },
   priceInputs: {
     flexDirection: 'row',
@@ -465,5 +536,8 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+  },
+  modalScrollView: {
+    flexGrow: 1,
   },
 });

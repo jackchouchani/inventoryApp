@@ -6,15 +6,17 @@ import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 
 interface LabelGeneratorProps {
-  items: Array<{ id: number; name: string; qrCode: string; description?: string; sellingPrice?: number }>;
+  items: Array<{ id: number; name: string; qrCode: string; description?: string; sellingPrice?: number; number?: string }>;
   onComplete: () => void;
   onError: (error: Error) => void;
+  mode: 'items' | 'containers';
 }
 
 export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   items,
   onComplete,
-  onError
+  onError,
+  mode
 }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -30,7 +32,74 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     }
   };
 
-  const generatePDF = async () => {
+  const generateContainerPDF = async () => {
+    try {
+      setLoading(true);
+
+      // Vérifier la connexion réseau
+      const isConnected = await checkNetworkConnection();
+      if (!isConnected) return;
+
+      // Dimensions pour les containers (en mm)
+      const labelWidth = 100; // 10cm
+      const labelHeight = 150; // 15cm
+      const margin = 5;
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [labelWidth, labelHeight]
+      });
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item.qrCode) {
+          throw new Error(`QR code missing for container ${item.name}`);
+        }
+
+        if (i > 0) {
+          doc.addPage([labelWidth, labelHeight]);
+        }
+
+        // Titre du container
+        doc.setFontSize(24);
+        doc.text(item.name, labelWidth/2, margin + 20, { align: 'center' });
+
+        // Numéro du container
+        doc.setFontSize(36);
+        doc.text(`#${item.number}`, labelWidth/2, margin + 40, { align: 'center' });
+
+        // QR Code (grand format)
+        const qrCodeBase64 = await generateQRCode(item.qrCode);
+        const qrSize = 70; // 7cm
+        doc.addImage(qrCodeBase64, 'PNG',
+          (labelWidth - qrSize) / 2,
+          margin + 50,
+          qrSize, qrSize
+        );
+
+        // Description (si présente)
+        if (item.description) {
+          doc.setFontSize(12);
+          const description = doc.splitTextToSize(item.description, labelWidth - (2 * margin));
+          doc.text(description, labelWidth/2, margin + 130, { align: 'center' });
+        }
+
+        setProgress(((i + 1) / items.length) * 100);
+      }
+
+      doc.save(`etiquettes-containers-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`);
+      onComplete();
+    } catch (error) {
+      handleLabelPrintingError(error as Error, 'LabelGenerator.generateContainerPDF');
+      onError(error as Error);
+    } finally {
+      setLoading(false);
+      setProgress(0);
+    }
+  };
+
+  const generateItemsPDF = async () => {
     try {
       setLoading(true);
 
@@ -62,58 +131,59 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       });
 
       for (let i = 0; i < items.length; i++) {
-        try {
-          if (i > 0 && i % totalLabelsPerPage === 0) {
-            doc.addPage();
-          }
-
-          const indexSurPage = i % totalLabelsPerPage;
-          const col = indexSurPage % labelsPerRow;
-          const row = Math.floor(indexSurPage / labelsPerRow);
-          
-          const posX = marginXFixed + (col * labelWidth);
-          const posY = marginYFixed + (row * labelHeight);
-
-          // Dessiner le cadre de l'étiquette
-          doc.rect(posX, posY, labelWidth, labelHeight);
-          
-          // Titre
-          doc.setFontSize(11);
-          doc.text(items[i].name, posX + labelWidth/2, posY + 5, { align: 'center' });
-          
-          // Ligne séparatrice
-          doc.line(posX + 5, posY + 7, posX + labelWidth - 5, posY + 7);
-          
-          // Description
-          if (items[i].description) {
-            doc.setFontSize(8);
-            const description = doc.splitTextToSize(items[i].description || '', labelWidth - 15);
-            doc.text(description, posX + 2, posY + 11);
-          }
-          
-          // Prix
-          if (items[i].sellingPrice !== undefined) {
-            doc.setFontSize(13);
-            doc.text(`${items[i].sellingPrice}€`, posX + labelWidth/2, posY + labelHeight - 5, { align: 'center' });
-          }
-          
-          // QR Code
-          const qrCodeBase64 = await generateQRCode(items[i].qrCode);
-          doc.addImage(qrCodeBase64, 'PNG', 
-            posX + labelWidth - 13,
-            posY + labelHeight - 14,
-            12, 12);
-
-          setProgress(((i + 1) / items.length) * 100);
-        } catch (error) {
-          handleLabelGenerationError(error as Error, `LabelGenerator.generatePDF.item.${i}`);
+        const item = items[i];
+        if (!item.qrCode) {
+          throw new Error(`QR code missing for item ${item.name}`);
         }
+
+        if (i > 0 && i % totalLabelsPerPage === 0) {
+          doc.addPage();
+        }
+
+        const indexSurPage = i % totalLabelsPerPage;
+        const col = indexSurPage % labelsPerRow;
+        const row = Math.floor(indexSurPage / labelsPerRow);
+        
+        const posX = marginXFixed + (col * labelWidth);
+        const posY = marginYFixed + (row * labelHeight);
+
+        // Dessiner le cadre de l'étiquette
+        doc.rect(posX, posY, labelWidth, labelHeight);
+        
+        // Titre
+        doc.setFontSize(11);
+        doc.text(item.name, posX + labelWidth/2, posY + 5, { align: 'center' });
+        
+        // Ligne séparatrice
+        doc.line(posX + 5, posY + 7, posX + labelWidth - 5, posY + 7);
+        
+        // Description
+        if (item.description) {
+          doc.setFontSize(8);
+          const description = doc.splitTextToSize(item.description, labelWidth - 15);
+          doc.text(description, posX + 2, posY + 11);
+        }
+        
+        // Prix
+        if (item.sellingPrice !== undefined) {
+          doc.setFontSize(13);
+          doc.text(`${item.sellingPrice}€`, posX + labelWidth/2, posY + labelHeight - 5, { align: 'center' });
+        }
+        
+        // QR Code
+        const qrCodeBase64 = await generateQRCode(item.qrCode);
+        doc.addImage(qrCodeBase64, 'PNG', 
+          posX + labelWidth - 13,
+          posY + labelHeight - 14,
+          12, 12);
+
+        setProgress(((i + 1) / items.length) * 100);
       }
 
       doc.save(`etiquettes-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`);
       onComplete();
     } catch (error) {
-      handleLabelPrintingError(error as Error, 'LabelGenerator.generatePDF');
+      handleLabelGenerationError(error as Error, 'LabelGenerator.generateItemsPDF');
       onError(error as Error);
     } finally {
       setLoading(false);
@@ -134,7 +204,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={generatePDF}
+        onPress={mode === 'containers' ? generateContainerPDF : generateItemsPDF}
         disabled={loading || items.length === 0}
       >
         <Text style={styles.buttonText}>

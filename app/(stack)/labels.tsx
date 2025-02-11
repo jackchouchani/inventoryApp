@@ -40,6 +40,13 @@ export default function LabelScreen() {
 
   const { data: inventoryData, isLoading, error } = useInventoryData();
 
+  // Effet pour mettre à jour les containers sélectionnés quand on bascule en mode container
+  useEffect(() => {
+    if (showContainers && inventoryData?.containers) {
+      setSelectedContainers(inventoryData.containers.map(container => container.id!));
+    }
+  }, [showContainers, inventoryData?.containers]);
+
   useEffect(() => {
     if (inventoryData?.items) {
       const filteredIds = inventoryData.items
@@ -110,6 +117,7 @@ export default function LabelScreen() {
           id: container.id!,
           name: container.name,
           description: container.description,
+          number: container.number.toString(),
           qrCode: container.qrCode || generateQRValue('CONTAINER')
         }));
     } else {
@@ -325,6 +333,7 @@ export default function LabelScreen() {
       <View style={styles.content}>
         <LabelGenerator
           items={getItemsToGenerate()}
+          mode={showContainers ? 'containers' : 'items'}
           onComplete={() => {
             setFilters({
               search: '',
