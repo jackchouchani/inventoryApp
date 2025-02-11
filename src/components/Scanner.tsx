@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated, Dimensions } from 'react-native';
+import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { parseQRCode, QR_CODE_TYPES } from '../utils/qrCodeManager';
@@ -11,7 +11,6 @@ import * as sounds from '../utils/soundManager';
 import { Container, Item } from '../database/types';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { handleScannerError } from '../utils/errorHandler';
-
 
 interface ScannerProps {
     onClose: () => void;
@@ -28,13 +27,11 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [scanned, setScanned] = useState(false);
     const [currentContainer, setCurrentContainer] = useState<Container | null>(null);
-    const [scanHistory, setScanHistory] = useState<Array<{ name: string; success: boolean }>>([]); 
+    const [scanHistory, setScanHistory] = useState<Array<{ name: string; success: boolean }>>([]);
     const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
     const [lastScanResult, setLastScanResult] = useState<{ success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null>(null);
     const [fadeAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-    const isFocused = useIsFocused();
-    const [pendingUpdates, setPendingUpdates] = useState<Array<{itemId: number, item: Item}>>([]);
 
     useEffect(() => {
         let mounted = true;
@@ -44,7 +41,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 const { status } = await BarCodeScanner.requestPermissionsAsync();
                 if (mounted) {
                     setHasPermission(status === 'granted');
-                    
+
                     if (status !== 'granted') {
                         handleScannerError(
                             new Error('Permission de caméra non accordée'),
@@ -127,20 +124,17 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         try {
             const item = await getItemByQRCode(qrData);
             if (item) {
-                // Au lieu de mettre à jour la DB, on stocke la modification en attente
-                setPendingUpdates(prev => [...prev, {
-                    itemId: item.id!,
-                    item: {
-                        ...item,
-                        containerId: currentContainer.id,
-                        updatedAt: new Date().toISOString()
-                    }
-                }]);
+                // Mettre à jour l'item avec le nouveau container
+                await updateItem(item.id!, {
+                    ...item,
+                    containerId: currentContainer.id,
+                    updatedAt: new Date().toISOString()
+                });
 
                 setScanHistory(prev => [{
                     name: item.name,
                     success: true
-                }, ...prev].slice(0, MAX_HISTORY_ITEMS));
+                }, ...prev].slice(0, 5));
 
                 setLastScanResult({
                     success: true,
@@ -150,6 +144,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 });
                 await haptics.vibrate(haptics.SUCCESS_PATTERN);
                 await sounds.playSuccessSound();
+                triggerRefresh();
             } else {
                 setLastScanResult({
                     success: false,
@@ -216,7 +211,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         setScanMode('container');
         setLastScanResult(null);
         setScanned(false);
-        setPendingUpdates([]); // Réinitialiser les mises à jour en attente
     };
 
     if (hasPermission === null) {
@@ -240,45 +234,33 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
 
     return (
         <View style={styles.container}>
-            {isFocused && isActive && (
-                <CameraView
-                    onBarcodeScanned={scanned ? undefined : handleQRCodeScanned}
-                    barcodeScannerSettings={{
-                        barcodeTypes: ['qr'],
-                    }}
-                    videoStabilizationMode="auto"
-                    style={StyleSheet.absoluteFillObject}
-                >
-                    <View style={styles.scanArea}>
-                        <View style={styles.scanSquare} />
-                    </View>
-                </CameraView>
-            )}
             <View style={styles.statusBar}>
                 <View style={styles.containerInfo}>
                     <Text style={styles.containerText}>
-                        {scanMode === 'container' 
+                        {scanMode === 'container'
                             ? '📦 Scannez un container'
                             : `📱 Scanner des articles dans: ${currentContainer?.name}`}
                     </Text>
                     {currentContainer && (
                         <View style={styles.actionButtons}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.resetButton}
                                 onPress={resetScanner}
                             >
                                 <MaterialIcons name="refresh" size={20} color="#fff" />
                                 <Text style={styles.buttonText}>Nouveau container</Text>
                             </TouchableOpacity>
-                            
-                            <TouchableOpacity 
+
+                            <TouchableOpacity
                                 style={styles.validateButton}
-                                onPress={handleValidate}
+                                onPress={() => {
+                                    haptics.vibrate(haptics.SUCCESS_PATTERN);
+                                    sounds.playSuccessSound();
+                                    resetScanner();
+                                }}
                             >
                                 <MaterialIcons name="check" size={20} color="#fff" />
-                                <Text style={styles.buttonText}>
-                                    Valider ({pendingUpdates.length})
-                                </Text>
+                                <Text style={styles.buttonText}>Valider</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -293,17 +275,17 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
 
             {/* Feedback Panel */}
             {lastScanResult && (
-                <Animated.View 
+                <Animated.View
                     style={[
                         styles.feedbackPanel,
                         { opacity: fadeAnim },
                         lastScanResult.success ? styles.successFeedback : styles.errorFeedback
                     ]}
                 >
-                    <MaterialIcons 
-                        name={lastScanResult.success ? "check-circle" : "error"} 
-                        size={24} 
-                        color="#fff" 
+                    <MaterialIcons
+                        name={lastScanResult.success ? "check-circle" : "error"}
+                        size={24}
+                        color="#fff"
                     />
                     <Text style={styles.feedbackText}>{lastScanResult.message}</Text>
                 </Animated.View>
@@ -317,10 +299,10 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     </Text>
                     {scanHistory.map((item, index) => (
                         <View key={index} style={styles.historyItem}>
-                            <MaterialIcons 
-                                name={item.success ? "check-circle" : "error"} 
-                                size={16} 
-                                color={item.success ? "#4CAF50" : "#FF3B30"} 
+                            <MaterialIcons
+                                name={item.success ? "check-circle" : "error"}
+                                size={16}
+                                color={item.success ? "#4CAF50" : "#FF3B30"}
                             />
                             <Text style={styles.historyItemText}>{item.name}</Text>
                         </View>
