@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { TouchableOpacity, View } from "react-native";
+import { TouchableOpacity, View, Platform } from "react-native";
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 
@@ -21,13 +21,17 @@ export default function TabLayout() {
           backgroundColor: '#f5f5f5',
           height: 60,
         },
+        headerStatusBarHeight: 0,
         tabBarStyle: {
-          backgroundColor: 'transparent',
+          backgroundColor: '#f5f5f5',
           borderTopWidth: 1,
           borderTopColor: '#e5e5e5',
-          height: 85,
-          paddingBottom: 30,
-          paddingTop: 10,
+          height: 60,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
         },
         tabBarActiveTintColor: '#007AFF',
         tabBarInactiveTintColor: '#8E8E93',

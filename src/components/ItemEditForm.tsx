@@ -132,67 +132,85 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                         </View>
                     </View>
 
-                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                        {editedItem.photoUri ? (
-                            <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
-                        ) : (
-                            <Text>Sélectionner une image</Text>
-                        )}
-                    </TouchableOpacity>
+                        <View style={styles.priceContainer}>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="Prix d'achat"
+                                value={editedItem.purchasePrice}
+                                keyboardType="numeric"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, purchasePrice: text }))}
+                            />
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="Prix de vente"
+                                value={editedItem.sellingPrice}
+                                keyboardType="numeric"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, sellingPrice: text }))}
+                            />
+                        </View>
 
-                    <Text style={styles.label}>Container</Text>
-                    <View style={styles.optionsContainer}>
-                        {containers.map((container) => (
-                            <TouchableOpacity
-                                key={container.id}
-                                style={[
-                                    styles.option,
-                                    editedItem.containerId === container.id && styles.optionSelected
-                                ]}
-                                onPress={() => setEditedItem(prev => ({ 
-                                    ...prev, 
-                                    containerId: container.id ?? prev.containerId 
-                                }))}
-                            >
-                                <Text>{container.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <Text style={styles.label}>Catégorie</Text>
-                    <View style={styles.optionsContainer}>
-                        {categories.map((category) => (
-                            <TouchableOpacity
-                                key={category.id}
-                                style={[
-                                    styles.option,
-                                    editedItem.categoryId === category.id && styles.optionSelected
-                                ]}
-                                onPress={() => setEditedItem(prev => ({
-                                    ...prev,
-                                    categoryId: category.id ?? prev.categoryId
-                                }))}
-                            >
-                                <Text>{category.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <View style={styles.qrCodeContainer}>
-                        <Text style={styles.label}>QR Code</Text>
-                        <QRCodeGenerator value={editedItem.qrCode} size={150} />
-                    </View>
-
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                            <Text style={styles.buttonText}>Annuler</Text>
+                        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                            {editedItem.photoUri ? (
+                                <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
+                            ) : (
+                                <Text>Sélectionner une image</Text>
+                            )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                            <Text style={styles.buttonText}>Mettre à jour</Text>
-                        </TouchableOpacity>
+
+                        <Text style={styles.label}>Container</Text>
+                        <View style={styles.optionsContainer}>
+                            {containers.map((container) => (
+                                <TouchableOpacity
+                                    key={container.id}
+                                    style={[
+                                        styles.option,
+                                        editedItem.containerId === container.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => setEditedItem(prev => ({ 
+                                        ...prev, 
+                                        containerId: container.id ?? prev.containerId 
+                                    }))}
+                                >
+                                    <Text>{container.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <Text style={styles.label}>Catégorie</Text>
+                        <View style={styles.optionsContainer}>
+                            {categories.map((category) => (
+                                <TouchableOpacity
+                                    key={category.id}
+                                    style={[
+                                        styles.option,
+                                        editedItem.categoryId === category.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => setEditedItem(prev => ({
+                                        ...prev,
+                                        categoryId: category.id ?? prev.categoryId
+                                    }))}
+                                >
+                                    <Text>{category.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.qrCodeContainer}>
+                            <Text style={styles.label}>QR Code</Text>
+                            <QRCodeGenerator value={editedItem.qrCode} size={150} />
+                        </View>
+
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                                <Text style={styles.buttonText}>Annuler</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                                <Text style={styles.buttonText}>Mettre à jour</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            </ScrollView>
+                </ScrollView>
+            </View>
         </View>
     );
 };
@@ -202,14 +220,21 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Exemple de style
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 16,
     },
     container: {
-        flex: 1,
+        maxHeight: '80%',
+        width: '100%',
         backgroundColor: '#f5f5f5',
+        borderRadius: 12,
+    },
+    scrollView: {
+        flex: 1,
     },
     contentContainer: {
         padding: 16,
+        paddingBottom: 32,
     },
     input: {
         backgroundColor: '#fff',

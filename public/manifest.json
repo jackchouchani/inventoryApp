@@ -11,14 +11,12 @@
       {
         "src": "icon-192.png",
         "type": "image/png",
-        "sizes": "192x192",
-        "purpose": "any maskable"
+        "sizes": "192x192"
       },
       {
         "src": "icon-512.png",
         "type": "image/png",
-        "sizes": "512x512",
-        "purpose": "any maskable"
+        "sizes": "512x512"
       }
     ],
     "start_url": "/",
@@ -57,7 +55,7 @@
       "Vibration",
       "Audio playback"
     ],
-    "display_override": ["standalone"],
+    "display_override": ["standalone", "minimal-ui"],
     "launch_handler": {
       "client_mode": "focus-existing"
     },

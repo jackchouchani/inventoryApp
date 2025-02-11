@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Platform, View, Text, ActivityIndicator } from "react-native";
+import { Platform, View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Stack } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
@@ -45,11 +45,6 @@ const toastConfig = {
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
-  disableTutorial: true,
-  android: {
-    navigationBarColor: 'transparent',
-    navigationBarStyle: 'dark',
-  },
 };
 
 export type RootStackParamList = {
@@ -118,7 +113,7 @@ export default function RootLayout() {
 
   if (isLoading && Platform.OS !== 'web') {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <View style={styles.container}>
         <Text>Chargement des données...</Text>
         {error && <Text style={{ color: "red" }}>Erreur: {error}</Text>}
         <ActivityIndicator size="large" color="#007AFF" />
@@ -138,4 +133,22 @@ export default function RootLayout() {
       </Provider>
     </QueryClientProvider>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 18,
+  },
+  rootContainer: {
+    flex: 1,
+  },
+  stackContentStyle: {
+    backgroundColor: "#fff",
+  },
+}); 
