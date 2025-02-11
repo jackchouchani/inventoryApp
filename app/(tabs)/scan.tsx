@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import Scanner from '../../src/components/Scanner';
+import { Scanner } from '../../src/components/Scanner';
 import { Container, Item, updateItem, getContainers, getItems } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useDispatch } from 'react-redux';
+import { updateItem as updateItemAction } from '../../src/store/itemsSlice';
 
 interface ItemProps {
   item: Item;
@@ -24,6 +26,12 @@ const ScanScreen: React.FC = () => {
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [isScannerActive, setIsScannerActive] = useState(true);
   const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
+  const dispatch = useDispatch();
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignmentProgress, setAssignmentProgress] = useState<{itemId: number; status: 'pending' | 'success' | 'error'}>({
+    itemId: 0,
+    status: 'pending'
+  });
 
   const loadData = async () => {
     try {
@@ -48,6 +56,9 @@ const ScanScreen: React.FC = () => {
     if (!selectedContainer) return;
     
     try {
+      setIsAssigning(true);
+      setAssignmentProgress({ itemId, status: 'pending' });
+      
       const item = items.find(i => i.id === itemId);
       if (!item) return;
       
@@ -57,8 +68,17 @@ const ScanScreen: React.FC = () => {
         updatedAt: new Date().toISOString()
       };
       
+      // Optimistic update
+      const updatedItems = items.map(i => 
+        i.id === itemId ? updateData : i
+      );
+      setItems(updatedItems);
+      dispatch(updateItemAction(updateData));
+      
+      // Effectuer l'opération Supabase
       await updateItem(itemId, updateData);
-      triggerRefresh();
+      
+      setAssignmentProgress({ itemId, status: 'success' });
       
       // Ajouter un feedback visuel
       Alert.alert(
@@ -67,7 +87,16 @@ const ScanScreen: React.FC = () => {
       );
     } catch (error) {
       console.error('Erreur lors de l\'assignation:', error);
+      setAssignmentProgress({ itemId, status: 'error' });
+      // Rollback en cas d'erreur
+      await loadData();
       Alert.alert('Erreur', 'Impossible d\'assigner l\'article');
+    } finally {
+      setIsAssigning(false);
+      // Reset progress après un délai
+      setTimeout(() => {
+        setAssignmentProgress({ itemId: 0, status: 'pending' });
+      }, 2000);
     }
   };
 
@@ -89,30 +118,89 @@ const ScanScreen: React.FC = () => {
     return matchesSearch && (item.containerId === null || item.containerId === selectedContainer?.id);
   });
 
-  const renderItem = ({ item }: ItemProps) => (
+  const renderItem = ({ item }: { item: Item }) => (
     <TouchableOpacity
       style={[
         styles.itemRow,
-        item.containerId === selectedContainer?.id && styles.itemSelected
+        item.containerId === selectedContainer?.id && styles.itemSelected,
+        item.containerId !== null && 
+        item.containerId !== selectedContainer?.id && 
+        styles.itemInOtherContainer,
+        assignmentProgress.itemId === item.id && 
+        assignmentProgress.status === 'pending' && 
+        styles.itemLoading
       ]}
       onPress={() => handleManualAssignment(item.id!)}
-      disabled={!selectedContainer}
+      disabled={isAssigning || !selectedContainer}
     >
-      <Text style={styles.itemText}>{item.name}</Text>
-      <Text style={styles.itemStatus}>
-        {item.containerId === selectedContainer?.id ? '✓' : ''}
-      </Text>
+      <View style={styles.itemContent}>
+        <View>
+          <Text style={styles.itemText}>{item.name}</Text>
+          {item.containerId !== null && 
+           item.containerId !== selectedContainer?.id && (
+            <Text style={styles.containerInfo}>
+              Dans: {containers.find(c => c.id === item.containerId)?.name}
+            </Text>
+          )}
+        </View>
+        <View style={styles.itemStatus}>
+          {assignmentProgress.itemId === item.id ? (
+            assignmentProgress.status === 'pending' ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : assignmentProgress.status === 'success' ? (
+              <MaterialIcons name="check-circle" size={24} color="#4CAF50" />
+            ) : (
+              <MaterialIcons name="error" size={24} color="#FF3B30" />
+            )
+          ) : (
+            item.containerId === selectedContainer?.id && (
+              <MaterialIcons name="check" size={24} color="#4CAF50" />
+            )
+          )}
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
-  const handleScanResult = async (result: { success: boolean; message: string; type?: 'container' | 'item' }) => {
+  const handleScanResult = async (result: { success: boolean; message: string; type?: 'container' | 'item'; data?: any }) => {
     if (result.success) {
       if (result.type === 'container') {
         setScanMode('item');
-        triggerRefresh();
-      } else {
-        // Mise à jour de l'interface après un scan d'article réussi
-        triggerRefresh();
+        const container = containers.find(c => c.qrCode === result.data?.qrCode);
+        if (container) {
+          setSelectedContainer(container);
+        }
+      } else if (result.type === 'item' && selectedContainer) {
+        try {
+          const item = items.find(i => i.qrCode === result.data?.qrCode);
+          if (item) {
+            const updateData = {
+              ...item,
+              containerId: selectedContainer.id,
+              updatedAt: new Date().toISOString()
+            };
+
+            // Optimistic update
+            const updatedItems = items.map(i => 
+              i.id === item.id ? updateData : i
+            );
+            setItems(updatedItems);
+            dispatch(updateItemAction(updateData));
+
+            // Effectuer l'opération Supabase
+            await updateItem(item.id!, updateData);
+
+            Alert.alert(
+              'Succès',
+              `Article ${item.name} assigné au container ${selectedContainer.name}`
+            );
+          }
+        } catch (error) {
+          console.error('Erreur lors du scan:', error);
+          // Rollback en cas d'erreur
+          await loadData();
+          Alert.alert('Erreur', 'Impossible de scanner l\'article. Veuillez réessayer.');
+        }
       }
     }
     // Réactiver le scanner après un délai
@@ -197,29 +285,7 @@ const ScanScreen: React.FC = () => {
 
                 <FlatList
                   data={filteredItems}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.itemRow,
-                        item.containerId === selectedContainer?.id && styles.itemSelected,
-                        item.containerId !== null && item.containerId !== selectedContainer?.id && styles.itemInOtherContainer
-                      ]}
-                      onPress={() => handleManualAssignment(item.id!)}
-                      disabled={!selectedContainer}
-                    >
-                      <View>
-                        <Text style={styles.itemText}>{item.name}</Text>
-                        {item.containerId !== null && item.containerId !== selectedContainer?.id && (
-                          <Text style={styles.containerInfo}>
-                            Dans: {containers.find(c => c.id === item.containerId)?.name}
-                          </Text>
-                        )}
-                      </View>
-                      <Text style={styles.itemStatus}>
-                        {item.containerId === selectedContainer?.id ? '✓' : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  renderItem={renderItem}
                   keyExtractor={item => item.id!.toString()}
                   style={styles.itemList}
                 />
@@ -354,8 +420,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   itemStatus: {
-    color: '#007AFF',
-    fontSize: 16,
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   validateButton: {
     backgroundColor: '#4CAF50',
@@ -409,6 +476,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  itemContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+  },
+  itemLoading: {
+    opacity: 0.7,
   },
 });
 

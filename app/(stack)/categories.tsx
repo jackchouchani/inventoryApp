@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../src/store/store';
 import { deleteCategory, editCategory, resetCategories, setCategories, addNewCategory } from '../../src/store/categorySlice';
-import { getCategories as fetchCategories, addCategory as addCategoryToDatabase, Category } from '../../src/database/database';
+import { getCategories as fetchCategories, addCategory as addCategoryToDatabase, updateCategory, deleteCategory as deleteCategoryFromDB, Category } from '../../src/database/database';
 import { theme } from '../../src/utils/theme';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -56,48 +56,90 @@ const CategoryScreen = () => {
     }
 
     try {
-      const categoryToAdd = {
+      const now = new Date().toISOString();
+      const tempId = Date.now(); // ID temporaire pour l'optimistic update
+      const optimisticCategory = {
+        id: tempId,
         name: newCategory.name.trim(),
-        description: newCategory.description.trim()
+        description: newCategory.description.trim(),
+        createdAt: now,
+        updatedAt: now
       };
 
-      const categoryId = await addCategoryToDatabase(categoryToAdd);
+      // Optimistic update
+      dispatch(addNewCategory(optimisticCategory));
+      setModalVisible(false);
 
-      if (categoryId) {
-        const categoryWithId = {
-          id: categoryId,
-          name: newCategory.name.trim(),
-          description: newCategory.description.trim(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+      // Effectuer l'opération Supabase
+      const categoryId = await addCategoryToDatabase({
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim()
+      });
 
-        dispatch(addNewCategory(categoryWithId));
-        setNewCategory({ name: '', description: '' });
-        setModalVisible(false);
-        Alert.alert('Succès', 'Catégorie ajoutée avec succès');
-        useRefreshStore.getState().triggerRefresh();
-      }
+      // Mettre à jour l'ID avec celui de la base de données
+      const realCategory = {
+        ...optimisticCategory,
+        id: categoryId
+      };
+      dispatch(setCategories([...categories.filter(c => c.id !== tempId), realCategory]));
+      
+      setNewCategory({ name: '', description: '' });
+      Alert.alert('Succès', 'Catégorie ajoutée avec succès');
     } catch (error) {
       console.error('Erreur:', error);
+      // Rollback en cas d'erreur
+      dispatch(setCategories(categories));
       Alert.alert('Erreur', 'Impossible d\'ajouter la catégorie. Veuillez réessayer.');
     }
   };
 
-  const handleEditCategory = (id: string, name: string) => {
-    setEditingId(id);
-    setCategoryName(name);
-    setError('');
-    setModalVisible(true);
+  const handleEditCategory = async (id: string, newName: string) => {
+    if (!newName.trim()) {
+      setError('Le nom de la catégorie ne peut pas être vide');
+      return;
+    }
+
+    const originalCategories = [...categories];
+    try {
+      // Optimistic update
+      dispatch(editCategory({ id: parseInt(id), name: newName.trim() }));
+      setModalVisible(false);
+      setCategoryName('');
+      setEditingId(null);
+
+      // Effectuer l'opération Supabase
+      await updateCategory(parseInt(id), newName.trim());
+    } catch (error) {
+      // Rollback en cas d'erreur
+      dispatch(setCategories(originalCategories));
+      Alert.alert('Erreur', 'Impossible de modifier la catégorie. Veuillez réessayer.');
+    }
   };
 
-  const handleDeleteCategory = (id: string) => {
+  const handleDeleteCategory = async (id: string) => {
+    const originalCategories = [...categories];
     Alert.alert(
       'Supprimer la catégorie',
       'Êtes-vous sûr de vouloir supprimer cette catégorie ?',
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', onPress: () => dispatch(deleteCategory(parseInt(id))), style: 'destructive' },
+        {
+          text: 'Supprimer',
+          onPress: async () => {
+            try {
+              // Optimistic update
+              dispatch(deleteCategory(parseInt(id)));
+
+              // Effectuer l'opération Supabase
+              await deleteCategoryFromDB(parseInt(id));
+            } catch (error) {
+              // Rollback en cas d'erreur
+              dispatch(setCategories(originalCategories));
+              Alert.alert('Erreur', 'Impossible de supprimer la catégorie. Veuillez réessayer.');
+            }
+          },
+          style: 'destructive'
+        },
       ]
     );
   };
