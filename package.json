@@ -41,6 +41,7 @@
     "expo-sharing": "~13.0.1",
     "expo-sqlite": "~15.1.1",
     "expo-status-bar": "~2.0.1",
+    "expo-system-ui": "^4.0.8",
     "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
     "localforage": "^1.10.0",

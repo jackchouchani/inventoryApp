@@ -52,15 +52,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    paddingTop: 0,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingTop: 0,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#007AFF',
+    fontWeight: '700',
+    marginBottom: 16,
   }
 });

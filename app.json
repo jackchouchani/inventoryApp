@@ -17,7 +17,8 @@
         "**/*.ttf",
         "**/*.png",
         "**/*.js"
-      ]},
+      ]
+    },
     "plugins": [
       "expo-router",
       [
@@ -38,23 +39,26 @@
         {
           "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
         }
-      ]
+      ],
+      "expo-system-ui"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.inventoryApp",
+      "buildNumber": "1.0.0",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"
         ],
-        "UIViewControllerBasedStatusBarAppearance": true,
-        "UIStatusBarHidden": false,
+        "UIStatusBarHidden": true,
         "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
         "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone.",
-        "NSHapticsUsageDescription": "L'application utilise les vibrations pour le retour haptique"
-      }
+        "NSHapticsUsageDescription": "L'application utilise les vibrations pour le retour haptique",
+        "UIViewControllerBasedStatusBarAppearance": false
+      },
+      "statusBarHidden": true
     },
     "android": {
       "adaptiveIcon": {
@@ -87,19 +91,6 @@
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
-    },
-    "androidStatusBar": {
-      "backgroundColor": "transparent",
-      "translucent": true,
-      "barStyle": "dark-content"
-    },
-    "androidNavigationBar": {
-      "backgroundColor": "#f5f5f5",
-      "translucent": false,
-      "barStyle": "dark-content"
-    },
-    "navigationBar": {
-      "visible": "immersive"
     }
   }
 }

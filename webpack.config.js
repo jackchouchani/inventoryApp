@@ -17,7 +17,8 @@ module.exports = async function (env, argv) {
   config.plugins.push(
     new webpack.DefinePlugin({
       'process.env.EXPO_ROUTER_APP_ROOT': JSON.stringify('app'),
-      'process.env.EXPO_ROUTER_IMPORT_MODE': JSON.stringify('sync')
+      'process.env.EXPO_ROUTER_IMPORT_MODE': JSON.stringify('sync'),
+      'process.env.FULL_SCREEN': JSON.stringify('true'),
     })
   );
 

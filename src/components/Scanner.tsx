@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated } from 'react-native';
+import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated, Dimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { parseQRCode, QR_CODE_TYPES } from '../utils/qrCodeManager';
@@ -9,6 +9,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as haptics from '../utils/vibrationManager';
 import * as sounds from '../utils/soundManager';
 import { Container, Item } from '../database/types';
+import { useIsFocused } from '@react-navigation/native';
 
 interface ScannerProps {
     onClose: () => void;
@@ -36,6 +37,8 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
     const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
     const [fadeAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+    const isFocused = useIsFocused();
+    const [pendingUpdates, setPendingUpdates] = useState<Array<{itemId: number, item: Item}>>([]);
 
     useEffect(() => {
         (async () => {
@@ -94,26 +97,28 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
         try {
             const item = await getItemByQRCode(qrData);
             if (item) {
-                // Mettre à jour l'item avec le nouveau container
-                await updateItem(item.id!, {
-                    ...item,
-                    containerId: currentContainer.id,
-                    updatedAt: new Date().toISOString()
-                });
+                // Au lieu de mettre à jour la DB, on stocke la modification en attente
+                setPendingUpdates(prev => [...prev, {
+                    itemId: item.id!,
+                    item: {
+                        ...item,
+                        containerId: currentContainer.id,
+                        updatedAt: new Date().toISOString()
+                    }
+                }]);
 
                 setScanHistory(prev => [{
                     name: item.name,
                     success: true
-                }, ...prev].slice(0, 5));
+                }, ...prev].slice(0, MAX_HISTORY_ITEMS));
 
                 setLastScanResult({
                     success: true,
-                    message: `Article "${item.name}" assigné au container`,
+                    message: `Article "${item.name}" ajouté à la liste`,
                     type: 'item'
                 });
                 await haptics.vibrate(haptics.SUCCESS_PATTERN);
                 await sounds.playSuccessSound();
-                triggerRefresh();
             } else {
                 setLastScanResult({
                     success: false,
@@ -134,7 +139,37 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
         }
     };
 
-    const handleQRCodeScanned = async ({ data }: { data: string }) => {
+    const handleValidate = async () => {
+        try {
+            // Mettre à jour tous les items en attente
+            for (const update of pendingUpdates) {
+                await updateItem(update.itemId, update.item);
+            }
+            
+            triggerRefresh();
+            await haptics.vibrate(haptics.SUCCESS_PATTERN);
+            await sounds.playSuccessSound();
+            onScan({ success: true, message: "Articles mis à jour", type: 'item' });
+            resetScanner();
+            
+            // Ajout d'un petit délai pour s'assurer que les mises à jour sont terminées
+            setTimeout(() => {
+                triggerRefresh(); // Second refresh pour s'assurer que ItemList est mis à jour
+            }, 500);
+            
+        } catch (error) {
+            console.error('Erreur lors de la validation:', error);
+            setLastScanResult({
+                success: false,
+                message: "Erreur lors de la mise à jour des articles",
+                type: 'item'
+            });
+            await haptics.vibrate(haptics.ERROR_PATTERN);
+            await sounds.playErrorSound();
+        }
+    };
+
+    const handleQRCodeScanned = async ({ bounds, data }: { bounds: { origin: { x: number, y: number }, size: { width: number, height: number } }, data: string }) => {
         if (!isActive || scanned) return;
         
         setScanned(true);
@@ -154,7 +189,7 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
             await sounds.playErrorSound();
         }
         
-        setTimeout(() => setScanned(false), 1500);
+        setTimeout(() => setScanned(false), SCAN_DELAY);
     };
 
     const resetScanner = () => {
@@ -163,6 +198,7 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
         setScanMode('container');
         setLastScanResult(null);
         setScanned(false);
+        setPendingUpdates([]); // Réinitialiser les mises à jour en attente
     };
 
     if (!permission) {
@@ -181,6 +217,20 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
 
     return (
         <View style={styles.container}>
+            {isFocused && isActive && (
+                <CameraView
+                    onBarcodeScanned={scanned ? undefined : handleQRCodeScanned}
+                    barcodeScannerSettings={{
+                        barcodeTypes: ['qr'],
+                    }}
+                    videoStabilizationMode="auto"
+                    style={StyleSheet.absoluteFillObject}
+                >
+                    <View style={styles.scanArea}>
+                        <View style={styles.scanSquare} />
+                    </View>
+                </CameraView>
+            )}
             <View style={styles.statusBar}>
                 <View style={styles.containerInfo}>
                     <Text style={styles.containerText}>
@@ -200,28 +250,17 @@ const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
                             
                             <TouchableOpacity 
                                 style={styles.validateButton}
-                                onPress={() => {
-                                    haptics.vibrate(haptics.SUCCESS_PATTERN);
-                                    sounds.playSuccessSound();
-                                    resetScanner();
-                                }}
+                                onPress={handleValidate}
                             >
                                 <MaterialIcons name="check" size={20} color="#fff" />
-                                <Text style={styles.buttonText}>Valider</Text>
+                                <Text style={styles.buttonText}>
+                                    Valider ({pendingUpdates.length})
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     )}
                 </View>
             </View>
-
-            {/* Camera View */}
-            <CameraView
-                onBarcodeScanned={scanned ? undefined : handleQRCodeScanned}
-                barcodeScannerSettings={{
-                    barcodeTypes: ['qr'],
-                }}
-                style={StyleSheet.absoluteFillObject}
-            />
 
             {/* Feedback Panel */}
             {lastScanResult && (
@@ -445,6 +484,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         gap: 10,
+    },
+    scanArea: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scanSquare: {
+        width: 200,
+        height: 200,
+        borderWidth: 2,
+        borderColor: '#007AFF',
+        backgroundColor: 'transparent',
+        borderRadius: 10,
     },
 });
 
