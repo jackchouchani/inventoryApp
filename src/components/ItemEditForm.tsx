@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import { updateItem, Category, Container } from '../database/database';
+import { updateItem, deleteItem, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { QRCodeGenerator } from './QRCodeGenerator';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface ItemEditFormProps {
     item: {
@@ -55,6 +56,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 ...editedItem,
                 purchasePrice,
                 sellingPrice,
+                updatedAt: new Date().toISOString()
             });
 
             // Mise à jour du store Redux
@@ -62,6 +64,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 type: 'items/updateItem',
                 payload: {
                     ...editedItem,
+                    id: item.id,
                     purchasePrice,
                     sellingPrice,
                     updatedAt: new Date().toISOString()
@@ -74,6 +77,52 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
             console.error('Erreur lors de la mise à jour:', error);
             Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
         }
+    };
+
+    const handleDelete = async () => {
+        if (!item.id) return;
+
+        Alert.alert(
+            'Confirmation',
+            'Êtes-vous sûr de vouloir supprimer cet article ?',
+            [
+                {
+                    text: 'Annuler',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Supprimer',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Mise à jour optimiste du store Redux
+                            dispatch({
+                                type: 'items/removeItem',
+                                payload: item.id
+                            });
+
+                            try {
+                                // Mise à jour de la base de données
+                                await deleteItem(item.id!);
+                                triggerRefresh();
+                                if (onSuccess) onSuccess();
+                            } catch (error) {
+                                // En cas d'erreur, on remet l'item dans le store
+                                dispatch({
+                                    type: 'items/addItem',
+                                    payload: item
+                                });
+                                console.error('Erreur lors de la suppression:', error);
+                                Alert.alert('Erreur', 'Impossible de supprimer l\'article');
+                            }
+                        } catch (error) {
+                            console.error('Erreur:', error);
+                            Alert.alert('Erreur', 'Une erreur est survenue');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const pickImage = async () => {
@@ -117,7 +166,12 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                                 placeholder="0.00"
                                 value={editedItem.purchasePrice}
                                 keyboardType="decimal-pad"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, purchasePrice: text }))}
+                                onChangeText={(text) => {
+                                    const cleanText = text.replace(',', '.');
+                                    if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+                                        setEditedItem(prev => ({ ...prev, purchasePrice: cleanText }));
+                                    }
+                                }}
                             />
                         </View>
                         <View style={styles.priceInputWrapper}>
@@ -127,90 +181,81 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                                 placeholder="0.00"
                                 value={editedItem.sellingPrice}
                                 keyboardType="decimal-pad"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, sellingPrice: text }))}
+                                onChangeText={(text) => {
+                                    const cleanText = text.replace(',', '.');
+                                    if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+                                        setEditedItem(prev => ({ ...prev, sellingPrice: cleanText }));
+                                    }
+                                }}
                             />
                         </View>
                     </View>
 
-                        <View style={styles.priceContainer}>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="Prix d'achat"
-                                value={editedItem.purchasePrice}
-                                keyboardType="numeric"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, purchasePrice: text }))}
-                            />
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="Prix de vente"
-                                value={editedItem.sellingPrice}
-                                keyboardType="numeric"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, sellingPrice: text }))}
-                            />
-                        </View>
+                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                        {editedItem.photoUri ? (
+                            <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
+                        ) : (
+                            <Text>Sélectionner une image</Text>
+                        )}
+                    </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                            {editedItem.photoUri ? (
-                                <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
-                            ) : (
-                                <Text>Sélectionner une image</Text>
-                            )}
+                    <Text style={styles.label}>Container</Text>
+                    <View style={styles.optionsContainer}>
+                        {containers.map((container) => (
+                            <TouchableOpacity
+                                key={container.id}
+                                style={[
+                                    styles.option,
+                                    editedItem.containerId === container.id && styles.optionSelected
+                                ]}
+                                onPress={() => setEditedItem(prev => ({
+                                    ...prev,
+                                    containerId: container.id ?? prev.containerId
+                                }))}
+                            >
+                                <Text>{container.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text style={styles.label}>Catégorie</Text>
+                    <View style={styles.optionsContainer}>
+                        {categories.map((category) => (
+                            <TouchableOpacity
+                                key={category.id}
+                                style={[
+                                    styles.option,
+                                    editedItem.categoryId === category.id && styles.optionSelected
+                                ]}
+                                onPress={() => setEditedItem(prev => ({
+                                    ...prev,
+                                    categoryId: category.id ?? prev.categoryId
+                                }))}
+                            >
+                                <Text>{category.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <View style={styles.qrCodeContainer}>
+                        <Text style={styles.label}>QR Code</Text>
+                        <QRCodeGenerator value={editedItem.qrCode} size={150} />
+                    </View>
+
+                    <View style={styles.buttonContainer}>
+                        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                            <MaterialIcons name="delete" size={20} color="#fff" />
+                            <Text style={styles.buttonText}>Supprimer</Text>
                         </TouchableOpacity>
-
-                        <Text style={styles.label}>Container</Text>
-                        <View style={styles.optionsContainer}>
-                            {containers.map((container) => (
-                                <TouchableOpacity
-                                    key={container.id}
-                                    style={[
-                                        styles.option,
-                                        editedItem.containerId === container.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => setEditedItem(prev => ({ 
-                                        ...prev, 
-                                        containerId: container.id ?? prev.containerId 
-                                    }))}
-                                >
-                                    <Text>{container.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <Text style={styles.label}>Catégorie</Text>
-                        <View style={styles.optionsContainer}>
-                            {categories.map((category) => (
-                                <TouchableOpacity
-                                    key={category.id}
-                                    style={[
-                                        styles.option,
-                                        editedItem.categoryId === category.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => setEditedItem(prev => ({
-                                        ...prev,
-                                        categoryId: category.id ?? prev.categoryId
-                                    }))}
-                                >
-                                    <Text>{category.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-
-                        <View style={styles.qrCodeContainer}>
-                            <Text style={styles.label}>QR Code</Text>
-                            <QRCodeGenerator value={editedItem.qrCode} size={150} />
-                        </View>
-
-                        <View style={styles.buttonContainer}>
-                            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                                <Text style={styles.buttonText}>Annuler</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                                <Text style={styles.buttonText}>Mettre à jour</Text>
-                            </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                            <Text style={styles.buttonText}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                            <Text style={styles.buttonText}>Mettre à jour</Text>
+                        </TouchableOpacity>
                     </View>
-                </ScrollView>
-            </View>
+                </View>
+            </ScrollView>
         </View>
     );
 };
@@ -220,21 +265,14 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        padding: 16,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Exemple de style
     },
     container: {
-        maxHeight: '80%',
-        width: '100%',
-        backgroundColor: '#f5f5f5',
-        borderRadius: 12,
-    },
-    scrollView: {
         flex: 1,
+        backgroundColor: '#f5f5f5',
     },
     contentContainer: {
         padding: 16,
-        paddingBottom: 32,
     },
     input: {
         backgroundColor: '#fff',
@@ -364,13 +402,25 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
     },
     cancelButton: {
+        flex: 1,
+        backgroundColor: '#8E8E93',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    deleteButton: {
         flex: 1,
         backgroundColor: '#FF3B30',
         padding: 16,
         borderRadius: 12,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
     },
     buttonText: {
         color: '#fff',
