@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, SafeAreaView, TextInput, ScrollView, Platform } from 'react-native';
-import { useSelector, useDispatch } from 'react-redux';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { LabelGenerator } from '../../src/components/LabelGenerator';
 import { FilterBar } from '../../src/components/FilterBar';
 import { handleDatabaseError } from '../../src/utils/errorHandler';
 import { Item, Container, Category } from '../../src/database/types';
-import { generateQRValue, QRCodeType } from '../../src/utils/qrCodeManager';
+import { generateQRValue } from '../../src/utils/qrCodeManager';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Filters {
@@ -18,6 +17,15 @@ interface Filters {
   startDate: Date | null;
   endDate: Date | null;
   status: 'all' | 'available' | 'sold';
+}
+
+interface InventoryItem {
+  id: number;
+  name: string;
+  description?: string;
+  sellingPrice?: number;
+  qrCode: string;
+  number?: string;
 }
 
 export default function LabelScreen() {
@@ -38,18 +46,23 @@ export default function LabelScreen() {
     status: 'all'
   });
 
-  const { data: inventoryData, isLoading, error } = useInventoryData();
+  const {
+    items,
+    containers,
+    categories,
+    isLoading,
+    error
+  } = useInventoryData({});
 
-  // Effet pour mettre à jour les containers sélectionnés quand on bascule en mode container
   useEffect(() => {
-    if (showContainers && inventoryData?.containers) {
-      setSelectedContainers(inventoryData.containers.map(container => container.id!));
+    if (showContainers && containers) {
+      setSelectedContainers(containers.map(container => container.id!));
     }
-  }, [showContainers, inventoryData?.containers]);
+  }, [showContainers, containers]);
 
   useEffect(() => {
-    if (inventoryData?.items) {
-      const filteredIds = inventoryData.items
+    if (items) {
+      const filteredIds = items
         .filter((item: Item) => {
           const matchesSearch = !filters.search || item.name.toLowerCase().includes(filters.search.toLowerCase());
           const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
@@ -74,7 +87,7 @@ export default function LabelScreen() {
         .map(item => item.id!);
       setSelectedItems(filteredIds);
     }
-  }, [filters, inventoryData?.items]);
+  }, [filters, items]);
 
   const onDateChange = (event: any, selectedDate: Date | undefined, isStartDate: boolean) => {
     if (Platform.OS === 'android') {
@@ -109,9 +122,9 @@ export default function LabelScreen() {
     );
   }
 
-  const getItemsToGenerate = () => {
+  const getItemsToGenerate = (): InventoryItem[] => {
     if (showContainers) {
-      return (inventoryData?.containers || [])
+      return (containers || [])
         .filter(container => selectedContainers.includes(container.id!))
         .map(container => ({
           id: container.id!,
@@ -121,7 +134,7 @@ export default function LabelScreen() {
           qrCode: container.qrCode || generateQRValue('CONTAINER')
         }));
     } else {
-      return (inventoryData?.items || [])
+      return (items || [])
         .filter(item => selectedItems.includes(item.id!))
         .map(item => ({
           id: item.id!,
@@ -215,7 +228,7 @@ export default function LabelScreen() {
               <View style={styles.filterSection}>
                 <Text style={styles.filterLabel}>Catégorie</Text>
                 <View style={styles.filterOptions}>
-                  {inventoryData?.categories.map((category: Category) => (
+                  {categories.map((category: Category) => (
                     <TouchableOpacity
                       key={category.id}
                       style={[
@@ -238,7 +251,7 @@ export default function LabelScreen() {
               <View style={styles.filterSection}>
                 <Text style={styles.filterLabel}>Container</Text>
                 <View style={styles.filterOptions}>
-                  {inventoryData?.containers.map((container) => (
+                  {containers.map((container) => (
                     <TouchableOpacity
                       key={container.id}
                       style={[

@@ -1,17 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { Item, Container, Category } from '../database/database';
-import { useRefreshStore } from '../store/refreshStore';
 import { ItemEditForm } from './ItemEditForm';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
+import { selectAllCategories } from '../store/categorySlice';
+import { selectAllContainers } from '../store/containersSlice';
+import { useAnimatedComponents } from '../hooks/useAnimatedComponents';
+import ItemCard from './ItemCard';
 
 interface ItemListProps {
   items: Item[];
-  containers: Container[];
-  categories: Category[];
   onMarkAsSold: (itemId: number) => void;
   onMarkAsAvailable: (itemId: number) => void;
   onMoveItem?: (itemId: number, newContainerId: number) => void;
+  onItemPress?: (item: Item) => void;
+  isLoading?: boolean;
 }
 
 interface Filters {
@@ -23,7 +27,53 @@ interface Filters {
   maxPrice: string;
 }
 
-export const ItemList: React.FC<ItemListProps> = ({ items, containers, categories, onMarkAsSold, onMarkAsAvailable, onMoveItem }) => {
+const ItemListModal: React.FC<{
+  selectedItem: Item | null;
+  containers: Container[];
+  categories: Category[];
+  onSuccess: () => void;
+  onCancel: () => void;
+}> = ({ selectedItem, containers, categories, onSuccess, onCancel }) => {
+  return (
+    <Modal
+      visible={!!selectedItem}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onCancel}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Modifier l'article</Text>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={onCancel}>
+              <MaterialIcons name="close" size={24} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+          {selectedItem && (
+            <ItemEditForm
+              item={selectedItem}
+              containers={containers}
+              categories={categories}
+              onSuccess={onSuccess}
+              onCancel={onCancel}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+export const ItemList: React.FC<ItemListProps> = ({
+  items,
+  onMarkAsSold,
+  onMarkAsAvailable,
+  onMoveItem,
+  onItemPress,
+  isLoading
+}) => {
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({
     search: '',
     categoryId: null,
@@ -33,131 +83,61 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
     maxPrice: '',
   });
 
-  const [showFilters, setShowFilters] = useState(false);
+  const {
+    opacity,
+    fadeIn,
+    fadeOut,
+    fadeStyle,
+    scale,
+    scaleUp,
+    scaleDown,
+    scaleStyle
+  } = useAnimatedComponents();
 
-  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const categories = useSelector(selectAllCategories);
+  const containers = useSelector(selectAllContainers);
 
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(filters.search.toLowerCase());
+      const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
+      const matchesContainer = !filters.containerId || 
+        (filters.containerId === 'none' ? !item.containerId : item.containerId === filters.containerId);
+      const matchesStatus = filters.status === 'all' || item.status === filters.status;
+      const matchesPrice = (!filters.minPrice || item.sellingPrice >= parseFloat(filters.minPrice)) &&
+        (!filters.maxPrice || item.sellingPrice <= parseFloat(filters.maxPrice));
 
-  useEffect(() => {
-    // Le composant se rafraîchira automatiquement quand refreshTimestamp change
-  }, [refreshTimestamp, items]);
+      return matchesSearch && matchesCategory && matchesContainer && matchesStatus && matchesPrice;
+    });
+  }, [items, filters]);
 
-  const handleStatusToggle = async (itemId: number, currentStatus: string) => {
-    if (currentStatus === 'available') {
-      await onMarkAsSold(itemId);
-    } else {
-      await onMarkAsAvailable(itemId);
-    }
-    triggerRefresh();
-  };
-
-  const filteredItems = items.filter((item: Item) => {
-    const searchLower = filters.search.toLowerCase();
-    const matchesSearch = 
-      item.name.toLowerCase().includes(searchLower) ||
-      (item.description && item.description.toLowerCase().includes(searchLower));
-
-    const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
-    const matchesContainer = 
-      !filters.containerId ? true : 
-      filters.containerId === 'none' ? !item.containerId :
-      item.containerId === filters.containerId;
-    const matchesStatus = filters.status === 'all' || item.status === filters.status;
-    
-    const minPrice = parseFloat(filters.minPrice);
-    const maxPrice = parseFloat(filters.maxPrice);
-    const matchesPrice = 
-      (!minPrice || item.sellingPrice >= minPrice) &&
-      (!maxPrice || item.sellingPrice <= maxPrice);
-
-    return matchesSearch && matchesCategory && matchesContainer && 
-           matchesStatus && matchesPrice;
-  });
-
-  const getContainerName = (containerId: number | null) => {
-    if (!containerId) return 'Non assigné';
-    const container = containers.find(c => c.id === containerId);
-    return container ? container.name : 'Non assigné';
-  };
-
-  const getCategoryName = (categoryId: number | null) => {
-    if (!categoryId) return 'Sans catégorie';
-    const category = categories.find(c => c.id === categoryId);
-    return category ? category.name : 'Sans catégorie';
-  };
-
-  const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity 
-      style={styles.itemContainer}
-      onPress={() => setSelectedItem(item)}
-    >
-      <View style={styles.itemHeader}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Prix: </Text>
-          <Text style={styles.price}>
-            {typeof item.sellingPrice === 'number' ? `${item.sellingPrice.toFixed(2)}€` : '0.00€'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.itemDetails}>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="category" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            {getCategoryName(item.categoryId ?? null)}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="inbox" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            {getContainerName(item.containerId ?? null)}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="euro" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            Prix d'achat: {typeof item.purchasePrice === 'number' ? `${item.purchasePrice.toFixed(2)}€` : '0.00€'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.actionButtons}>
-        {item.status === 'available' ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.soldButton]}
-            onPress={() => {
-              if (typeof item.id === 'number') {
-                onMarkAsSold(item.id);
-              }
-            }}
-          >
-            <MaterialIcons name="shopping-cart" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Marquer comme vendu</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.availableButton]}
-            onPress={() => {
-              if (typeof item.id === 'number') {
-                onMarkAsAvailable(item.id);
-              }
-            }}
-          >
-            <MaterialIcons name="restore" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Remettre en stock</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-
-  const handleEditSuccess = () => {
+  const handleModalSuccess = useCallback(() => {
     setSelectedItem(null);
-    triggerRefresh();
-  };
+  }, []);
+
+  const handleModalCancel = useCallback(() => {
+    setSelectedItem(null);
+  }, []);
+
+  const handleItemPress = useCallback((item: Item) => {
+    setSelectedItem(item);
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  if (!items.length) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Aucun article trouvé</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -166,7 +146,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           style={styles.searchInput}
           placeholder="Rechercher des articles..."
           value={filters.search}
-          onChangeText={(text) => setFilters({ ...filters, search: text })}
+          onChangeText={(text) => setFilters(prev => ({ ...prev, search: text }))}
         />
         <TouchableOpacity
           style={styles.filterButton}
@@ -178,155 +158,149 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
 
       {showFilters && (
         <View style={styles.filtersContainer}>
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Catégorie</Text>
-            <View style={styles.filterOptions}>
-              {categories.map((category) => (
+          <ScrollView>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Catégorie</Text>
+              <View style={styles.filterOptions}>
+                {categories?.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.filterOption,
+                      filters.categoryId === category.id && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => setFilters(prev => ({
+                      ...prev,
+                      categoryId: prev.categoryId === category.id ? null : category.id
+                    }))}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      filters.categoryId === category.id && styles.filterOptionTextSelected
+                    ]}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Container</Text>
+              <View style={styles.filterOptions}>
                 <TouchableOpacity
-                  key={category.id}
                   style={[
                     styles.filterOption,
-                    filters.categoryId === category.id && styles.filterOptionSelected,
+                    filters.containerId === 'none' && styles.filterOptionSelected,
                   ]}
-                  onPress={() =>
-                    setFilters({
-                      ...filters,
-                      categoryId: filters.categoryId === category.id ? null : category.id ?? null,
-                    })
-                  }
+                  onPress={() => setFilters(prev => ({
+                    ...prev,
+                    containerId: prev.containerId === 'none' ? null : 'none'
+                  }))}
                 >
-                  <Text style={styles.filterOptionText}>{category.name}</Text>
+                  <Text style={[
+                    styles.filterOptionText,
+                    filters.containerId === 'none' && styles.filterOptionTextSelected
+                  ]}>Sans container</Text>
                 </TouchableOpacity>
-              ))}
+                {containers?.map((container) => (
+                  <TouchableOpacity
+                    key={container.id}
+                    style={[
+                      styles.filterOption,
+                      filters.containerId === container.id && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => setFilters(prev => ({
+                      ...prev,
+                      containerId: prev.containerId === container.id ? null : container.id
+                    }))}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      filters.containerId === container.id && styles.filterOptionTextSelected
+                    ]}>{container.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Container</Text>
-            <View style={styles.filterOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  filters.containerId === 'none' && styles.filterOptionSelected,
-                ]}
-                onPress={() =>
-                  setFilters({
-                    ...filters,
-                    containerId: filters.containerId === 'none' ? null : 'none',
-                  })
-                }
-              >
-                <Text style={styles.filterOptionText}>Sans container</Text>
-              </TouchableOpacity>
-              {containers.map((container) => (
-                <TouchableOpacity
-                  key={container.id}
-                  style={[
-                    styles.filterOption,
-                    filters.containerId === container.id &&
-                      styles.filterOptionSelected,
-                  ]}
-                  onPress={() =>
-                    setFilters({
-                      ...filters,
-                        containerId: filters.containerId === container.id ? null : container.id ?? null,
-                    })
-                  }
-                >
-                  <Text style={styles.filterOptionText}>{container.name}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>État</Text>
+              <View style={styles.filterOptions}>
+                {[
+                  { value: 'all', label: 'Tous' },
+                  { value: 'available', label: 'Disponible' },
+                  { value: 'sold', label: 'Vendu' }
+                ].map((status) => (
+                  <TouchableOpacity
+                    key={status.value}
+                    style={[
+                      styles.filterOption,
+                      filters.status === status.value && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => setFilters(prev => ({ ...prev, status: status.value as any }))}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      filters.status === status.value && styles.filterOptionTextSelected
+                    ]}>{status.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>État</Text>
-            <View style={styles.filterOptions}>
-              {[
-                { value: 'all', label: 'Tous' },
-                { value: 'available', label: 'Disponible' },
-                { value: 'sold', label: 'Vendu' }
-              ].map((status) => (
-                <TouchableOpacity
-                  key={status.value}
-                  style={[
-                    styles.filterOption,
-                    filters.status === status.value && styles.filterOptionSelected,
-                  ]}
-                  onPress={() => setFilters({ 
-                    ...filters, 
-                    status: status.value as Filters['status'] 
-                  })}
-                >
-                  <Text style={styles.filterOptionText}>{status.label}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Prix</Text>
+              <View style={styles.priceInputs}>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="Min"
+                  value={filters.minPrice}
+                  onChangeText={(value) => setFilters(prev => ({ ...prev, minPrice: value }))}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.priceSeparator}>-</Text>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="Max"
+                  value={filters.maxPrice}
+                  onChangeText={(value) => setFilters(prev => ({ ...prev, maxPrice: value }))}
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
-          </View>
-
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Price Range</Text>
-            <View style={styles.priceInputs}>
-              <TextInput
-                style={styles.priceInput}
-                placeholder="Min"
-                value={filters.minPrice}
-                onChangeText={(text) => setFilters({ ...filters, minPrice: text })}
-                keyboardType="numeric"
-              />
-              <Text>-</Text>
-              <TextInput
-                style={styles.priceInput}
-                placeholder="Max"
-                value={filters.maxPrice}
-                onChangeText={(text) => setFilters({ ...filters, maxPrice: text })}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
+          </ScrollView>
         </View>
       )}
 
       <FlatList
         data={filteredItems}
-        renderItem={renderItem}
-        keyExtractor={(item) => `item-${item.id}-${item.updatedAt}`}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        renderItem={({ item }) => (
+          <ItemCard
+            item={item}
+            onPress={() => handleItemPress(item)}
+            fadeAnimation={{
+              opacity,
+              fadeIn,
+              fadeOut,
+              fadeStyle
+            }}
+            scaleAnimation={{
+              scale,
+              scaleUp,
+              scaleDown,
+              scaleStyle
+            }}
+          />
+        )}
+        keyExtractor={(item) => item.id?.toString() || ''}
       />
 
-      <Modal
-        visible={!!selectedItem}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSelectedItem(null)}
-      >
-        {selectedItem && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Modifier l'article</Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setSelectedItem(null)}
-                >
-                  <MaterialIcons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.modalScrollView}>
-                <ItemEditForm
-                  item={selectedItem}
-                  containers={containers}
-                  categories={categories}
-                  onSuccess={handleEditSuccess}
-                  onCancel={() => setSelectedItem(null)}
-                />
-              </ScrollView>
-            </View>
-          </View>
-        )}
-      </Modal>
+      <ItemListModal
+        selectedItem={selectedItem}
+        containers={containers}
+        categories={categories}
+        onSuccess={handleModalSuccess}
+        onCancel={handleModalCancel}
+      />
     </View>
   );
 };
@@ -334,47 +308,47 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   searchBar: {
     flexDirection: 'row',
-    padding: 8,
-    gap: 8,
+    padding: 10,
+    gap: 10,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#ddd',
   },
   searchInput: {
     flex: 1,
-    height: 36,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    paddingHorizontal: 10,
   },
   filterButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#ddd',
+    borderRadius: 5,
   },
   filtersContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: 10,
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#ddd',
+    maxHeight: '50%',
   },
   filterSection: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   filterLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
     marginBottom: 8,
-    color: '#000',
+    color: '#333',
   },
   filterOptions: {
     flexDirection: 'row',
@@ -382,162 +356,88 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterOption: {
-    paddingVertical: 6,
     paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 15,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   filterOptionSelected: {
     backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
   filterOptionText: {
-    color: '#000',
-    fontSize: 14,
+    fontSize: 12,
+    color: '#333',
   },
   filterOptionTextSelected: {
     color: '#fff',
+    fontWeight: 'bold',
   },
-  itemContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 2,
-    marginVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  itemHeader: {
+  priceInputs: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 10,
   },
-  itemName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  priceInput: {
     flex: 1,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: '#fff',
   },
-  priceLabel: {
-    fontSize: 14,
+  priceSeparator: {
     color: '#666',
-  },
-  price: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
   },
-  itemDetails: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
   },
-  detailText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#666',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  soldButton: {
-    backgroundColor: '#FF3B30',
-  },
-  availableButton: {
-    backgroundColor: '#34C759',
-  },
-  actionButtonText: {
-    color: '#fff',
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  separator: {
-    height: 8,
-  },
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 15,
-    maxHeight: '80%',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '90%',
+    padding: 0,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 10,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e5e5e5',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
   },
-  closeButton: {
-    padding: 5,
+  modalCloseButton: {
+    padding: 8,
   },
-  priceInputs: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 10,
   },
-  priceInput: {
-    width: 100,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginHorizontal: 5,
-  },
-  list: {
-    padding: 16,
-  },
-  modalScrollView: {
-    flexGrow: 1,
+  itemInfo: {
+    flex: 1,
   },
 });

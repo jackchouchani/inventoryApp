@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import { addItem, Category, Container } from '../database/database';
+import { addItem as addItemToDb, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
-import { QRCodeGenerator } from './QRCodeGenerator';
 import { generateQRValue } from '../utils/qrCodeManager';
+import { addItem } from '../store/itemsSlice';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ItemFormProps {
     containers: Container[];
@@ -23,23 +24,34 @@ interface ItemFormState {
     photoUri: string;
     containerId?: number;
     categoryId?: number;
-    qrCode: string;
 }
+
+const INITIAL_STATE: ItemFormState = {
+    name: '',
+    description: '',
+    purchasePrice: '',
+    sellingPrice: '',
+    status: 'available',
+    photoUri: '',
+    containerId: undefined,
+    categoryId: undefined,
+};
 
 const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
+    const queryClient = useQueryClient();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-    const [item, setItem] = useState<ItemFormState>({
-        name: '',
-        description: '',
-        purchasePrice: '',
-        sellingPrice: '',
-        status: 'available',
-        photoUri: '',
-        containerId: undefined,
-        categoryId: undefined,
-        qrCode: generateQRValue('ITEM')
-    });
+    const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
+
+    const resetForm = useCallback(() => {
+        setItem(INITIAL_STATE);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            resetForm();
+        };
+    }, [resetForm]);
 
     const handleSave = async () => {
         try {
@@ -48,54 +60,65 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 Alert.alert('Erreur', 'Le nom est requis');
                 return;
             }
-            if (!item.purchasePrice || !item.sellingPrice) {
-                Alert.alert('Erreur', 'Les prix sont requis');
+
+            const purchasePrice = parseFloat(item.purchasePrice);
+            const sellingPrice = parseFloat(item.sellingPrice);
+            
+            if (isNaN(purchasePrice) || isNaN(sellingPrice)) {
+                Alert.alert('Erreur', 'Les prix doivent être des nombres valides');
                 return;
             }
+            
+            if (purchasePrice < 0 || sellingPrice < 0) {
+                Alert.alert('Erreur', 'Les prix ne peuvent pas être négatifs');
+                return;
+            }
+
             if (!item.categoryId) {
                 Alert.alert('Erreur', 'La catégorie est requise');
                 return;
             }
 
+            // Génération du QR code uniquement à la sauvegarde
+            const qrCode = generateQRValue('ITEM');
+
             // Ajout dans la base de données
-            const newItemId = await addItem({
+            const newItemId = await addItemToDb({
                 name: item.name.trim(),
-                description: item.description,
-                purchasePrice: parseFloat(item.purchasePrice),
-                sellingPrice: parseFloat(item.sellingPrice),
+                description: item.description.trim(),
+                purchasePrice,
+                sellingPrice,
                 status: 'available',
                 photoUri: item.photoUri,
-                containerId: item.containerId || undefined,
+                containerId: item.containerId,
                 categoryId: item.categoryId,
-                qrCode: item.qrCode
+                qrCode
             });
 
-            // Mise à jour du store Redux
-            dispatch({
-                type: 'items/addItem',
-                payload: {
-                    id: newItemId,
-                    ...item,
-                    purchasePrice: parseFloat(item.purchasePrice),
-                    sellingPrice: parseFloat(item.sellingPrice),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }
-            });
+            // Création de l'objet complet pour Redux
+            const newItem = {
+                id: newItemId,
+                name: item.name.trim(),
+                description: item.description.trim(),
+                purchasePrice,
+                sellingPrice,
+                status: 'available' as const,
+                photoUri: item.photoUri,
+                containerId: item.containerId,
+                categoryId: item.categoryId,
+                qrCode,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
 
-            // Reset du formulaire et refresh
-            setItem({
-                name: '',
-                description: '',
-                purchasePrice: '',
-                sellingPrice: '',
-                status: 'available',
-                photoUri: '',
-                containerId: undefined,
-                categoryId: undefined,
-                qrCode: generateQRValue('ITEM')
-            });
-            
+            // Mise à jour du store Redux avec l'action creator appropriée
+            dispatch(addItem(newItem));
+
+            // Invalider les requêtes pour forcer le rechargement
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+
+            resetForm();
             triggerRefresh();
             if (onSuccess) onSuccess();
         } catch (error) {
@@ -105,107 +128,147 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
     };
 
     const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 1,
-        });
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.8,
+            });
 
-        if (!result.canceled && result.assets[0]) {
-            setItem(prev => ({ ...prev, photoUri: result.assets[0].uri }));
+            if (!result.canceled && result.assets[0]) {
+                setItem(prev => ({ ...prev, photoUri: result.assets[0].uri }));
+            }
+        } catch (error) {
+            console.error('Erreur lors de la sélection de l\'image:', error);
+            Alert.alert('Erreur', 'Impossible de charger l\'image');
         }
     };
+
+    const handleContainerSelect = useCallback((containerId: number | undefined) => {
+        if (containerId) {
+            setItem(prev => ({ ...prev, containerId }));
+        }
+    }, []);
+
+    const handleCategorySelect = useCallback((categoryId: number | undefined) => {
+        if (categoryId) {
+            setItem(prev => ({ ...prev, categoryId }));
+        }
+    }, []);
 
     return (
         <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={onCancel}>
-                    <Text style={styles.cancelText}>Annuler</Text>
-                </TouchableOpacity>
                 <Text style={styles.modalTitle}>Nouvel Article</Text>
-                <TouchableOpacity onPress={handleSave}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
                     <Text style={styles.saveText}>Enregistrer</Text>
                 </TouchableOpacity>
             </View>
             
             <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Nom de l'article"
-                    value={item.name}
-                    onChangeText={(text) => setItem(prev => ({ ...prev, name: text }))}
-                />
-
-                <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Description de l'article"
-                    value={item.description}
-                    onChangeText={(text) => setItem(prev => ({ ...prev, description: text }))}
-                    multiline
-                    numberOfLines={4}
-                />
-
-                <View style={styles.priceContainer}>
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>Informations générales</Text>
                     <TextInput
-                        style={[styles.input, styles.priceInput]}
-                        placeholder="Prix d'achat"
-                        value={item.purchasePrice}
-                        keyboardType="numeric"
-                        onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
+                        style={styles.input}
+                        placeholder="Nom de l'article"
+                        value={item.name}
+                        onChangeText={(text) => setItem(prev => ({ ...prev, name: text }))}
+                        placeholderTextColor="#999"
                     />
+
                     <TextInput
-                        style={[styles.input, styles.priceInput]}
-                        placeholder="Prix de vente"
-                        value={item.sellingPrice}
-                        keyboardType="numeric"
-                        onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
+                        style={[styles.input, styles.textArea]}
+                        placeholder="Description de l'article"
+                        value={item.description}
+                        onChangeText={(text) => setItem(prev => ({ ...prev, description: text }))}
+                        multiline
+                        numberOfLines={4}
+                        placeholderTextColor="#999"
                     />
                 </View>
 
-                <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                    {item.photoUri ? (
-                        <Image source={{ uri: item.photoUri }} style={styles.image} />
-                    ) : (
-                        <Text>Sélectionner une image</Text>
-                    )}
-                </TouchableOpacity>
-
-                <Text style={styles.label}>Container</Text>
-                <View style={styles.optionsContainer}>
-                    {containers.map((container) => (
-                        <TouchableOpacity
-                            key={container.id}
-                            style={[
-                                styles.option,
-                                item.containerId === container.id && styles.optionSelected
-                            ]}
-                            onPress={() => setItem(prev => ({ ...prev, containerId: container.id }))}
-                        >
-                            <Text>{container.name}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>Prix</Text>
+                    <View style={styles.priceContainer}>
+                        <View style={styles.priceWrapper}>
+                            <Text style={styles.priceLabel}>Prix d'achat</Text>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="0.00"
+                                value={item.purchasePrice}
+                                keyboardType="numeric"
+                                onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
+                                placeholderTextColor="#999"
+                            />
+                        </View>
+                        <View style={styles.priceWrapper}>
+                            <Text style={styles.priceLabel}>Prix de vente</Text>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="0.00"
+                                value={item.sellingPrice}
+                                keyboardType="numeric"
+                                onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
+                                placeholderTextColor="#999"
+                            />
+                        </View>
+                    </View>
                 </View>
 
-                <Text style={styles.label}>Catégorie</Text>
-                <View style={styles.optionsContainer}>
-                    {categories.map((category) => (
-                        <TouchableOpacity
-                            key={category.id}
-                            style={[
-                                styles.option,
-                                item.categoryId === category.id && styles.optionSelected
-                            ]}
-                            onPress={() => setItem(prev => ({ ...prev, categoryId: category.id }))}
-                        >
-                            <Text>{category.name}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>Photo</Text>
+                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                        {item.photoUri ? (
+                            <Image source={{ uri: item.photoUri }} style={styles.image} />
+                        ) : (
+                            <View style={styles.imagePlaceholder}>
+                                <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
                 </View>
 
-                <View style={styles.qrCodeContainer}>
-                    <Text style={styles.label}>QR Code</Text>
-                    <QRCodeGenerator value={item.qrCode} size={150} />
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>Emplacement</Text>
+                    <View style={styles.optionsContainer}>
+                        {containers.map((container) => (
+                            <TouchableOpacity
+                                key={container.id}
+                                style={[
+                                    styles.option,
+                                    item.containerId === container.id && styles.optionSelected
+                                ]}
+                                onPress={() => handleContainerSelect(container.id)}
+                            >
+                                <Text style={[
+                                    styles.optionText,
+                                    item.containerId === container.id && styles.optionTextSelected
+                                ]}>{container.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+
+                <View style={[styles.formSection, styles.formSectionLast]}>
+                    <Text style={styles.sectionTitle}>Catégorie</Text>
+                    <View style={styles.optionsContainer}>
+                        {categories.map((category) => (
+                            <TouchableOpacity
+                                key={category.id}
+                                style={[
+                                    styles.option,
+                                    item.categoryId === category.id && styles.optionSelected
+                                ]}
+                                onPress={() => handleCategorySelect(category.id)}
+                            >
+                                <Text style={[
+                                    styles.optionText,
+                                    item.categoryId === category.id && styles.optionTextSelected
+                                ]}>{category.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
                 </View>
             </ScrollView>
         </View>
@@ -225,18 +288,26 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e5e5e5',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
     modalTitle: {
-        fontSize: 17,
+        fontSize: 20,
         fontWeight: '600',
+        color: '#000',
     },
-    cancelText: {
-        color: '#007AFF',
-        fontSize: 17,
+    saveButton: {
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
     },
     saveText: {
-        color: '#007AFF',
-        fontSize: 17,
+        color: '#fff',
+        fontSize: 16,
         fontWeight: '600',
     },
     container: {
@@ -245,75 +316,92 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 16,
     },
-    input: {
+    formSection: {
         backgroundColor: '#fff',
-        borderRadius: 10,
-        padding: 12,
+        borderRadius: 12,
+        padding: 16,
         marginBottom: 16,
-        fontSize: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
-        shadowRadius: 3,
+        shadowRadius: 2,
         elevation: 2,
     },
+    formSectionLast: {
+        marginBottom: 32,
+    },
+    sectionTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#000',
+        marginBottom: 12,
+    },
+    input: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        color: '#000',
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        marginBottom: 12,
+    },
     textArea: {
-        height: 120,
+        height: 100,
         textAlignVertical: 'top',
     },
     priceContainer: {
         flexDirection: 'row',
         gap: 12,
-        marginBottom: 16,
+    },
+    priceWrapper: {
+        flex: 1,
+    },
+    priceLabel: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 4,
     },
     priceInput: {
-        flex: 1,
-        maxWidth: '48%',
+        marginBottom: 0,
     },
     imageButton: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        height: 200,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+        aspectRatio: 4/3,
+        borderRadius: 8,
         overflow: 'hidden',
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
     },
     image: {
         width: '100%',
         height: '100%',
-        resizeMode: 'cover',
     },
-    label: {
+    imagePlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imagePlaceholderText: {
+        color: '#666',
         fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 8,
-        color: '#000',
     },
     optionsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
-        marginBottom: 16,
     },
     option: {
-        paddingVertical: 8,
         paddingHorizontal: 12,
-        borderRadius: 16,
-        backgroundColor: '#fff',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 1,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
     },
     optionSelected: {
         backgroundColor: '#007AFF',
+        borderColor: '#007AFF',
     },
     optionText: {
         color: '#000',
@@ -321,42 +409,6 @@ const styles = StyleSheet.create({
     },
     optionTextSelected: {
         color: '#fff',
-    },
-    qrCodeContainer: {
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 12,
-        marginVertical: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
-    },
-    buttonContainer: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 16,
-    },
-    saveButton: {
-        flex: 1,
-        backgroundColor: '#007AFF',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    cancelButton: {
-        flex: 1,
-        backgroundColor: '#FF3B30',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
     },
 });
 

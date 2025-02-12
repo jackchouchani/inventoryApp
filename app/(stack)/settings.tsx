@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
@@ -16,13 +16,29 @@ import {
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { generateQRValue } from 'utils/qrCodeManager';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { selectAllCategories } from '../../src/store/categorySlice';
 
 const SettingsScreen = () => {
   const router = useRouter();
   const dispatch = useDispatch();
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-  const categories = useSelector((state: RootState) => state.categories.categories);
+  const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const cats = await getCategories();
+        dispatch({ type: 'categories/setCategories', payload: cats });
+      } catch (error) {
+        console.error('Erreur lors du chargement des catégories:', error);
+      }
+    };
+    
+    if (!Array.isArray(categories) || categories.length === 0) {
+      loadCategories();
+    }
+  }, [dispatch]);
 
   const handleLogout = async () => {
     try {
@@ -106,7 +122,12 @@ const SettingsScreen = () => {
   };
 
   if (!categories) {
-    return <Text>Loading...</Text>;
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
   }
 
   return (
@@ -215,6 +236,15 @@ const styles = StyleSheet.create({
   dangerText: {
     color: '#FF3B30',
     fontWeight: '500',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
 });
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
 import { updateItem, deleteItem, Category, Container } from '../database/database';
-import { useRefreshStore } from '../store/refreshStore';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { MaterialIcons } from '@expo/vector-icons';
+import { removeItem, updateItem as updateItemAction } from '../store/itemsSlice';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ItemEditFormProps {
     item: {
@@ -28,7 +29,7 @@ interface ItemEditFormProps {
 
 export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
-    const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+    const queryClient = useQueryClient();
     const [editedItem, setEditedItem] = useState({
         ...item,
         purchasePrice: item.purchasePrice?.toString() || '0',
@@ -51,27 +52,20 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 return;
             }
 
-            // Mise à jour dans la base de données
-            await updateItem(item.id, {
+            const updatedItem = {
                 ...editedItem,
+                id: item.id,
                 purchasePrice,
                 sellingPrice,
                 updatedAt: new Date().toISOString()
-            });
+            };
+
+            // Mise à jour dans la base de données
+            await updateItem(item.id, updatedItem);
 
             // Mise à jour du store Redux
-            dispatch({
-                type: 'items/updateItem',
-                payload: {
-                    ...editedItem,
-                    id: item.id,
-                    purchasePrice,
-                    sellingPrice,
-                    updatedAt: new Date().toISOString()
-                }
-            });
+            dispatch(updateItemAction(updatedItem));
 
-            triggerRefresh();
             if (onSuccess) onSuccess();
         } catch (error) {
             console.error('Erreur lors de la mise à jour:', error);
@@ -82,47 +76,45 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
     const handleDelete = async () => {
         if (!item.id) return;
 
-        Alert.alert(
-            'Confirmation',
-            'Êtes-vous sûr de vouloir supprimer cet article ?',
-            [
-                {
-                    text: 'Annuler',
-                    style: 'cancel'
-                },
-                {
-                    text: 'Supprimer',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            // Mise à jour optimiste du store Redux
-                            dispatch({
-                                type: 'items/removeItem',
-                                payload: item.id
-                            });
-
-                            try {
-                                // Mise à jour de la base de données
-                                await deleteItem(item.id!);
-                                triggerRefresh();
-                                if (onSuccess) onSuccess();
-                            } catch (error) {
-                                // En cas d'erreur, on remet l'item dans le store
-                                dispatch({
-                                    type: 'items/addItem',
-                                    payload: item
-                                });
-                                console.error('Erreur lors de la suppression:', error);
-                                Alert.alert('Erreur', 'Impossible de supprimer l\'article');
-                            }
-                        } catch (error) {
-                            console.error('Erreur:', error);
-                            Alert.alert('Erreur', 'Une erreur est survenue');
-                        }
-                    }
+        const confirmDelete = async () => {
+            try {
+                const itemId = item.id as number;
+                await deleteItem(itemId);
+                dispatch(removeItem(itemId));
+                queryClient.invalidateQueries({ queryKey: ['items'] });
+                queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                if (onCancel) onCancel();
+            } catch (error) {
+                console.error('Erreur lors de la suppression:', error);
+                if (Platform.OS === 'web') {
+                    window.alert('Impossible de supprimer l\'article');
+                } else {
+                    Alert.alert('Erreur', 'Impossible de supprimer l\'article');
                 }
-            ]
-        );
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
+                await confirmDelete();
+            }
+        } else {
+            Alert.alert(
+                'Confirmation de suppression',
+                'Êtes-vous sûr de vouloir supprimer cet article ?',
+                [
+                    {
+                        text: 'Annuler',
+                        style: 'cancel'
+                    },
+                    {
+                        text: 'Supprimer',
+                        style: 'destructive',
+                        onPress: confirmDelete
+                    }
+                ]
+            );
+        }
     };
 
     const pickImage = async () => {
@@ -139,134 +131,155 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
     };
 
     return (
-        <View style={styles.modalContainer}>
-            <ScrollView style={styles.container}>
-                <View style={styles.contentContainer}>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Nom de l'article"
-                        value={editedItem.name}
-                        onChangeText={(text) => setEditedItem(prev => ({ ...prev, name: text }))}
-                    />
+        <ScrollView style={styles.container}>
+            <View style={styles.contentContainer}>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Nom de l'article"
+                    value={editedItem.name}
+                    onChangeText={(text) => setEditedItem(prev => ({ ...prev, name: text }))}
+                />
 
-                    <TextInput
-                        style={[styles.input, styles.textArea]}
-                        placeholder="Description de l'article"
-                        value={editedItem.description}
-                        onChangeText={(text) => setEditedItem(prev => ({ ...prev, description: text }))}
-                        multiline
-                        numberOfLines={4}
-                    />
+                <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Description de l'article"
+                    value={editedItem.description}
+                    onChangeText={(text) => setEditedItem(prev => ({ ...prev, description: text }))}
+                    multiline
+                    numberOfLines={4}
+                />
 
-                    <View style={styles.priceContainer}>
-                        <View style={styles.priceInputWrapper}>
-                            <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="0.00"
-                                value={editedItem.purchasePrice}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => {
-                                    const cleanText = text.replace(',', '.');
-                                    if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
-                                        setEditedItem(prev => ({ ...prev, purchasePrice: cleanText }));
-                                    }
-                                }}
-                            />
-                        </View>
-                        <View style={styles.priceInputWrapper}>
-                            <Text style={styles.priceLabel}>Prix de vente (€)</Text>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="0.00"
-                                value={editedItem.sellingPrice}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => {
-                                    const cleanText = text.replace(',', '.');
-                                    if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
-                                        setEditedItem(prev => ({ ...prev, sellingPrice: cleanText }));
-                                    }
-                                }}
-                            />
-                        </View>
+                <View style={styles.priceContainer}>
+                    <View style={styles.priceInputWrapper}>
+                        <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                        <TextInput
+                            style={[styles.input, styles.priceInput]}
+                            placeholder="0.00"
+                            value={editedItem.purchasePrice}
+                            keyboardType="decimal-pad"
+                            onChangeText={(text) => {
+                                const cleanText = text.replace(',', '.');
+                                if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+                                    setEditedItem(prev => ({ ...prev, purchasePrice: cleanText }));
+                                }
+                            }}
+                        />
                     </View>
-
-                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                        {editedItem.photoUri ? (
-                            <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
-                        ) : (
-                            <Text>Sélectionner une image</Text>
-                        )}
-                    </TouchableOpacity>
-
-                    <Text style={styles.label}>Container</Text>
-                    <View style={styles.optionsContainer}>
-                        {containers.map((container) => (
-                            <TouchableOpacity
-                                key={container.id}
-                                style={[
-                                    styles.option,
-                                    editedItem.containerId === container.id && styles.optionSelected
-                                ]}
-                                onPress={() => setEditedItem(prev => ({
-                                    ...prev,
-                                    containerId: container.id ?? prev.containerId
-                                }))}
-                            >
-                                <Text>{container.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <Text style={styles.label}>Catégorie</Text>
-                    <View style={styles.optionsContainer}>
-                        {categories.map((category) => (
-                            <TouchableOpacity
-                                key={category.id}
-                                style={[
-                                    styles.option,
-                                    editedItem.categoryId === category.id && styles.optionSelected
-                                ]}
-                                onPress={() => setEditedItem(prev => ({
-                                    ...prev,
-                                    categoryId: category.id ?? prev.categoryId
-                                }))}
-                            >
-                                <Text>{category.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <View style={styles.qrCodeContainer}>
-                        <Text style={styles.label}>QR Code</Text>
-                        <QRCodeGenerator value={editedItem.qrCode} size={150} />
-                    </View>
-
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                            <MaterialIcons name="delete" size={20} color="#fff" />
-                            <Text style={styles.buttonText}>Supprimer</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                            <Text style={styles.buttonText}>Annuler</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                            <Text style={styles.buttonText}>Mettre à jour</Text>
-                        </TouchableOpacity>
+                    <View style={styles.priceInputWrapper}>
+                        <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                        <TextInput
+                            style={[styles.input, styles.priceInput]}
+                            placeholder="0.00"
+                            value={editedItem.sellingPrice}
+                            keyboardType="decimal-pad"
+                            onChangeText={(text) => {
+                                const cleanText = text.replace(',', '.');
+                                if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+                                    setEditedItem(prev => ({ ...prev, sellingPrice: cleanText }));
+                                }
+                            }}
+                        />
                     </View>
                 </View>
-            </ScrollView>
-        </View>
+
+                <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                    {editedItem.photoUri ? (
+                        <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
+                    ) : (
+                        <Text>Sélectionner une image</Text>
+                    )}
+                </TouchableOpacity>
+
+                <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionTitle}>Container</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+                        <View style={styles.optionsContainer}>
+                            <TouchableOpacity
+                                style={[
+                                    styles.option,
+                                    editedItem.containerId === null && styles.optionSelected
+                                ]}
+                                onPress={() => setEditedItem(prev => ({
+                                    ...prev,
+                                    containerId: null
+                                }))}
+                            >
+                                <Text style={[
+                                    styles.optionText,
+                                    editedItem.containerId === null && styles.optionTextSelected
+                                ]}>Sans container</Text>
+                            </TouchableOpacity>
+                            {containers && containers.map((container) => (
+                                <TouchableOpacity
+                                    key={container.id}
+                                    style={[
+                                        styles.option,
+                                        editedItem.containerId === container.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => setEditedItem(prev => ({
+                                        ...prev,
+                                        containerId: container.id ?? prev.containerId
+                                    }))}
+                                >
+                                    <Text style={[
+                                        styles.optionText,
+                                        editedItem.containerId === container.id && styles.optionTextSelected
+                                    ]}>{container.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
+                </View>
+
+                <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionTitle}>Catégorie</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+                        <View style={styles.optionsContainer}>
+                            {categories.map((category) => (
+                                <TouchableOpacity
+                                    key={category.id}
+                                    style={[
+                                        styles.option,
+                                        editedItem.categoryId === category.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => setEditedItem(prev => ({
+                                        ...prev,
+                                        categoryId: category.id ?? prev.categoryId
+                                    }))}
+                                >
+                                    <Text style={[
+                                        styles.optionText,
+                                        editedItem.categoryId === category.id && styles.optionTextSelected
+                                    ]}>{category.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
+                </View>
+
+                <View style={styles.qrCodeContainer}>
+                    <Text style={styles.sectionTitle}>QR Code</Text>
+                    <QRCodeGenerator value={editedItem.qrCode} size={150} />
+                </View>
+
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                        <MaterialIcons name="delete" size={20} color="#fff" />
+                        <Text style={styles.buttonText}>Supprimer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                        <Text style={styles.buttonText}>Annuler</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                        <Text style={styles.buttonText}>Mettre à jour</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Exemple de style
-    },
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
@@ -326,6 +339,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#007AFF',
         fontWeight: '600',
+        marginBottom: 0,
     },
     imageButton: {
         backgroundColor: '#fff',
@@ -346,38 +360,50 @@ const styles = StyleSheet.create({
         height: '100%',
         resizeMode: 'cover',
     },
-    label: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 8,
-        color: '#000',
-    },
-    optionsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
+    sectionContainer: {
         marginBottom: 16,
-    },
-    option: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 16,
         backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 1,
+        shadowRadius: 3,
+        elevation: 2,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 12,
+        color: '#333',
+    },
+    optionsScrollView: {
+        marginBottom: 0,
+    },
+    optionsContainer: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingVertical: 4,
+    },
+    option: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: '#f5f5f5',
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
     },
     optionSelected: {
         backgroundColor: '#007AFF',
+        borderColor: '#007AFF',
     },
     optionText: {
-        color: '#000',
         fontSize: 14,
+        color: '#333',
     },
     optionTextSelected: {
         color: '#fff',
+        fontWeight: '500',
     },
     qrCodeContainer: {
         alignItems: 'center',
@@ -426,5 +452,10 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    noDataText: {
+        color: '#666',
+        fontStyle: 'italic',
+        padding: 8,
     },
 });

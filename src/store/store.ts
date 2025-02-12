@@ -3,24 +3,34 @@ import categoryReducer from './categorySlice';
 import itemsReducer from './itemsSlice';
 import containersReducer from './containersSlice';
 import { ContainersState } from './containersSlice';
+import { categoriesAdapter } from './categorySlice';
+import { itemsAdapter } from './itemsSlice';
+import { containersAdapter } from './containersSlice';
+import { Item } from '../database/types';
 
-const initialState: {
-  items: { items: any[] },
-  categories: { categories: any[] },
-  containers: ContainersState
-} = {
-  items: {
-    items: [] as any[]
-  },
-  categories: {
-    categories: [] as any[]
-  },
-  containers: {
-    containers: [],
-    status: 'idle',
-    error: null,
-    loading: false
-  }
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+
+const initialState = {
+  items: itemsAdapter.getInitialState({
+    status: 'idle' as const,
+    error: null as string | null,
+    searchResults: [] as Item[],
+    selectedItem: null as Item | null,
+    similarItems: [] as Item[],
+    currentPage: 0,
+    totalItems: 0,
+    hasMore: false,
+  }),
+  categories: categoriesAdapter.getInitialState({
+    status: 'idle' as const,
+    error: null as string | null,
+  }),
+  containers: containersAdapter.getInitialState({
+    status: 'idle' as const,
+    error: null as string | null,
+    loading: false,
+  }),
 };
 
 export const store = configureStore({
@@ -29,8 +39,5 @@ export const store = configureStore({
     items: itemsReducer,
     containers: containersReducer,
   },
-  preloadedState: initialState
+  preloadedState: initialState,
 });
-
-export type RootState = ReturnType<typeof store.getState>;
-export type AppDispatch = typeof store.dispatch;

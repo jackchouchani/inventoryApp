@@ -1,26 +1,15 @@
 import { Audio } from 'expo-av';
 
-const loadSound = async (soundFile: any) => {
-  const { sound } = await Audio.Sound.createAsync(soundFile);
-  return sound;
+const soundFiles = {
+    success: require('../../assets/sounds/success.mp3'),
+    error: require('../../assets/sounds/error.mp3'),
 };
 
-export const playSuccessSound = async () => {
-  try {
-    const sound = await loadSound(require('../../assets/sounds/success.mp3'));
-    await sound.playAsync();
-    sound.unloadAsync();
-  } catch (error) {
-    console.error('Erreur son:', error);
-  }
-};
-
-export const playErrorSound = async () => {
-  try {
-    const sound = await loadSound(require('../../assets/sounds/error.mp3'));
-    await sound.playAsync();
-    sound.unloadAsync();
-  } catch (error) {
-    console.error('Erreur son:', error);
-  }
+export const play = async (soundName: 'success' | 'error') => {
+    try {
+        const { sound } = await Audio.Sound.createAsync(soundFiles[soundName]);
+        await sound.playAsync();
+    } catch (error) {
+        console.error('Erreur lors de la lecture du son:', error);
+    }
 };

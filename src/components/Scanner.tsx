@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Text, View, StyleSheet, Alert, TouchableOpacity, Platform, Animated } from 'react-native';
 import { CameraView, useCameraPermissions, CameraType, BarcodeScanningResult } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -11,6 +11,7 @@ import * as sounds from '../utils/soundManager';
 import { Container, Item } from '../database/types';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { handleScannerError } from '../utils/errorHandler';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ScannerProps {
     onClose: () => void;
@@ -18,197 +19,166 @@ interface ScannerProps {
     isActive: boolean;
 }
 
+interface ScanState {
+    mode: 'container' | 'item';
+    currentContainer: Container | null;
+    history: Array<{ name: string; success: boolean }>;
+    lastResult: { success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null;
+}
+
+const INITIAL_STATE: ScanState = {
+    mode: 'container',
+    currentContainer: null,
+    history: [],
+    lastResult: null
+};
+
 const SCAN_DELAY = 500;
 const MAX_HISTORY_ITEMS = 5;
 
 const isWeb = Platform.OS === 'web';
 
 export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
-    const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-    const [scanned, setScanned] = useState(false);
-    const [currentContainer, setCurrentContainer] = useState<Container | null>(null);
-    const [scanHistory, setScanHistory] = useState<Array<{ name: string; success: boolean }>>([]);
-    const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
-    const [lastScanResult, setLastScanResult] = useState<{ success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null>(null);
+    const [permission, requestPermission] = useCameraPermissions();
+    const [scanState, setScanState] = useState<ScanState>(INITIAL_STATE);
     const [fadeAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-    const [permission, requestPermission] = useCameraPermissions();
+    const queryClient = useQueryClient();
 
-    useEffect(() => {
-        let mounted = true;
-
-        (async () => {
-            try {
-                const permission = await requestPermission();
-                if (mounted) {
-                    setHasPermission(permission?.granted ?? false);
-
-                    if (!permission?.granted) {
-                        handleScannerError(
-                            new Error('Permission de caméra non accordée'),
-                            'Scanner.requestPermissions'
-                        );
-                    }
-                }
-            } catch (error) {
-                if (mounted) {
-                    handleScannerError(
-                        error as Error,
-                        'Scanner.requestPermissions'
-                    );
-                    setHasPermission(false);
-                }
-            }
-        })();
-
-        return () => {
-            mounted = false;
-            setScanned(false);
-            setCurrentContainer(null);
-            setScanHistory([]);
-            setScanMode('container');
-            setLastScanResult(null);
-            fadeAnim.setValue(0);
-        };
+    const resetScanner = useCallback(() => {
+        setScanState(INITIAL_STATE);
     }, []);
 
-    // Effet pour gérer l'activation/désactivation de la caméra
-    useEffect(() => {
-        if (!isActive) {
-            setScanned(false);
-            setCurrentContainer(null);
-            setScanHistory([]);
-            setScanMode('container');
-            setLastScanResult(null);
-            return;
-        }
-
-        // Réinitialiser les permissions à chaque activation
-        (async () => {
-            try {
-                const permission = await requestPermission();
-                setHasPermission(permission?.granted ?? false);
-            } catch (error) {
-                setHasPermission(false);
-                handleScannerError(error as Error, 'Scanner.checkPermissions');
-            }
-        })();
-    }, [isActive]);
-
-    // Animation pour le feedback
-    const animateFeedback = (success: boolean) => {
+    const handleFeedback = useCallback(async (success: boolean) => {
+        // Animation
         fadeAnim.setValue(1);
         Animated.timing(fadeAnim, {
             toValue: 0,
             duration: 2000,
             useNativeDriver: true,
         }).start();
-    };
 
-    const handleContainerScan = async (qrData: string) => {
+        // Haptic feedback
+        await haptics.vibrate(success ? haptics.SUCCESS_PATTERN : haptics.ERROR_PATTERN);
+        // Sound feedback
+        await sounds.play(success ? 'success' : 'error');
+    }, [fadeAnim]);
+
+    const updateScanState = useCallback((updates: Partial<ScanState> | ((prev: ScanState) => Partial<ScanState>)) => {
+        setScanState(prev => ({
+            ...prev,
+            ...(typeof updates === 'function' ? updates(prev) : updates)
+        }));
+    }, []);
+
+    const handleContainerScan = useCallback(async (qrData: string) => {
         try {
             const container = await getContainerByQRCode(qrData);
             if (container) {
-                setCurrentContainer(container);
-                setScanMode('item');
-                setLastScanResult({
-                    success: true,
-                    message: `Container "${container.name}" sélectionné`,
-                    type: 'container',
-                    data: container
+                updateScanState({
+                    mode: 'item',
+                    currentContainer: container,
+                    lastResult: {
+                        success: true,
+                        message: `Container "${container.name}" sélectionné`,
+                        type: 'container',
+                        data: container
+                    }
                 });
-                await haptics.vibrate(haptics.SUCCESS_PATTERN);
-                await sounds.playSuccessSound();
+                await handleFeedback(true);
             } else {
-                setLastScanResult({
-                    success: false,
-                    message: "QR code invalide ou container non trouvé",
-                    type: 'container'
+                updateScanState({
+                    lastResult: {
+                        success: false,
+                        message: "QR code invalide ou container non trouvé",
+                        type: 'container'
+                    }
                 });
-                await haptics.vibrate(haptics.ERROR_PATTERN);
-                await sounds.playErrorSound();
+                await handleFeedback(false);
             }
         } catch (error) {
-            setLastScanResult({
-                success: false,
-                message: "Erreur lors du scan du container",
-                type: 'container'
+            handleScannerError(error as Error, 'Scanner.handleContainerScan');
+            updateScanState({
+                lastResult: {
+                    success: false,
+                    message: "Erreur lors du scan du container",
+                    type: 'container'
+                }
             });
-            await haptics.vibrate(haptics.ERROR_PATTERN);
-            await sounds.playErrorSound();
+            await handleFeedback(false);
         }
-    };
+    }, [handleFeedback, updateScanState]);
 
-    const handleItemScan = async (qrData: string) => {
-        if (!currentContainer) return;
+    const handleItemScan = useCallback(async (qrData: string) => {
+        if (!scanState.currentContainer) return;
 
         try {
             const item = await getItemByQRCode(qrData);
             if (item) {
-                // Mettre à jour l'item avec le nouveau container
-                await updateItem(item.id!, {
+                const updateData = {
                     ...item,
-                    containerId: currentContainer.id,
+                    containerId: scanState.currentContainer.id,
                     updatedAt: new Date().toISOString()
-                });
+                };
 
-                setScanHistory(prev => [{
-                    name: item.name,
-                    success: true
-                }, ...prev].slice(0, 5));
+                await updateItem(item.id!, updateData);
+                
+                // Mise à jour optimiste de l'historique
+                updateScanState(prev => ({
+                    ...prev,
+                    history: [{ name: item.name, success: true }, ...prev.history].slice(0, 5),
+                    lastResult: {
+                        success: true,
+                        message: `Article "${item.name}" assigné au container`,
+                        type: 'item',
+                        data: item
+                    }
+                }));
 
-                setLastScanResult({
-                    success: true,
-                    message: `Article "${item.name}" assigné au container`,
-                    type: 'item',
-                    data: item
-                });
-                await haptics.vibrate(haptics.SUCCESS_PATTERN);
-                await sounds.playSuccessSound();
+                // Invalider les requêtes pour forcer le rechargement
+                queryClient.invalidateQueries({ queryKey: ['items'] });
+                queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                
+                await handleFeedback(true);
                 triggerRefresh();
             } else {
-                setLastScanResult({
-                    success: false,
-                    message: "Article non trouvé",
-                    type: 'item'
-                });
-                await haptics.vibrate(haptics.ERROR_PATTERN);
-                await sounds.playErrorSound();
+                updateScanState(prev => ({
+                    ...prev,
+                    lastResult: {
+                        success: false,
+                        message: "Article non trouvé",
+                        type: 'item'
+                    }
+                }));
+                await handleFeedback(false);
             }
         } catch (error) {
-            setLastScanResult({
-                success: false,
-                message: "Erreur lors du scan de l'article",
-                type: 'item'
-            });
-            await haptics.vibrate(haptics.ERROR_PATTERN);
-            await sounds.playErrorSound();
+            handleScannerError(error as Error, 'Scanner.handleItemScan');
+            updateScanState(prev => ({
+                ...prev,
+                lastResult: {
+                    success: false,
+                    message: "Erreur lors du scan de l'article",
+                    type: 'item'
+                }
+            }));
+            await handleFeedback(false);
         }
-    };
+    }, [scanState.currentContainer, handleFeedback, updateScanState, queryClient, triggerRefresh]);
 
-    const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    const handleBarCodeScanned = useCallback(async ({ type, data }: { type: string; data: string }) => {
+        if (!isActive) return;
+
         try {
-            if (!isActive) return;
-
-            let scanData;
-            try {
-                scanData = JSON.parse(data);
-            } catch {
-                handleScannerError(
-                    new Error('QR code invalide'),
-                    'Scanner.handleBarCodeScanned'
-                );
-                onScan({ success: false, message: 'Format de QR code invalide' });
-                return;
+            const scanData = JSON.parse(data);
+            if (!scanData.type || !scanData.qrCode) {
+                throw new Error('Données de QR code invalides ou incomplètes');
             }
 
-            if (!scanData.type || !scanData.qrCode) {
-                handleScannerError(
-                    new Error('Données de QR code incomplètes'),
-                    'Scanner.handleBarCodeScanned'
-                );
-                onScan({ success: false, message: 'Données de QR code incomplètes' });
-                return;
+            if (scanState.mode === 'container') {
+                await handleContainerScan(data);
+            } else {
+                await handleItemScan(data);
             }
 
             onScan({
@@ -218,37 +188,39 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 data: scanData
             });
         } catch (error) {
-            handleScannerError(
-                error as Error,
-                'Scanner.handleBarCodeScanned'
-            );
+            handleScannerError(error as Error, 'Scanner.handleBarCodeScanned');
             onScan({ success: false, message: 'Erreur lors du scan' });
         }
-    };
+    }, [isActive, scanState.mode, handleContainerScan, handleItemScan, onScan]);
 
-    const resetScanner = () => {
-        setCurrentContainer(null);
-        setScanHistory([]);
-        setScanMode('container');
-        setLastScanResult(null);
-        setScanned(false);
-    };
+    useEffect(() => {
+        if (!isActive) {
+            resetScanner();
+            return;
+        }
 
-    if (hasPermission === null) {
+        const checkPermissions = async () => {
+            try {
+                await requestPermission();
+            } catch (error) {
+                handleScannerError(error as Error, 'Scanner.checkPermissions');
+            }
+        };
+
+        checkPermissions();
+    }, [isActive, resetScanner, requestPermission]);
+
+    if (!permission?.granted) {
         return (
             <View style={styles.container}>
-                <Text style={styles.text}>Demande d'accès à la caméra...</Text>
-            </View>
-        );
-    }
-
-    if (hasPermission === false) {
-        return (
-            <View style={styles.container}>
-                <Text style={styles.text}>Pas d'accès à la caméra</Text>
-                <TouchableOpacity onPress={onClose} style={styles.button}>
-                    <Text style={styles.buttonText}>Fermer</Text>
-                </TouchableOpacity>
+                <Text style={styles.text}>
+                    {permission === null ? 'Demande d\'accès à la caméra...' : 'Pas d\'accès à la caméra'}
+                </Text>
+                {permission?.granted === false && (
+                    <TouchableOpacity onPress={onClose} style={styles.button}>
+                        <Text style={styles.buttonText}>Fermer</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         );
     }
@@ -260,22 +232,18 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     <TouchableOpacity 
                         style={styles.closeButton}
                         onPress={() => {
-                            setScanned(false);
-                            setCurrentContainer(null);
-                            setScanHistory([]);
-                            setScanMode('container');
-                            setLastScanResult(null);
+                            resetScanner();
                             onClose();
                         }}
                     >
                         <MaterialIcons name="close" size={24} color="#fff" />
                     </TouchableOpacity>
                     <Text style={styles.containerText}>
-                        {scanMode === 'container'
+                        {scanState.mode === 'container'
                             ? '📦 Scannez un container'
-                            : `📱 Scanner des articles dans: ${currentContainer?.name}`}
+                            : `📱 Scanner des articles dans: ${scanState.currentContainer?.name}`}
                     </Text>
-                    {currentContainer && (
+                    {scanState.currentContainer && (
                         <View style={styles.actionButtons}>
                             <TouchableOpacity
                                 style={styles.resetButton}
@@ -288,8 +256,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                             <TouchableOpacity
                                 style={styles.validateButton}
                                 onPress={() => {
-                                    haptics.vibrate(haptics.SUCCESS_PATTERN);
-                                    sounds.playSuccessSound();
+                                    handleFeedback(true);
                                     resetScanner();
                                 }}
                             >
@@ -301,43 +268,41 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 </View>
             </View>
 
-            {/* Camera View */}
-            {isActive && hasPermission && (
+            {isActive && permission?.granted && (
                 <CameraView
+                    key={isActive ? 'active' : 'inactive'}
                     style={[StyleSheet.absoluteFillObject, styles.camera]}
                     facing="back"
                     barcodeScannerSettings={{
                         barcodeTypes: ['qr'],
                     }}
-                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                    onBarcodeScanned={handleBarCodeScanned}
                 />
             )}
 
-            {/* Feedback Panel */}
-            {lastScanResult && (
+            {scanState.lastResult && (
                 <Animated.View
                     style={[
                         styles.feedbackPanel,
                         { opacity: fadeAnim },
-                        lastScanResult.success ? styles.successFeedback : styles.errorFeedback
+                        scanState.lastResult.success ? styles.successFeedback : styles.errorFeedback
                     ]}
                 >
                     <MaterialIcons
-                        name={lastScanResult.success ? "check-circle" : "error"}
+                        name={scanState.lastResult.success ? "check-circle" : "error"}
                         size={24}
                         color="#fff"
                     />
-                    <Text style={styles.feedbackText}>{lastScanResult.message}</Text>
+                    <Text style={styles.feedbackText}>{scanState.lastResult.message}</Text>
                 </Animated.View>
             )}
 
-            {/* Scan History */}
-            {scanHistory.length > 0 && (
+            {scanState.history.length > 0 && (
                 <View style={styles.historyPanel}>
                     <Text style={styles.historyTitle}>
                         Derniers articles scannés:
                     </Text>
-                    {scanHistory.map((item, index) => (
+                    {scanState.history.map((item, index) => (
                         <View key={index} style={styles.historyItem}>
                             <MaterialIcons
                                 name={item.success ? "check-circle" : "error"}
@@ -348,18 +313,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                         </View>
                     ))}
                 </View>
-            )}
-
-            {/* Scan Button */}
-            {scanned && (
-                <TouchableOpacity
-                    style={styles.rescanButton}
-                    onPress={() => setScanned(false)}
-                >
-                    <Text style={styles.rescanButtonText}>
-                        Scanner {scanMode === 'container' ? 'un container' : 'un article'}
-                    </Text>
-                </TouchableOpacity>
             )}
         </View>
     );

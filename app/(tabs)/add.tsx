@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'expo-router';
@@ -10,34 +10,61 @@ import { useRefreshStore } from '../../src/store/refreshStore';
 import { Container, Category } from '../../src/database/types';
 
 export default function AddScreen() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [containers, setContainers] = useState<Container[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const dispatch = useDispatch();
   const router = useRouter();
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
+      setLoading(true);
+      setError(null);
       const [loadedContainers, loadedCategories] = await Promise.all([
         getContainers(),
         getCategories()
       ]);
-      setContainers(loadedContainers);
-      setCategories(loadedCategories);
-      dispatch(setItems(await getItems()));
+      setContainers(loadedContainers || []);
+      setCategories(loadedCategories || []);
+      const items = await getItems();
+      dispatch(setItems(items || []));
     } catch (error) {
       console.error('Error loading data:', error);
+      setError('Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [dispatch]);
 
   useEffect(() => {
     loadData();
-  }, [refreshTimestamp]);
+  }, [refreshTimestamp, loadData]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Ajouter un article</Text>
         <ItemForm 
           containers={containers} 
           categories={categories}
@@ -52,16 +79,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    paddingTop: 0,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 0,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 16,
-  }
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#FF3B30',
+    textAlign: 'center',
+    fontSize: 16,
+  },
 });
