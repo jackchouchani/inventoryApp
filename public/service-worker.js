@@ -1,58 +1,53 @@
-const CACHE_NAME = 'inventory-app-v1';
-const OFFLINE_URL = '/offline.html';
-
-const STATIC_RESOURCES = [
+const CACHE_NAME = 'inventory-app-cache-v1';
+const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/static/js/main.js',
+  '/static/css/main.css',
   '/manifest.json',
-  // '/static/js/main.js',
-  // '/static/css/main.css',
-  // '/favicon.ico',
-  // '/icon-192.png',
-  // '/icon-512.png',
-  '/offline.html'
+  '/favicon.ico',
+  '/logo192.png',
+  '/logo512.png'
 ];
 
 // Précache lors de l'installation
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_RESOURCES))
+      .then((cache) => cache.addAll(STATIC_ASSETS))
   );
 });
 
 // Stratégie de cache : Network First avec fallback sur le cache
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match('/'))
-    );
-  } else {
-    event.respondWith(
-      caches.match(event.request)
-        .then((response) => {
-          if (response) {
-            return response; // Retourne la réponse du cache si elle existe
-          }
-          return fetch(event.request)
-            .then((response) => {
-              if (!response || response.status !== 200) {
-                return response;
-              }
-              // Mettre en cache la nouvelle ressource
-              const responseToCache = response.clone();
-              caches.open(CACHE_NAME)
-                .then((cache) => {
-                  cache.put(event.request, responseToCache);
-                });
-              return response;
-            })
-            .catch(() => {
-              return caches.match('/offline.html');
-            });
-        })
-    );
+  // Ne pas mettre en cache les requêtes POST
+  if (event.request.method !== 'GET') {
+    return;
   }
+
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        if (response) {
+          return response;
+        }
+
+        return fetch(event.request).then((response) => {
+          // Ne mettre en cache que les réponses valides
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+
+          return response;
+        });
+      })
+  );
 });
 
 // Nettoyage des anciens caches
@@ -61,8 +56,8 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
-          .map((cacheName) => caches.delete(cacheName))
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
       );
     })
   );

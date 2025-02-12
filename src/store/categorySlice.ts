@@ -1,39 +1,81 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Category, addCategory } from '../database/database';
+import { createSlice, createEntityAdapter, PayloadAction, createSelector } from '@reduxjs/toolkit';
+import { Category } from '../database/database';
+import { RootState } from './store';
 
-interface CategoryState {
-  categories: Category[];
-}
+// Type étendu pour garantir un ID non-null
+export type CategoryWithId = Omit<Category, 'id'> & { id: number };
 
-const initialState: CategoryState = {
-  categories: []
-};
+// Création de l'adaptateur pour les catégories
+export const categoriesAdapter = createEntityAdapter<CategoryWithId>({
+  sortComparer: (a: CategoryWithId, b: CategoryWithId) => a.name.localeCompare(b.name),
+});
+
+// État initial avec l'adaptateur
+const initialState = categoriesAdapter.getInitialState({
+  status: 'idle' as 'idle' | 'loading' | 'succeeded' | 'failed',
+  error: null as string | null,
+});
 
 const categorySlice = createSlice({
   name: 'categories',
   initialState,
   reducers: {
     setCategories: (state, action: PayloadAction<Category[]>) => {
-      state.categories = action.payload;
+      const categoriesWithId = action.payload.filter((category): category is CategoryWithId => category.id !== undefined);
+      categoriesAdapter.setAll(state, categoriesWithId);
     },
     addNewCategory: (state, action: PayloadAction<Category>) => {
-      state.categories.push(action.payload);
+      if (action.payload.id) {
+        categoriesAdapter.addOne(state, action.payload as CategoryWithId);
+      }
     },
     editCategory: (state, action: PayloadAction<{ id: number; name: string }>) => {
       const { id, name } = action.payload;
-      const category = state.categories.find((cat: Category) => cat.id === id);
-      if (category) {
-        category.name = name;
-      }
+      categoriesAdapter.updateOne(state, {
+        id,
+        changes: { name }
+      });
     },
     deleteCategory: (state, action: PayloadAction<number>) => {
-      state.categories = state.categories.filter((cat: Category) => cat.id !== action.payload);
+      categoriesAdapter.removeOne(state, action.payload);
     },
     resetCategories: (state) => {
-      state.categories = [];
+      categoriesAdapter.removeAll(state);
     }
   }
 });
+
+// Sélecteurs de base
+export const {
+  selectAll: selectAllCategories,
+  selectById: selectCategoryById,
+  selectIds: selectCategoryIds,
+  selectTotal: selectTotalCategories,
+} = categoriesAdapter.getSelectors<RootState>((state) => state.categories);
+
+// Sélecteurs mémorisés
+export const selectCategoriesWithItemCount = createSelector(
+  [selectAllCategories, (state: RootState) => state.items],
+  (categories, itemsState) => {
+    return categories.map(category => ({
+      ...category,
+      itemCount: Object.values(itemsState.entities || {}).filter(
+        item => item?.categoryId === category.id
+      ).length
+    }));
+  }
+);
+
+export const selectCategoryByName = createSelector(
+  [selectAllCategories, (state, name: string) => name.toLowerCase()],
+  (categories, name) => categories.find(
+    category => category.name.toLowerCase() === name
+  )
+);
+
+// Ajout des nouveaux sélecteurs
+export const selectCategoriesStatus = (state: RootState) => state.categories.status;
+export const selectCategoriesError = (state: RootState) => state.categories.error;
 
 export const { setCategories, addNewCategory, editCategory, deleteCategory, resetCategories } = categorySlice.actions;
 export default categorySlice.reducer;

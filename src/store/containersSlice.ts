@@ -1,40 +1,88 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createEntityAdapter, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { Container } from '../database/database';
+import { RootState } from './store';
 
-interface ContainersState {
-  containers: Container[];
-  loading: boolean;
-  error: string | null;
-  status: 'idle' | 'loading' | 'succeeded' | 'failed';
-}
+// Type étendu pour garantir un ID non-null
+export type ContainerWithId = Omit<Container, 'id'> & { id: number };
 
-export type { ContainersState };
+// Création de l'adaptateur pour les containers
+export const containersAdapter = createEntityAdapter<ContainerWithId>({
+  sortComparer: (a: ContainerWithId, b: ContainerWithId) => a.number - b.number,
+});
 
-const initialState: ContainersState = {
-  containers: [],
+// État initial avec l'adaptateur
+const initialState = containersAdapter.getInitialState({
+  status: 'idle',
+  error: null as string | null,
   loading: false,
-  error: null,
-  status: 'idle'
-};
+});
+
+export type ContainersState = typeof initialState;
 
 const containersSlice = createSlice({
   name: 'containers',
   initialState,
   reducers: {
     setContainers: (state, action: PayloadAction<Container[]>) => {
-      state.containers = action.payload;
+      const containersWithId = action.payload.filter((container): container is ContainerWithId => container.id !== undefined);
+      containersAdapter.setAll(state, containersWithId);
     },
     addContainer: (state, action: PayloadAction<Container>) => {
-      state.containers.push(action.payload);
+      if (action.payload.id) {
+        containersAdapter.addOne(state, action.payload as ContainerWithId);
+      }
     },
     updateContainer: (state, action: PayloadAction<Container>) => {
-      const index = state.containers.findIndex(c => c.id === action.payload.id);
-      if (index !== -1) {
-        state.containers[index] = action.payload;
+      if (action.payload.id) {
+        containersAdapter.updateOne(state, {
+          id: action.payload.id,
+          changes: action.payload,
+        });
       }
+    },
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.loading = action.payload;
+    },
+    setError: (state, action: PayloadAction<string | null>) => {
+      state.error = action.payload;
+    },
+    setStatus: (state, action: PayloadAction<'idle' | 'loading' | 'succeeded' | 'failed'>) => {
+      state.status = action.payload;
     }
   }
 });
 
-export const { setContainers, addContainer, updateContainer } = containersSlice.actions;
+// Sélecteurs de base
+export const {
+  selectAll: selectAllContainers,
+  selectById: selectContainerById,
+  selectIds: selectContainerIds,
+  selectTotal: selectTotalContainers,
+} = containersAdapter.getSelectors<RootState>((state) => state.containers);
+
+// Sélecteurs mémorisés
+export const selectContainerWithItems = createSelector(
+  [selectAllContainers, (state: RootState) => state.items],
+  (containers, itemsState) => {
+    return containers.map(container => ({
+      ...container,
+      items: Object.values(itemsState.entities || {}).filter(
+        item => item?.containerId === container.id
+      )
+    }));
+  }
+);
+
+export const selectContainerByNumber = createSelector(
+  [selectAllContainers, (state, number: number) => number],
+  (containers, number) => containers.find(
+    container => container.number === number
+  )
+);
+
+export const selectContainersStatus = (state: RootState) => state.containers.status;
+export const selectContainersError = (state: RootState) => state.containers.error;
+export const selectContainersLoading = (state: RootState) => state.containers.loading;
+
+export const { setContainers, addContainer, updateContainer, setLoading, setError, setStatus } = containersSlice.actions;
 export default containersSlice.reducer;

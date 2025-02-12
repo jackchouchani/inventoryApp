@@ -1,17 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { Item, Container, Category } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { ItemEditForm } from './ItemEditForm';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '../store/store';
+import { selectAllItems, selectFilteredItems, selectItemsStatistics } from '../store/itemsSlice';
+import { selectAllCategories } from '../store/categorySlice';
+import { selectAllContainers, selectContainerById } from '../store/containersSlice';
+import { useInventoryData } from '../hooks/useInventoryData';
+import { updateItemStatus, moveItem } from '../store/itemsThunks';
+import { AppDispatch } from '../store/store';
+import { useAnimatedComponents, ANIMATION_PRESETS } from '../hooks/useAnimatedComponents';
+import { offlineSyncManager } from '../services/offlineSync';
+import Animated from 'react-native-reanimated';
+import ItemCard from './ItemCard';
 
 interface ItemListProps {
-  items: Item[];
-  containers: Container[];
-  categories: Category[];
   onMarkAsSold: (itemId: number) => void;
   onMarkAsAvailable: (itemId: number) => void;
   onMoveItem?: (itemId: number, newContainerId: number) => void;
+  onItemPress?: (item: Item) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoading?: boolean;
 }
 
 interface Filters {
@@ -23,7 +36,47 @@ interface Filters {
   maxPrice: string;
 }
 
-export const ItemList: React.FC<ItemListProps> = ({ items, containers, categories, onMarkAsSold, onMarkAsAvailable, onMoveItem }) => {
+const ItemListModal: React.FC<{
+  selectedItem: Item | null;
+  containers: Container[];
+  categories: Category[];
+  onSuccess: () => void;
+  onCancel: () => void;
+}> = ({ selectedItem, containers, categories, onSuccess, onCancel }) => {
+  return (
+    <Modal
+      visible={!!selectedItem}
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
+      {selectedItem && (
+        <ItemEditForm
+          item={selectedItem}
+          containers={containers}
+          categories={categories}
+          onSuccess={onSuccess}
+          onCancel={onCancel}
+        />
+      )}
+    </Modal>
+  );
+};
+
+export const ItemList: React.FC<ItemListProps> = ({
+  onMarkAsSold,
+  onMarkAsAvailable,
+  onMoveItem,
+  onItemPress,
+  onLoadMore,
+  hasMore = false,
+  isLoading = false,
+}) => {
+  // Hooks d'animation - Déplacés au niveau racine du composant
+  const { useFadeAnimation, useScaleAnimation } = useAnimatedComponents();
+  const fadeAnimation = useFadeAnimation(0);
+  const scaleAnimation = useScaleAnimation(1);
+
+  // États - Tous les useState au début
   const [filters, setFilters] = useState<Filters>({
     search: '',
     categoryId: null,
@@ -32,133 +85,191 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
     minPrice: '',
     maxPrice: '',
   });
-
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
+  // Hooks Redux
+  const dispatch = useDispatch<AppDispatch>();
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  // Sélecteurs Redux avec valeurs par défaut
+  const items = useSelector(selectAllItems) || [];
+  const categories = useSelector(selectAllCategories) || [];
+  const containers = useSelector(selectAllContainers) || [];
+  const statistics = useSelector(selectItemsStatistics);
 
-  useEffect(() => {
-    // Le composant se rafraîchira automatiquement quand refreshTimestamp change
-  }, [refreshTimestamp, items]);
-
-  const handleStatusToggle = async (itemId: number, currentStatus: string) => {
-    if (currentStatus === 'available') {
-      await onMarkAsSold(itemId);
-    } else {
-      await onMarkAsAvailable(itemId);
-    }
-    triggerRefresh();
-  };
-
-  const filteredItems = items.filter((item: Item) => {
-    const searchLower = filters.search.toLowerCase();
-    const matchesSearch = 
-      item.name.toLowerCase().includes(searchLower) ||
-      (item.description && item.description.toLowerCase().includes(searchLower));
-
-    const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
-    const matchesContainer = 
-      !filters.containerId ? true : 
-      filters.containerId === 'none' ? !item.containerId :
-      item.containerId === filters.containerId;
-    const matchesStatus = filters.status === 'all' || item.status === filters.status;
-    
-    const minPrice = parseFloat(filters.minPrice);
-    const maxPrice = parseFloat(filters.maxPrice);
-    const matchesPrice = 
-      (!minPrice || item.sellingPrice >= minPrice) &&
-      (!maxPrice || item.sellingPrice <= maxPrice);
-
-    return matchesSearch && matchesCategory && matchesContainer && 
-           matchesStatus && matchesPrice;
+  // Hook d'inventaire avec valeurs par défaut
+  const {
+    items: paginatedItems = [],
+    categories: paginatedCategories = [],
+    containers: paginatedContainers = [],
+    isLoading: dataLoading = false,
+    error = null,
+    hasMore: dataHasMore = false,
+    fetchNextPage,
+    refetch
+  } = useInventoryData({
+    search: filters.search,
+    categoryId: filters.categoryId ?? undefined,
+    containerId: filters.containerId ?? undefined,
+    status: filters.status === 'all' ? undefined : filters.status,
+    minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+    maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
   });
 
-  const getContainerName = (containerId: number | null) => {
-    if (!containerId) return 'Non assigné';
-    const container = containers.find(c => c.id === containerId);
-    return container ? container.name : 'Non assigné';
-  };
+  // Callbacks mémorisés
+  const handleSearchChange = useCallback((text: string) => {
+    setFilters(prev => ({ ...prev, search: text }));
+  }, []);
 
-  const getCategoryName = (categoryId: number | null) => {
-    if (!categoryId) return 'Sans catégorie';
-    const category = categories.find(c => c.id === categoryId);
-    return category ? category.name : 'Sans catégorie';
-  };
+  const handleCategoryFilter = useCallback((categoryId: number | null) => {
+    setFilters(prev => ({
+      ...prev,
+      categoryId: prev.categoryId === categoryId ? null : categoryId
+    }));
+  }, []);
 
-  const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity 
-      style={styles.itemContainer}
-      onPress={() => setSelectedItem(item)}
-    >
-      <View style={styles.itemHeader}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Prix: </Text>
-          <Text style={styles.price}>
-            {typeof item.sellingPrice === 'number' ? `${item.sellingPrice.toFixed(2)}€` : '0.00€'}
-          </Text>
-        </View>
-      </View>
+  const handleContainerFilter = useCallback((containerId: 'none' | number | null) => {
+    setFilters(prev => ({
+      ...prev,
+      containerId: prev.containerId === containerId ? null : containerId
+    }));
+  }, []);
 
-      <View style={styles.itemDetails}>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="category" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            {getCategoryName(item.categoryId ?? null)}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="inbox" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            {getContainerName(item.containerId ?? null)}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <MaterialIcons name="euro" size={16} color="#666" />
-          <Text style={styles.detailText}>
-            Prix d'achat: {typeof item.purchasePrice === 'number' ? `${item.purchasePrice.toFixed(2)}€` : '0.00€'}
-          </Text>
-        </View>
-      </View>
+  const handleStatusFilter = useCallback((status: 'all' | 'available' | 'sold') => {
+    setFilters(prev => ({ ...prev, status }));
+  }, []);
 
-      <View style={styles.actionButtons}>
-        {item.status === 'available' ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.soldButton]}
-            onPress={() => {
-              if (typeof item.id === 'number') {
-                onMarkAsSold(item.id);
-              }
-            }}
-          >
-            <MaterialIcons name="shopping-cart" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Marquer comme vendu</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.availableButton]}
-            onPress={() => {
-              if (typeof item.id === 'number') {
-                onMarkAsAvailable(item.id);
-              }
-            }}
-          >
-            <MaterialIcons name="restore" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Remettre en stock</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const handleMinPriceChange = useCallback((value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      minPrice: value
+    }));
+  }, []);
 
-  const handleEditSuccess = () => {
+  const handleMaxPriceChange = useCallback((value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      maxPrice: value
+    }));
+  }, []);
+
+  const handleStatusToggle = useCallback(async (itemId: number, currentStatus: string) => {
+    try {
+      await dispatch(updateItemStatus({ 
+        itemId, 
+        status: currentStatus === 'available' ? 'sold' : 'available' 
+      }));
+      refetch();
+    } catch (error) {
+      console.error('Erreur lors du changement de statut:', error);
+    }
+  }, [dispatch, refetch]);
+
+  const handleModalCancel = useCallback(() => {
     setSelectedItem(null);
-    triggerRefresh();
-  };
+  }, []);
 
+  const handleModalSuccess = useCallback(() => {
+    setSelectedItem(null);
+    refetch();
+  }, [refetch]);
+
+  const handleLoadMore = useCallback(() => {
+    if (dataHasMore) {
+      fetchNextPage();
+    }
+  }, [dataHasMore, fetchNextPage]);
+
+  const handleItemPress = useCallback((item: Item) => {
+    setSelectedItem(item);
+  }, []);
+
+  // Effets
+  useEffect(() => {
+    if (paginatedItems.length > 0) {
+      setSelectedItem(null);
+    }
+  }, [paginatedItems]);
+
+  useEffect(() => {
+    const applyFilters = () => {
+      if (filters.search || filters.categoryId || filters.containerId || filters.status !== 'all' || filters.minPrice || filters.maxPrice) {
+        refetch();
+      }
+    };
+    applyFilters();
+  }, [filters, refetch]);
+
+  useEffect(() => {
+    const syncData = async () => {
+      const isStale = await offlineSyncManager.isDataStale();
+      if (isStale) {
+        await offlineSyncManager.saveOfflineData({
+          items: paginatedItems,
+          categories,
+          containers
+        });
+      }
+    };
+    syncData();
+  }, [paginatedItems, categories, containers]);
+
+  // Mémoisation des props de la FlatList
+  const flatListProps = useMemo(() => ({
+    data: paginatedItems,
+    renderItem: ({ item }: { item: Item }) => (
+      <ItemCard
+        item={item}
+        onPress={() => handleItemPress(item)}
+        fadeAnimation={fadeAnimation}
+        scaleAnimation={scaleAnimation}
+      />
+    ),
+    keyExtractor: (item: Item) => item.id?.toString() || '',
+    style: styles.list,
+    onEndReached: handleLoadMore,
+    onEndReachedThreshold: 0.5,
+    ListFooterComponent: dataHasMore ? (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#007AFF" />
+      </View>
+    ) : null,
+    initialNumToRender: 10,
+    maxToRenderPerBatch: 10,
+    windowSize: 5,
+    removeClippedSubviews: true,
+    maintainVisibleContentPosition: {
+      minIndexForVisible: 0,
+    }
+  }), [paginatedItems, handleItemPress, handleLoadMore, dataHasMore, fadeAnimation, scaleAnimation]);
+
+  // Rendu conditionnel pour le chargement
+  if (dataLoading && (!paginatedItems || paginatedItems.length === 0)) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // Rendu conditionnel pour les erreurs
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error.toString()}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton} 
+          onPress={() => { refetch(); }}
+        >
+          <Text style={styles.retryButtonText}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Rendu principal
   return (
     <View style={styles.container}>
       <View style={styles.searchBar}>
@@ -166,7 +277,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           style={styles.searchInput}
           placeholder="Rechercher des articles..."
           value={filters.search}
-          onChangeText={(text) => setFilters({ ...filters, search: text })}
+          onChangeText={handleSearchChange}
         />
         <TouchableOpacity
           style={styles.filterButton}
@@ -181,19 +292,14 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           <View style={styles.filterSection}>
             <Text style={styles.filterLabel}>Catégorie</Text>
             <View style={styles.filterOptions}>
-              {categories.map((category) => (
+              {paginatedCategories?.map((category) => (
                 <TouchableOpacity
                   key={category.id}
                   style={[
                     styles.filterOption,
                     filters.categoryId === category.id && styles.filterOptionSelected,
                   ]}
-                  onPress={() =>
-                    setFilters({
-                      ...filters,
-                      categoryId: filters.categoryId === category.id ? null : category.id ?? null,
-                    })
-                  }
+                  onPress={() => handleCategoryFilter(category.id ?? null)}
                 >
                   <Text style={styles.filterOptionText}>{category.name}</Text>
                 </TouchableOpacity>
@@ -209,29 +315,18 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                   styles.filterOption,
                   filters.containerId === 'none' && styles.filterOptionSelected,
                 ]}
-                onPress={() =>
-                  setFilters({
-                    ...filters,
-                    containerId: filters.containerId === 'none' ? null : 'none',
-                  })
-                }
+                onPress={() => handleContainerFilter('none')}
               >
                 <Text style={styles.filterOptionText}>Sans container</Text>
               </TouchableOpacity>
-              {containers.map((container) => (
+              {paginatedContainers?.map((container) => (
                 <TouchableOpacity
                   key={container.id}
                   style={[
                     styles.filterOption,
-                    filters.containerId === container.id &&
-                      styles.filterOptionSelected,
+                    filters.containerId === container.id && styles.filterOptionSelected,
                   ]}
-                  onPress={() =>
-                    setFilters({
-                      ...filters,
-                        containerId: filters.containerId === container.id ? null : container.id ?? null,
-                    })
-                  }
+                  onPress={() => handleContainerFilter(container.id ?? null)}
                 >
                   <Text style={styles.filterOptionText}>{container.name}</Text>
                 </TouchableOpacity>
@@ -253,10 +348,7 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
                     styles.filterOption,
                     filters.status === status.value && styles.filterOptionSelected,
                   ]}
-                  onPress={() => setFilters({ 
-                    ...filters, 
-                    status: status.value as Filters['status'] 
-                  })}
+                  onPress={() => handleStatusFilter(status.value as 'all' | 'available' | 'sold')}
                 >
                   <Text style={styles.filterOptionText}>{status.label}</Text>
                 </TouchableOpacity>
@@ -265,21 +357,21 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
           </View>
 
           <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Price Range</Text>
+            <Text style={styles.filterLabel}>Prix</Text>
             <View style={styles.priceInputs}>
               <TextInput
                 style={styles.priceInput}
                 placeholder="Min"
                 value={filters.minPrice}
-                onChangeText={(text) => setFilters({ ...filters, minPrice: text })}
+                onChangeText={handleMinPriceChange}
                 keyboardType="numeric"
               />
-              <Text>-</Text>
+              <Text style={styles.priceSeparator}>-</Text>
               <TextInput
                 style={styles.priceInput}
                 placeholder="Max"
                 value={filters.maxPrice}
-                onChangeText={(text) => setFilters({ ...filters, maxPrice: text })}
+                onChangeText={handleMaxPriceChange}
                 keyboardType="numeric"
               />
             </View>
@@ -287,46 +379,15 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
         </View>
       )}
 
-      <FlatList
-        data={filteredItems}
-        renderItem={renderItem}
-        keyExtractor={(item) => `item-${item.id}-${item.updatedAt}`}
-        contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      <FlatList {...flatListProps} />
+
+      <ItemListModal
+        selectedItem={selectedItem}
+        containers={paginatedContainers ?? []}
+        categories={paginatedCategories ?? []}
+        onSuccess={handleModalSuccess}
+        onCancel={handleModalCancel}
       />
-
-      <Modal
-        visible={!!selectedItem}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSelectedItem(null)}
-      >
-        {selectedItem && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Modifier l'article</Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setSelectedItem(null)}
-                >
-                  <MaterialIcons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.modalScrollView}>
-                <ItemEditForm
-                  item={selectedItem}
-                  containers={containers}
-                  categories={categories}
-                  onSuccess={handleEditSuccess}
-                  onCancel={() => setSelectedItem(null)}
-                />
-              </ScrollView>
-            </View>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 };
@@ -334,47 +395,45 @@ export const ItemList: React.FC<ItemListProps> = ({ items, containers, categorie
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   searchBar: {
     flexDirection: 'row',
-    padding: 8,
-    gap: 8,
+    padding: 10,
+    gap: 10,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#ddd',
   },
   searchInput: {
     flex: 1,
-    height: 36,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    paddingHorizontal: 10,
   },
   filterButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#ddd',
+    borderRadius: 5,
   },
   filtersContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
+    padding: 10,
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#ddd',
   },
   filterSection: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   filterLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
     marginBottom: 8,
-    color: '#000',
   },
   filterOptions: {
     flexDirection: 'row',
@@ -382,162 +441,139 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterOption: {
-    paddingVertical: 6,
     paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 15,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   filterOptionSelected: {
     backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
   filterOptionText: {
-    color: '#000',
-    fontSize: 14,
+    fontSize: 12,
+    color: '#333',
   },
-  filterOptionTextSelected: {
-    color: '#fff',
+  list: {
+    flex: 1,
   },
   itemContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 2,
-    marginVertical: 4,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   itemName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
   },
   priceLabel: {
-    fontSize: 14,
     color: '#666',
   },
   price: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontWeight: 'bold',
+    color: '#2ecc71',
   },
   itemDetails: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
+    gap: 5,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    gap: 5,
   },
   detailText: {
-    marginLeft: 8,
-    fontSize: 14,
     color: '#666',
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 8,
+    marginTop: 10,
+    gap: 10,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 5,
+    gap: 5,
   },
   soldButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#e74c3c',
   },
   availableButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#2ecc71',
   },
   actionButtonText: {
     color: '#fff',
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  separator: {
-    height: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    maxHeight: '80%',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 5,
+    fontSize: 12,
   },
   priceInputs: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
   priceInput: {
-    width: 100,
+    flex: 1,
     height: 40,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 5,
     paddingHorizontal: 10,
-    marginHorizontal: 5,
   },
-  list: {
-    padding: 16,
+  priceSeparator: {
+    color: '#666',
+    fontSize: 16,
   },
-  modalScrollView: {
-    flexGrow: 1,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  itemInfo: {
+    flex: 1,
   },
 });

@@ -135,27 +135,63 @@ const supabaseDatabase: DatabaseInterface = {
         throw handleValidationError('Le nom de l\'item est requis', 'addItem');
       }
 
+      // Vérification de l'authentification
+      const { data: sessionData, error: authError } = await supabase.auth.getSession();
+      
+      if (authError) {
+        console.error('Erreur d\'authentification:', authError);
+        throw handleValidationError('Erreur d\'authentification', 'addItem');
+      }
+
+      if (!sessionData.session?.user?.id) {
+        console.error('Utilisateur non authentifié');
+        throw handleValidationError('Utilisateur non authentifié', 'addItem');
+      }
+
+      const userId = sessionData.session.user.id;
+
+      // Construction de l'objet à insérer
       const supabaseItem = {
         name: item.name,
-        description: item.description,
-        purchase_price: item.purchasePrice,
-        selling_price: item.sellingPrice,
-        status: item.status,
-        photo_uri: item.photoUri,
-        container_id: item.containerId,
-        category_id: item.categoryId,
-        qr_code: item.qrCode
+        description: item.description || null,
+        purchase_price: item.purchasePrice || 0,
+        selling_price: item.sellingPrice || 0,
+        status: item.status || 'available',
+        photo_uri: item.photoUri || null,
+        container_id: item.containerId || null,
+        category_id: item.categoryId || null,
+        qr_code: item.qrCode || null,
+        user_id: userId,
+        created_by: userId,
+        deleted: false
       };
 
+      console.log('Données à insérer:', supabaseItem);
+
+      // Insertion avec gestion d'erreur détaillée
       const { data, error } = await supabase
         .from('items')
-        .insert([supabaseItem])
-        .select()
+        .insert(supabaseItem)
+        .select('*')
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur Supabase détaillée:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+
+      if (!data) {
+        throw handleValidationError('Aucune donnée retournée après l\'insertion', 'addItem');
+      }
+
       return data.id;
     } catch (error) {
+      console.error('Erreur complète:', error);
       handleDatabaseError(error as PostgrestError, 'addItem');
       throw error;
     }
