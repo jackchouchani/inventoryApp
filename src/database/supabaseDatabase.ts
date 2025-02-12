@@ -461,7 +461,7 @@ const supabaseDatabase: DatabaseInterface = {
 
       const { error } = await supabase
         .from('items')
-        .delete()
+        .update({ deleted: true })
         .eq('id', id);
 
       if (error) throw error;

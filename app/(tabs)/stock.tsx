@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { ItemList } from '../../src/components/ItemList';
@@ -9,6 +9,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateItem as updateItemAction, selectAllItems } from '../../src/store/itemsSlice';
 import { PostgrestError } from '@supabase/supabase-js';
 import { RootState } from '../../src/store/store';
+import supabaseDatabase from '../../src/database/supabaseDatabase';
 
 export default function StockScreen() {
   const [filter, setFilter] = useState('');
@@ -18,6 +19,24 @@ export default function StockScreen() {
   const { isLoading, error, refetch } = useInventoryData({
     search: filter
   });
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const items = await supabaseDatabase.getItems();
+        if (items) {
+          dispatch({ type: 'items/setItems', payload: items });
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement initial des items:', error);
+      }
+    };
+
+    // Charger les données si le tableau d'items est vide
+    if (!items || items.length === 0) {
+      loadInitialData();
+    }
+  }, [dispatch, items]);
 
   const handleMarkAsSold = useCallback(async (itemId: number) => {
     try {

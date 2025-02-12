@@ -28,24 +28,24 @@ const CategoryScreen = () => {
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
 
   useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const dbCategories = await fetchCategories();
+        const formattedCategories = dbCategories.map(cat => ({
+          id: cat.id!,
+          name: cat.name,
+          createdAt: cat.createdAt,
+          updatedAt: cat.updatedAt
+        }));
+        dispatch(setCategories(formattedCategories));
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setError('Failed to load categories');
+      }
+    };
+    
     loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const dbCategories = await fetchCategories();
-      const formattedCategories = dbCategories.map(cat => ({
-        id: cat.id!,
-        name: cat.name,
-        createdAt: cat.createdAt,
-        updatedAt: cat.updatedAt
-      }));
-      dispatch(setCategories(formattedCategories));
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      setError('Failed to load categories');
-    }
-  };
+  }, [dispatch]);
 
   const categories = useSelector((state: RootState) => state.categories.categories);
 

@@ -12,7 +12,7 @@ import { selectAllContainers, selectContainerById } from '../store/containersSli
 import { useInventoryData } from '../hooks/useInventoryData';
 import { updateItemStatus, moveItem } from '../store/itemsThunks';
 import { AppDispatch } from '../store/store';
-import { useAnimatedComponents, ANIMATION_PRESETS } from '../hooks/useAnimatedComponents';
+import { useAnimatedComponents } from '../hooks/useAnimatedComponents';
 import { offlineSyncManager } from '../services/offlineSync';
 import Animated from 'react-native-reanimated';
 import ItemCard from './ItemCard';
@@ -71,12 +71,9 @@ export const ItemList: React.FC<ItemListProps> = ({
   hasMore = false,
   isLoading = false,
 }) => {
-  // Hooks d'animation - Déplacés au niveau racine du composant
-  const { useFadeAnimation, useScaleAnimation } = useAnimatedComponents();
-  const fadeAnimation = useFadeAnimation(0);
-  const scaleAnimation = useScaleAnimation(1);
-
-  // États - Tous les useState au début
+  // 1. Tous les useState au début
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({
     search: '',
     categoryId: null,
@@ -85,21 +82,28 @@ export const ItemList: React.FC<ItemListProps> = ({
     minPrice: '',
     maxPrice: '',
   });
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
 
-  // Hooks Redux
+  // 2. Hooks de contexte et dispatch
   const dispatch = useDispatch<AppDispatch>();
-  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
-  // Sélecteurs Redux avec valeurs par défaut
-  const items = useSelector(selectAllItems) || [];
-  const categories = useSelector(selectAllCategories) || [];
-  const containers = useSelector(selectAllContainers) || [];
-  const statistics = useSelector(selectItemsStatistics);
+  // 3. Hooks d'animation
+  const {
+    opacity,
+    fadeIn,
+    fadeOut,
+    fadeStyle,
+    scale,
+    scaleUp,
+    scaleDown,
+    scaleStyle
+  } = useAnimatedComponents();
 
-  // Hook d'inventaire avec valeurs par défaut
+  // 4. Sélecteurs Redux
+  const items = useSelector(selectAllItems) ?? [];
+  const categories = useSelector(selectAllCategories) ?? [];
+  const containers = useSelector(selectAllContainers) ?? [];
+
+  // 5. Hook personnalisé pour les données
   const {
     items: paginatedItems = [],
     categories: paginatedCategories = [],
@@ -118,7 +122,11 @@ export const ItemList: React.FC<ItemListProps> = ({
     maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
   });
 
-  // Callbacks mémorisés
+  // 6. Hooks de refresh
+  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+
+  // 7. Callbacks
   const handleSearchChange = useCallback((text: string) => {
     setFilters(prev => ({ ...prev, search: text }));
   }, []);
@@ -142,17 +150,11 @@ export const ItemList: React.FC<ItemListProps> = ({
   }, []);
 
   const handleMinPriceChange = useCallback((value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      minPrice: value
-    }));
+    setFilters(prev => ({ ...prev, minPrice: value }));
   }, []);
 
   const handleMaxPriceChange = useCallback((value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      maxPrice: value
-    }));
+    setFilters(prev => ({ ...prev, maxPrice: value }));
   }, []);
 
   const handleStatusToggle = useCallback(async (itemId: number, currentStatus: string) => {
@@ -177,29 +179,21 @@ export const ItemList: React.FC<ItemListProps> = ({
   }, [refetch]);
 
   const handleLoadMore = useCallback(() => {
-    if (dataHasMore) {
+    if (dataHasMore && !dataLoading) {
       fetchNextPage();
     }
-  }, [dataHasMore, fetchNextPage]);
+  }, [dataHasMore, dataLoading, fetchNextPage]);
 
   const handleItemPress = useCallback((item: Item) => {
     setSelectedItem(item);
   }, []);
 
-  // Effets
+  // 8. Effets
   useEffect(() => {
-    if (paginatedItems.length > 0) {
-      setSelectedItem(null);
+    if (filters.search || filters.categoryId || filters.containerId || 
+        filters.status !== 'all' || filters.minPrice || filters.maxPrice) {
+      refetch();
     }
-  }, [paginatedItems]);
-
-  useEffect(() => {
-    const applyFilters = () => {
-      if (filters.search || filters.categoryId || filters.containerId || filters.status !== 'all' || filters.minPrice || filters.maxPrice) {
-        refetch();
-      }
-    };
-    applyFilters();
   }, [filters, refetch]);
 
   useEffect(() => {
@@ -207,28 +201,43 @@ export const ItemList: React.FC<ItemListProps> = ({
       const isStale = await offlineSyncManager.isDataStale();
       if (isStale) {
         await offlineSyncManager.saveOfflineData({
-          items: paginatedItems,
-          categories,
-          containers
+          items: paginatedItems || [],
+          categories: categories || [],
+          containers: containers || []
         });
       }
     };
     syncData();
   }, [paginatedItems, categories, containers]);
 
-  // Mémoisation des props de la FlatList
+  useEffect(() => {
+    if (paginatedItems?.length > 0) {
+      setSelectedItem(null);
+    }
+  }, [paginatedItems]);
+
+  // 9. Mémoisation des props de la FlatList
   const flatListProps = useMemo(() => ({
-    data: paginatedItems,
+    data: paginatedItems || [],
     renderItem: ({ item }: { item: Item }) => (
       <ItemCard
         item={item}
         onPress={() => handleItemPress(item)}
-        fadeAnimation={fadeAnimation}
-        scaleAnimation={scaleAnimation}
+        fadeAnimation={{
+          opacity,
+          fadeIn,
+          fadeOut,
+          fadeStyle
+        }}
+        scaleAnimation={{
+          scale,
+          scaleUp,
+          scaleDown,
+          scaleStyle
+        }}
       />
     ),
     keyExtractor: (item: Item) => item.id?.toString() || '',
-    style: styles.list,
     onEndReached: handleLoadMore,
     onEndReachedThreshold: 0.5,
     ListFooterComponent: dataHasMore ? (
@@ -236,14 +245,7 @@ export const ItemList: React.FC<ItemListProps> = ({
         <ActivityIndicator size="small" color="#007AFF" />
       </View>
     ) : null,
-    initialNumToRender: 10,
-    maxToRenderPerBatch: 10,
-    windowSize: 5,
-    removeClippedSubviews: true,
-    maintainVisibleContentPosition: {
-      minIndexForVisible: 0,
-    }
-  }), [paginatedItems, handleItemPress, handleLoadMore, dataHasMore, fadeAnimation, scaleAnimation]);
+  }), [paginatedItems, handleItemPress, handleLoadMore, dataHasMore, opacity, fadeIn, fadeOut, fadeStyle, scale, scaleUp, scaleDown, scaleStyle]);
 
   // Rendu conditionnel pour le chargement
   if (dataLoading && (!paginatedItems || paginatedItems.length === 0)) {
@@ -289,93 +291,95 @@ export const ItemList: React.FC<ItemListProps> = ({
 
       {showFilters && (
         <View style={styles.filtersContainer}>
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Catégorie</Text>
-            <View style={styles.filterOptions}>
-              {paginatedCategories?.map((category) => (
+          <ScrollView>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Catégorie</Text>
+              <View style={styles.filterOptions}>
+                {paginatedCategories?.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.filterOption,
+                      filters.categoryId === category.id && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => handleCategoryFilter(category.id ?? null)}
+                  >
+                    <Text style={styles.filterOptionText}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Container</Text>
+              <View style={styles.filterOptions}>
                 <TouchableOpacity
-                  key={category.id}
                   style={[
                     styles.filterOption,
-                    filters.categoryId === category.id && styles.filterOptionSelected,
+                    filters.containerId === 'none' && styles.filterOptionSelected,
                   ]}
-                  onPress={() => handleCategoryFilter(category.id ?? null)}
+                  onPress={() => handleContainerFilter('none')}
                 >
-                  <Text style={styles.filterOptionText}>{category.name}</Text>
+                  <Text style={styles.filterOptionText}>Sans container</Text>
                 </TouchableOpacity>
-              ))}
+                {paginatedContainers?.map((container) => (
+                  <TouchableOpacity
+                    key={container.id}
+                    style={[
+                      styles.filterOption,
+                      filters.containerId === container.id && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => handleContainerFilter(container.id ?? null)}
+                  >
+                    <Text style={styles.filterOptionText}>{container.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Container</Text>
-            <View style={styles.filterOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  filters.containerId === 'none' && styles.filterOptionSelected,
-                ]}
-                onPress={() => handleContainerFilter('none')}
-              >
-                <Text style={styles.filterOptionText}>Sans container</Text>
-              </TouchableOpacity>
-              {paginatedContainers?.map((container) => (
-                <TouchableOpacity
-                  key={container.id}
-                  style={[
-                    styles.filterOption,
-                    filters.containerId === container.id && styles.filterOptionSelected,
-                  ]}
-                  onPress={() => handleContainerFilter(container.id ?? null)}
-                >
-                  <Text style={styles.filterOptionText}>{container.name}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>État</Text>
+              <View style={styles.filterOptions}>
+                {[
+                  { value: 'all', label: 'Tous' },
+                  { value: 'available', label: 'Disponible' },
+                  { value: 'sold', label: 'Vendu' }
+                ].map((status) => (
+                  <TouchableOpacity
+                    key={status.value}
+                    style={[
+                      styles.filterOption,
+                      filters.status === status.value && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => handleStatusFilter(status.value as 'all' | 'available' | 'sold')}
+                  >
+                    <Text style={styles.filterOptionText}>{status.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>État</Text>
-            <View style={styles.filterOptions}>
-              {[
-                { value: 'all', label: 'Tous' },
-                { value: 'available', label: 'Disponible' },
-                { value: 'sold', label: 'Vendu' }
-              ].map((status) => (
-                <TouchableOpacity
-                  key={status.value}
-                  style={[
-                    styles.filterOption,
-                    filters.status === status.value && styles.filterOptionSelected,
-                  ]}
-                  onPress={() => handleStatusFilter(status.value as 'all' | 'available' | 'sold')}
-                >
-                  <Text style={styles.filterOptionText}>{status.label}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Prix</Text>
+              <View style={styles.priceInputs}>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="Min"
+                  value={filters.minPrice}
+                  onChangeText={handleMinPriceChange}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.priceSeparator}>-</Text>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="Max"
+                  value={filters.maxPrice}
+                  onChangeText={handleMaxPriceChange}
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
-          </View>
-
-          <View style={styles.filterSection}>
-            <Text style={styles.filterLabel}>Prix</Text>
-            <View style={styles.priceInputs}>
-              <TextInput
-                style={styles.priceInput}
-                placeholder="Min"
-                value={filters.minPrice}
-                onChangeText={handleMinPriceChange}
-                keyboardType="numeric"
-              />
-              <Text style={styles.priceSeparator}>-</Text>
-              <TextInput
-                style={styles.priceInput}
-                placeholder="Max"
-                value={filters.maxPrice}
-                onChangeText={handleMaxPriceChange}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
+          </ScrollView>
         </View>
       )}
 

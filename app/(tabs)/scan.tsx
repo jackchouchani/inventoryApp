@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import { Scanner } from '../../src/components/Scanner';
@@ -15,26 +15,34 @@ interface ItemProps {
 const ScanScreen: React.FC = () => {
   const router = useRouter();
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+
+  // 1. États
   const [showManualMode, setShowManualMode] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [containers, setContainers] = useState<Container[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
-  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [showOtherContainers, setShowOtherContainers] = useState(false);
   const [isScannerActive, setIsScannerActive] = useState(true);
   const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
-  const dispatch = useDispatch();
   const [isAssigning, setIsAssigning] = useState(false);
-  const [assignmentProgress, setAssignmentProgress] = useState<{itemId: number; status: 'pending' | 'success' | 'error'}>({
+  const [assignmentProgress, setAssignmentProgress] = useState<{
+    itemId: number;
+    status: 'pending' | 'success' | 'error'
+  }>({
     itemId: 0,
     status: 'pending'
   });
+  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
 
-  // Effet pour désactiver le scanner lors du changement d'onglet
+  // 2. Store hooks
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+
+  // 3. Effets
   useEffect(() => {
     const unsubscribe = navigation.addListener('blur', () => {
       setIsScannerActive(false);
@@ -48,54 +56,76 @@ const ScanScreen: React.FC = () => {
     };
   }, [navigation]);
 
-  const loadData = async () => {
+  useEffect(() => {
+    setIsScannerActive(true);
+  }, [showManualMode]);
+
+  // 4. Chargement des données
+  const loadData = useCallback(async () => {
     try {
       setError(null);
       const [loadedContainers, loadedItems] = await Promise.all([
         getContainers(),
         getItems()
       ]);
-      setContainers(loadedContainers);
-      setItems(loadedItems);
+      setContainers(loadedContainers || []);
+      setItems(loadedItems || []);
     } catch (error) {
       setError("Erreur lors du chargement des données");
       console.error('Erreur lors du chargement des données:', error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, [refreshTimestamp]);
+  }, [refreshTimestamp, loadData]);
 
-  const handleManualAssignment = async (itemId: number) => {
+  // 5. Logique de filtrage
+  useEffect(() => {
+    const filtered = items.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      if (showOnlySelected) {
+        return matchesSearch && item.containerId === selectedContainer?.id;
+      }
+      
+      if (showOtherContainers) {
+        return matchesSearch;
+      }
+      
+      return matchesSearch && (item.containerId === null || item.containerId === selectedContainer?.id);
+    });
+    
+    setFilteredItems(filtered);
+  }, [items, searchQuery, showOnlySelected, showOtherContainers, selectedContainer]);
+
+  // 6. Callbacks
+  const handleManualAssignment = useCallback(async (itemId: number) => {
     if (!selectedContainer) return;
     
     try {
       setIsAssigning(true);
       setAssignmentProgress({ itemId, status: 'pending' });
       
-      const item = items.find(i => i.id === itemId);
-      if (!item) return;
+      const updatedItems = [...items];
+      const itemIndex = updatedItems.findIndex(i => i.id === itemId);
+      if (itemIndex === -1) return;
       
+      const item = updatedItems[itemIndex];
       const updateData = {
         ...item,
         containerId: item.containerId === selectedContainer.id ? null : selectedContainer.id,
         updatedAt: new Date().toISOString()
       };
       
-      // Optimistic update
-      const updatedItems = items.map(i => 
-        i.id === itemId ? updateData : i
-      );
+      updatedItems[itemIndex] = updateData;
       setItems(updatedItems);
       dispatch(updateItemAction(updateData));
       
-      // Effectuer l'opération Supabase
       await updateItem(itemId, updateData);
       
       setAssignmentProgress({ itemId, status: 'success' });
       
-      // Ajouter un feedback visuel
       Alert.alert(
         'Succès',
         `Article ${item.name} ${item.containerId === selectedContainer.id ? 'retiré du' : 'ajouté au'} container ${selectedContainer.name}`
@@ -103,35 +133,56 @@ const ScanScreen: React.FC = () => {
     } catch (error) {
       console.error('Erreur lors de l\'assignation:', error);
       setAssignmentProgress({ itemId, status: 'error' });
-      // Rollback en cas d'erreur
       await loadData();
       Alert.alert('Erreur', 'Impossible d\'assigner l\'article');
     } finally {
       setIsAssigning(false);
-      // Reset progress après un délai
       setTimeout(() => {
         setAssignmentProgress({ itemId: 0, status: 'pending' });
       }, 2000);
     }
-  };
+  }, [selectedContainer, items, dispatch, loadData]);
 
-  useEffect(() => {
-    setIsScannerActive(true);
-  }, [showManualMode]);
+  const handleScanResult = useCallback(async (result: { success: boolean; message: string; type?: 'container' | 'item'; data?: any }) => {
+    if (result.success) {
+      if (result.type === 'container') {
+        setScanMode('item');
+        const container = containers.find(c => c.qrCode === result.data?.qrCode);
+        if (container) {
+          setSelectedContainer(container);
+        }
+      } else if (result.type === 'item' && selectedContainer) {
+        try {
+          const updatedItems = [...items];
+          const itemIndex = updatedItems.findIndex(i => i.qrCode === result.data?.qrCode);
+          if (itemIndex === -1) return;
 
-  const filteredItems = items.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (showOnlySelected) {
-      return matchesSearch && item.containerId === selectedContainer?.id;
+          const item = updatedItems[itemIndex];
+          const updateData = {
+            ...item,
+            containerId: selectedContainer.id,
+            updatedAt: new Date().toISOString()
+          };
+
+          updatedItems[itemIndex] = updateData;
+          setItems(updatedItems);
+          dispatch(updateItemAction(updateData));
+
+          await updateItem(item.id!, updateData);
+
+          Alert.alert(
+            'Succès',
+            `Article ${item.name} assigné au container ${selectedContainer.name}`
+          );
+        } catch (error) {
+          console.error('Erreur lors du scan:', error);
+          await loadData();
+          Alert.alert('Erreur', 'Impossible de scanner l\'article. Veuillez réessayer.');
+        }
+      }
     }
-    
-    if (showOtherContainers) {
-      return matchesSearch;
-    }
-    
-    return matchesSearch && (item.containerId === null || item.containerId === selectedContainer?.id);
-  });
+    setTimeout(() => setIsScannerActive(true), 1500);
+  }, [containers, items, selectedContainer, dispatch, loadData]);
 
   const renderItem = ({ item }: { item: Item }) => (
     <TouchableOpacity
@@ -176,51 +227,6 @@ const ScanScreen: React.FC = () => {
       </View>
     </TouchableOpacity>
   );
-
-  const handleScanResult = async (result: { success: boolean; message: string; type?: 'container' | 'item'; data?: any }) => {
-    if (result.success) {
-      if (result.type === 'container') {
-        setScanMode('item');
-        const container = containers.find(c => c.qrCode === result.data?.qrCode);
-        if (container) {
-          setSelectedContainer(container);
-        }
-      } else if (result.type === 'item' && selectedContainer) {
-        try {
-          const item = items.find(i => i.qrCode === result.data?.qrCode);
-          if (item) {
-            const updateData = {
-              ...item,
-              containerId: selectedContainer.id,
-              updatedAt: new Date().toISOString()
-            };
-
-            // Optimistic update
-            const updatedItems = items.map(i => 
-              i.id === item.id ? updateData : i
-            );
-            setItems(updatedItems);
-            dispatch(updateItemAction(updateData));
-
-            // Effectuer l'opération Supabase
-            await updateItem(item.id!, updateData);
-
-            Alert.alert(
-              'Succès',
-              `Article ${item.name} assigné au container ${selectedContainer.name}`
-            );
-          }
-        } catch (error) {
-          console.error('Erreur lors du scan:', error);
-          // Rollback en cas d'erreur
-          await loadData();
-          Alert.alert('Erreur', 'Impossible de scanner l\'article. Veuillez réessayer.');
-        }
-      }
-    }
-    // Réactiver le scanner après un délai
-    setTimeout(() => setIsScannerActive(true), 1500);
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>

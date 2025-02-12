@@ -47,236 +47,103 @@ const defaultTimingConfig: TimingConfig = {
 
 export const useAnimatedComponents = () => {
   // Animation de fade
-  const useFadeAnimation = (initialValue: number = 0) => {
-    const opacity = useSharedValue(initialValue);
+  const opacity = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
-    const fadeIn = useCallback((config?: AnimationConfig) => {
-      opacity.value = withTiming(1, {
-        duration: config?.duration || defaultTimingConfig.duration,
-        easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-      });
-    }, [opacity]);
+  const fadeIn = useCallback((config?: AnimationConfig) => {
+    opacity.value = withTiming(1, {
+      duration: config?.duration || defaultTimingConfig.duration,
+      easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
+    });
+  }, [opacity]);
 
-    const fadeOut = useCallback((config?: AnimationConfig) => {
-      opacity.value = withTiming(0, {
-        duration: config?.duration || defaultTimingConfig.duration,
-        easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-      });
-    }, [opacity]);
-
-    const fadeStyle = useAnimatedStyle(() => ({
-      opacity: opacity.value,
-    }));
-
-    return { opacity, fadeIn, fadeOut, fadeStyle };
-  };
+  const fadeOut = useCallback((config?: AnimationConfig) => {
+    opacity.value = withTiming(0, {
+      duration: config?.duration || defaultTimingConfig.duration,
+      easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
+    });
+  }, [opacity]);
 
   // Animation de scale
-  const useScaleAnimation = (initialValue: number = 1) => {
-    const scale = useSharedValue(initialValue);
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
-    const scaleUp = useCallback((config?: AnimationConfig) => {
-      scale.value = withSpring(1.1, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [scale]);
+  const scaleUp = useCallback((config?: AnimationConfig) => {
+    scale.value = withSpring(1.1, {
+      damping: config?.springConfig?.damping || defaultSpringConfig.damping,
+      stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
+      mass: config?.springConfig?.mass || defaultSpringConfig.mass,
+    });
+  }, [scale]);
 
-    const scaleDown = useCallback((config?: AnimationConfig) => {
-      scale.value = withSpring(1, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [scale]);
-
-    const scaleStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-
-    return { scale, scaleUp, scaleDown, scaleStyle };
-  };
+  const scaleDown = useCallback((config?: AnimationConfig) => {
+    scale.value = withSpring(1, {
+      damping: config?.springConfig?.damping || defaultSpringConfig.damping,
+      stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
+      mass: config?.springConfig?.mass || defaultSpringConfig.mass,
+    });
+  }, [scale]);
 
   // Animation de slide
-  const useSlideAnimation = (initialValue: number = 0) => {
-    const translateY = useSharedValue(initialValue);
+  const translateY = useSharedValue(0);
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
-    const slideIn = useCallback((config?: AnimationConfig) => {
-      translateY.value = withSpring(0, {
-        damping: 15,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [translateY]);
+  const slideIn = useCallback((config?: AnimationConfig) => {
+    translateY.value = withSpring(0, {
+      damping: 15,
+      stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
+      mass: config?.springConfig?.mass || defaultSpringConfig.mass,
+    });
+  }, [translateY]);
 
-    const slideOut = useCallback((config?: AnimationConfig) => {
-      translateY.value = withSpring(100, {
-        damping: 15,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [translateY]);
-
-    const slideStyle = useAnimatedStyle(() => ({
-      transform: [{ translateY: translateY.value }],
-    }));
-
-    return { translateY, slideIn, slideOut, slideStyle };
-  };
+  const slideOut = useCallback((config?: AnimationConfig) => {
+    translateY.value = withSpring(100, {
+      damping: 15,
+      stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
+      mass: config?.springConfig?.mass || defaultSpringConfig.mass,
+    });
+  }, [translateY]);
 
   // Animation de rotation
-  const useRotateAnimation = (initialValue: number = 0) => {
-    const rotation = useSharedValue(initialValue);
+  const rotation = useSharedValue(0);
+  const rotateStyle = useAnimatedStyle(() => ({
+    transform: [{ rotateZ: `${rotation.value}deg` }],
+  }));
 
-    const rotate = useCallback((toValue: number, config?: AnimationConfig) => {
-      rotation.value = withSpring(toValue, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [rotation]);
-
-    const rotateStyle = useAnimatedStyle(() => ({
-      transform: [{ rotateZ: `${rotation.value}deg` }],
-    }));
-
-    return { rotation, rotate, rotateStyle };
-  };
-
-  // Animation de liste avec décalage
-  const useListAnimation = (index: number, initialValue: number = 0) => {
-    const translateY = useSharedValue(initialValue);
-    const opacity = useSharedValue(0);
-    const scale = useSharedValue(0.8);
-
-    const animateIn = useCallback((config?: AnimationConfig) => {
-      const delay = (index * 150) % 1000; // Décalage maximum de 1 seconde
-      translateY.value = withDelay(
-        delay,
-        withSpring(0, {
-          damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-          stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-          mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-        })
-      );
-      opacity.value = withDelay(delay, withTiming(1, {
-        duration: config?.duration || defaultTimingConfig.duration,
-        easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-      }));
-      scale.value = withDelay(delay, withSpring(1, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      }));
-    }, [index, opacity, scale, translateY]);
-
-    const animateOut = useCallback((config?: AnimationConfig) => {
-      const delay = (index * 100) % 800; // Décalage maximum de 0.8 seconde
-      translateY.value = withDelay(delay, withSpring(100, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      }));
-      opacity.value = withDelay(delay, withTiming(0, {
-        duration: config?.duration || defaultTimingConfig.duration,
-        easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-      }));
-      scale.value = withDelay(delay, withSpring(0.8, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      }));
-    }, [index, opacity, scale, translateY]);
-
-    const style = useAnimatedStyle(() => ({
-      opacity: opacity.value,
-      transform: [
-        { translateY: translateY.value },
-        { scale: scale.value },
-      ],
-    }));
-
-    return { style, animateIn, animateOut };
-  };
-
-  // Animation composée/imbriquée
-  const useComposedAnimation = (initialValue: number = 0) => {
-    const progress = useSharedValue(initialValue);
-    const scale = useSharedValue(1);
-
-    const animate = useCallback((config?: AnimationConfig) => {
-      const sequence = withSequence(
-        withTiming(1, {
-          duration: config?.duration || defaultTimingConfig.duration,
-          easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-        }),
-        withSpring(0.8, {
-          damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-          stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-          mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-        }),
-        withSpring(1, {
-          damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-          stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-          mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-        })
-      );
-
-      progress.value = sequence;
-      scale.value = withSpring(1.1, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [progress, scale]);
-
-    const reset = useCallback((config?: AnimationConfig) => {
-      progress.value = withTiming(0, {
-        duration: config?.duration || defaultTimingConfig.duration,
-        easing: config?.timingConfig?.easing || defaultTimingConfig.easing,
-      });
-      scale.value = withSpring(1, {
-        damping: config?.springConfig?.damping || defaultSpringConfig.damping,
-        stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
-        mass: config?.springConfig?.mass || defaultSpringConfig.mass,
-      });
-    }, [progress, scale]);
-
-    const style = useAnimatedStyle(() => {
-      const translateY = interpolate(
-        progress.value,
-        [0, 0.5, 1],
-        [0, -20, 0],
-        Extrapolate.CLAMP
-      );
-
-      const opacity = interpolate(
-        progress.value,
-        [0, 0.2, 0.8, 1],
-        [0, 1, 1, 0],
-        Extrapolate.CLAMP
-      );
-
-      return {
-        opacity,
-        transform: [
-          { translateY },
-          { scale: scale.value },
-        ],
-      };
+  const rotate = useCallback((toValue: number, config?: AnimationConfig) => {
+    rotation.value = withSpring(toValue, {
+      damping: config?.springConfig?.damping || defaultSpringConfig.damping,
+      stiffness: config?.springConfig?.stiffness || defaultSpringConfig.stiffness,
+      mass: config?.springConfig?.mass || defaultSpringConfig.mass,
     });
-
-    return { progress, scale, style, animate, reset };
-  };
+  }, [rotation]);
 
   return {
-    useFadeAnimation,
-    useScaleAnimation,
-    useSlideAnimation,
-    useRotateAnimation,
-    useListAnimation,
-    useComposedAnimation,
+    // Fade animation
+    opacity,
+    fadeIn,
+    fadeOut,
+    fadeStyle,
+    // Scale animation
+    scale,
+    scaleUp,
+    scaleDown,
+    scaleStyle,
+    // Slide animation
+    translateY,
+    slideIn,
+    slideOut,
+    slideStyle,
+    // Rotate animation
+    rotation,
+    rotate,
+    rotateStyle,
   };
 };
 

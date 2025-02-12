@@ -1,8 +1,7 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 'react-native';
+import React, { useCallback, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Item } from '../database/types';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useAnimatedComponents } from '../hooks/useAnimatedComponents';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 
@@ -41,15 +40,9 @@ const ItemCard: React.FC<ItemCardProps> = ({
     scaleAnimation?.scaleDown();
   }, [scaleAnimation]);
 
-  const imageStyle = useMemo(() => ({
-    width: 80,
-    height: 80,
-    borderRadius: 4,
-    marginRight: 12,
-    backgroundImage: item.photoUri ? `url(${item.photoUri})` : 'none',
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-  }), [item.photoUri]);
+  useEffect(() => {
+    fadeAnimation?.fadeIn();
+  }, []);
 
   return (
     <Animated.View 
@@ -63,10 +56,15 @@ const ItemCard: React.FC<ItemCardProps> = ({
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        style={styles.touchable}
       >
         <View style={styles.content}>
           {item.photoUri && (
-            <div style={imageStyle} />
+            <Image 
+              source={{ uri: item.photoUri }} 
+              style={styles.image}
+              resizeMode="cover"
+            />
           )}
           <View style={styles.info}>
             <Text style={styles.name}>{item.name}</Text>
@@ -99,11 +97,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 8,
     marginVertical: 8,
+    marginHorizontal: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  touchable: {
+    width: '100%',
   },
   content: {
     flexDirection: 'row',

@@ -6,6 +6,7 @@ import { updateItem, deleteItem, Category, Container } from '../database/databas
 import { useRefreshStore } from '../store/refreshStore';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { MaterialIcons } from '@expo/vector-icons';
+import { supabaseDatabase } from '../database/supabaseDatabase';
 
 interface ItemEditFormProps {
     item: {
@@ -83,7 +84,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
         if (!item.id) return;
 
         Alert.alert(
-            'Confirmation',
+            'Confirmation de suppression',
             'Êtes-vous sûr de vouloir supprimer cet article ?',
             [
                 {
@@ -95,29 +96,13 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            // Mise à jour optimiste du store Redux
-                            dispatch({
-                                type: 'items/removeItem',
-                                payload: item.id
-                            });
-
-                            try {
-                                // Mise à jour de la base de données
-                                await deleteItem(item.id!);
-                                triggerRefresh();
-                                if (onSuccess) onSuccess();
-                            } catch (error) {
-                                // En cas d'erreur, on remet l'item dans le store
-                                dispatch({
-                                    type: 'items/addItem',
-                                    payload: item
-                                });
-                                console.error('Erreur lors de la suppression:', error);
-                                Alert.alert('Erreur', 'Impossible de supprimer l\'article');
-                            }
+                            await supabaseDatabase.deleteItem(item.id!);
+                            dispatch({ type: 'items/removeItem', payload: item.id });
+                            triggerRefresh();
+                            if (onCancel) onCancel(); // Ferme le modal
                         } catch (error) {
-                            console.error('Erreur:', error);
-                            Alert.alert('Erreur', 'Une erreur est survenue');
+                            console.error('Erreur lors de la suppression:', error);
+                            Alert.alert('Erreur', 'Impossible de supprimer l\'article');
                         }
                     }
                 }

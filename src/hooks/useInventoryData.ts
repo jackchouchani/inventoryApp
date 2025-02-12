@@ -187,7 +187,22 @@ export const useInventoryData = (params: UseInventoryDataParams = {}): UseInvent
 
         const { data, error } = await query;
         if (error) throw error;
-        return data || [];
+        
+        return (data || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          purchasePrice: parseFloat(item.purchase_price) || 0,
+          sellingPrice: parseFloat(item.selling_price) || 0,
+          status: item.status,
+          photoUri: item.photo_uri,
+          containerId: item.container_id,
+          categoryId: item.category_id,
+          qrCode: item.qr_code,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          soldAt: item.sold_at
+        }));
       } catch (error) {
         console.error('Error fetching items:', error);
         throw error;
