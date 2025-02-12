@@ -1,42 +1,18 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
-import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { ItemList } from '../../src/components/ItemList';
 import { FilterBar } from '../../src/components/FilterBar';
-import { handleDatabaseError } from '../../src/utils/errorHandler';
 import { updateItem, Item } from '../../src/database/database';
-import { useDispatch, useSelector } from 'react-redux';
-import { updateItem as updateItemAction, selectAllItems } from '../../src/store/itemsSlice';
-import { PostgrestError } from '@supabase/supabase-js';
-import { RootState } from '../../src/store/store';
-import supabaseDatabase from '../../src/database/supabaseDatabase';
+import { useDispatch } from 'react-redux';
+import { updateItem as updateItemAction } from '../../src/store/itemsSlice';
+import { useInventoryData } from '../../src/hooks/useInventoryData';
 
 export default function StockScreen() {
   const [filter, setFilter] = useState('');
   const dispatch = useDispatch();
-  const items = useSelector(selectAllItems);
-
-  const { isLoading, error, refetch } = useInventoryData({
+  const { items, isLoading, error, refetch } = useInventoryData({
     search: filter
   });
-
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        const items = await supabaseDatabase.getItems();
-        if (items) {
-          dispatch({ type: 'items/setItems', payload: items });
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement initial des items:', error);
-      }
-    };
-
-    // Charger les données si le tableau d'items est vide
-    if (!items || items.length === 0) {
-      loadInitialData();
-    }
-  }, [dispatch, items]);
 
   const handleMarkAsSold = useCallback(async (itemId: number) => {
     try {
@@ -50,12 +26,14 @@ export default function StockScreen() {
         updatedAt: new Date().toISOString()
       };
 
+      // Mise à jour optimiste
       dispatch(updateItemAction(updateData));
 
       try {
         await updateItem(itemId, updateData);
         refetch();
       } catch (error) {
+        // Rollback en cas d'erreur
         dispatch(updateItemAction(item));
         console.error('Erreur lors du marquage comme vendu:', error);
         Alert.alert('Erreur', 'Impossible de marquer l\'article comme vendu');
@@ -78,12 +56,14 @@ export default function StockScreen() {
         updatedAt: new Date().toISOString()
       };
 
+      // Mise à jour optimiste
       dispatch(updateItemAction(updateData));
 
       try {
         await updateItem(itemId, updateData);
         refetch();
       } catch (error) {
+        // Rollback en cas d'erreur
         dispatch(updateItemAction(item));
         console.error('Erreur lors de la remise en stock:', error);
         Alert.alert('Erreur', 'Impossible de remettre l\'article en stock');
@@ -94,29 +74,13 @@ export default function StockScreen() {
     }
   }, [items, dispatch, refetch]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Chargement de l'inventaire...</Text>
-      </View>
-    );
-  }
-
   if (error) {
-    console.error('Erreur lors du chargement des données:', error);
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>
-          Une erreur est survenue lors du chargement des données
-        </Text>
+        <Text style={styles.errorText}>Une erreur est survenue lors du chargement des articles</Text>
       </View>
     );
   }
-
-  const filteredItems = (items || []).filter((item: Item) =>
-    item.name.toLowerCase().includes(filter.toLowerCase())
-  );
 
   return (
     <View style={styles.container}>
@@ -127,6 +91,7 @@ export default function StockScreen() {
       />
       
       <ItemList
+        items={items}
         onMarkAsSold={handleMarkAsSold}
         onMarkAsAvailable={handleMarkAsAvailable}
         isLoading={isLoading}

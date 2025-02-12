@@ -7,226 +7,203 @@ import { useRefreshStore } from '../../src/store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDispatch } from 'react-redux';
 import { updateItem as updateItemAction } from '../../src/store/itemsSlice';
+import { useQueryClient } from '@tanstack/react-query';
+import { useInventoryData } from '../../src/hooks/useInventoryData';
 
-interface ItemProps {
-  item: Item;
+interface ScanScreenState {
+  mode: 'manual' | 'scanner';
+  selectedContainer: Container | null;
+  searchQuery: string;
+  showOnlySelected: boolean;
+  showOtherContainers: boolean;
+  isScannerActive: boolean;
+  scanMode: 'container' | 'item';
+  isAssigning: boolean;
+  assignmentProgress: {
+    itemId: number;
+    status: 'pending' | 'success' | 'error';
+  };
 }
+
+const INITIAL_STATE: ScanScreenState = {
+  mode: 'scanner',
+  selectedContainer: null,
+  searchQuery: '',
+  showOnlySelected: false,
+  showOtherContainers: false,
+  isScannerActive: true,
+  scanMode: 'container',
+  isAssigning: false,
+  assignmentProgress: {
+    itemId: 0,
+    status: 'pending'
+  }
+};
 
 const ScanScreen: React.FC = () => {
   const router = useRouter();
   const navigation = useNavigation();
   const dispatch = useDispatch();
-
-  // 1. États
-  const [showManualMode, setShowManualMode] = useState(false);
-  const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
+  const queryClient = useQueryClient();
+  const [scanState, setScanState] = useState<ScanScreenState>(INITIAL_STATE);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showOnlySelected, setShowOnlySelected] = useState(false);
-  const [showOtherContainers, setShowOtherContainers] = useState(false);
-  const [isScannerActive, setIsScannerActive] = useState(true);
-  const [scanMode, setScanMode] = useState<'container' | 'item'>('container');
-  const [isAssigning, setIsAssigning] = useState(false);
-  const [assignmentProgress, setAssignmentProgress] = useState<{
-    itemId: number;
-    status: 'pending' | 'success' | 'error'
-  }>({
-    itemId: 0,
-    status: 'pending'
-  });
-  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
-
-  // 2. Store hooks
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
 
-  // 3. Effets
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('blur', () => {
-      setIsScannerActive(false);
-      setShowManualMode(false);
-    });
+  // Utilisation de useInventoryData pour gérer les données
+  const { items, containers, isLoading, refetch } = useInventoryData();
 
-    return () => {
-      unsubscribe();
-      setIsScannerActive(false);
-      setShowManualMode(false);
-    };
-  }, [navigation]);
-
-  useEffect(() => {
-    setIsScannerActive(true);
-  }, [showManualMode]);
-
-  // 4. Chargement des données
-  const loadData = useCallback(async () => {
-    try {
-      setError(null);
-      const [loadedContainers, loadedItems] = await Promise.all([
-        getContainers(),
-        getItems()
-      ]);
-      setContainers(loadedContainers || []);
-      setItems(loadedItems || []);
-    } catch (error) {
-      setError("Erreur lors du chargement des données");
-      console.error('Erreur lors du chargement des données:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [refreshTimestamp, loadData]);
-
-  // 5. Logique de filtrage
-  useEffect(() => {
-    const filtered = items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+  // Gestion des filtres
+  const filteredItems = useCallback(() => {
+    return items.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(scanState.searchQuery.toLowerCase());
       
-      if (showOnlySelected) {
-        return matchesSearch && item.containerId === selectedContainer?.id;
+      if (scanState.showOnlySelected) {
+        return matchesSearch && item.containerId === scanState.selectedContainer?.id;
       }
       
-      if (showOtherContainers) {
+      if (scanState.showOtherContainers) {
         return matchesSearch;
       }
       
-      return matchesSearch && (item.containerId === null || item.containerId === selectedContainer?.id);
+      return matchesSearch && (item.containerId === null || item.containerId === scanState.selectedContainer?.id);
     });
-    
-    setFilteredItems(filtered);
-  }, [items, searchQuery, showOnlySelected, showOtherContainers, selectedContainer]);
+  }, [items, scanState.searchQuery, scanState.showOnlySelected, scanState.showOtherContainers, scanState.selectedContainer]);
 
-  // 6. Callbacks
+  // Gestion de la navigation
+  useEffect(() => {
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setScanState(prev => ({
+        ...prev,
+        isScannerActive: false,
+        mode: 'scanner'
+      }));
+    });
+
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      setScanState(prev => ({
+        ...prev,
+        isScannerActive: true
+      }));
+    });
+
+    return () => {
+      unsubscribeBlur();
+      unsubscribeFocus();
+    };
+  }, [navigation]);
+
+  // Gestion de l'assignation manuelle
   const handleManualAssignment = useCallback(async (itemId: number) => {
-    if (!selectedContainer) return;
+    if (!scanState.selectedContainer) return;
     
     try {
-      setIsAssigning(true);
-      setAssignmentProgress({ itemId, status: 'pending' });
+      setScanState(prev => ({
+        ...prev,
+        isAssigning: true,
+        assignmentProgress: { itemId, status: 'pending' }
+      }));
       
-      const updatedItems = [...items];
-      const itemIndex = updatedItems.findIndex(i => i.id === itemId);
-      if (itemIndex === -1) return;
+      const item = items.find(i => i.id === itemId);
+      if (!item) return;
       
-      const item = updatedItems[itemIndex];
       const updateData = {
         ...item,
-        containerId: item.containerId === selectedContainer.id ? null : selectedContainer.id,
+        containerId: item.containerId === scanState.selectedContainer.id ? null : scanState.selectedContainer.id,
         updatedAt: new Date().toISOString()
       };
       
-      updatedItems[itemIndex] = updateData;
-      setItems(updatedItems);
+      // Mise à jour optimiste
       dispatch(updateItemAction(updateData));
       
+      // Mise à jour de la base de données
       await updateItem(itemId, updateData);
       
-      setAssignmentProgress({ itemId, status: 'success' });
+      // Invalider les requêtes
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      
+      setScanState(prev => ({
+        ...prev,
+        assignmentProgress: { itemId, status: 'success' }
+      }));
       
       Alert.alert(
         'Succès',
-        `Article ${item.name} ${item.containerId === selectedContainer.id ? 'retiré du' : 'ajouté au'} container ${selectedContainer.name}`
+        `Article ${item.name} ${item.containerId === scanState.selectedContainer.id ? 'retiré du' : 'ajouté au'} container ${scanState.selectedContainer.name}`
       );
     } catch (error) {
       console.error('Erreur lors de l\'assignation:', error);
-      setAssignmentProgress({ itemId, status: 'error' });
-      await loadData();
+      setScanState(prev => ({
+        ...prev,
+        assignmentProgress: { itemId, status: 'error' }
+      }));
+      await refetch();
       Alert.alert('Erreur', 'Impossible d\'assigner l\'article');
     } finally {
-      setIsAssigning(false);
+      setScanState(prev => ({
+        ...prev,
+        isAssigning: false
+      }));
       setTimeout(() => {
-        setAssignmentProgress({ itemId: 0, status: 'pending' });
+        setScanState(prev => ({
+          ...prev,
+          assignmentProgress: { itemId: 0, status: 'pending' }
+        }));
       }, 2000);
     }
-  }, [selectedContainer, items, dispatch, loadData]);
+  }, [scanState.selectedContainer, items, dispatch, queryClient, refetch]);
 
+  // Gestion du scan
   const handleScanResult = useCallback(async (result: { success: boolean; message: string; type?: 'container' | 'item'; data?: any }) => {
     if (result.success) {
       if (result.type === 'container') {
-        setScanMode('item');
-        const container = containers.find(c => c.qrCode === result.data?.qrCode);
-        if (container) {
-          setSelectedContainer(container);
-        }
-      } else if (result.type === 'item' && selectedContainer) {
+        setScanState(prev => ({
+          ...prev,
+          scanMode: 'item',
+          selectedContainer: containers.find(c => c.qrCode === result.data?.qrCode) || null
+        }));
+      } else if (result.type === 'item' && scanState.selectedContainer) {
         try {
-          const updatedItems = [...items];
-          const itemIndex = updatedItems.findIndex(i => i.qrCode === result.data?.qrCode);
-          if (itemIndex === -1) return;
+          const item = items.find(i => i.qrCode === result.data?.qrCode);
+          if (!item) return;
 
-          const item = updatedItems[itemIndex];
           const updateData = {
             ...item,
-            containerId: selectedContainer.id,
+            containerId: scanState.selectedContainer.id,
             updatedAt: new Date().toISOString()
           };
 
-          updatedItems[itemIndex] = updateData;
-          setItems(updatedItems);
+          // Mise à jour optimiste
           dispatch(updateItemAction(updateData));
 
+          // Mise à jour de la base de données
           await updateItem(item.id!, updateData);
+
+          // Invalider les requêtes
+          queryClient.invalidateQueries({ queryKey: ['items'] });
+          queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
           Alert.alert(
             'Succès',
-            `Article ${item.name} assigné au container ${selectedContainer.name}`
+            `Article ${item.name} assigné au container ${scanState.selectedContainer.name}`
           );
         } catch (error) {
           console.error('Erreur lors du scan:', error);
-          await loadData();
+          await refetch();
           Alert.alert('Erreur', 'Impossible de scanner l\'article. Veuillez réessayer.');
         }
       }
     }
-    setTimeout(() => setIsScannerActive(true), 1500);
-  }, [containers, items, selectedContainer, dispatch, loadData]);
+    setTimeout(() => setScanState(prev => ({ ...prev, isScannerActive: true })), 1500);
+  }, [containers, items, scanState.selectedContainer, dispatch, queryClient, refetch]);
 
-  const renderItem = ({ item }: { item: Item }) => (
-    <TouchableOpacity
-      style={[
-        styles.itemRow,
-        item.containerId === selectedContainer?.id && styles.itemSelected,
-        item.containerId !== null && 
-        item.containerId !== selectedContainer?.id && 
-        styles.itemInOtherContainer,
-        assignmentProgress.itemId === item.id && 
-        assignmentProgress.status === 'pending' && 
-        styles.itemLoading
-      ]}
-      onPress={() => handleManualAssignment(item.id!)}
-      disabled={isAssigning || !selectedContainer}
-    >
-      <View style={styles.itemContent}>
-        <View>
-          <Text style={styles.itemText}>{item.name}</Text>
-          {item.containerId !== null && 
-           item.containerId !== selectedContainer?.id && (
-            <Text style={styles.containerInfo}>
-              Dans: {containers.find(c => c.id === item.containerId)?.name}
-            </Text>
-          )}
-        </View>
-        <View style={styles.itemStatus}>
-          {assignmentProgress.itemId === item.id ? (
-            assignmentProgress.status === 'pending' ? (
-              <ActivityIndicator size="small" color="#007AFF" />
-            ) : assignmentProgress.status === 'success' ? (
-              <MaterialIcons name="check-circle" size={24} color="#4CAF50" />
-            ) : (
-              <MaterialIcons name="error" size={24} color="#FF3B30" />
-            )
-          ) : (
-            item.containerId === selectedContainer?.id && (
-              <MaterialIcons name="check" size={24} color="#4CAF50" />
-            )
-          )}
-        </View>
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
       </View>
-    </TouchableOpacity>
-  );
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -235,71 +212,74 @@ const ScanScreen: React.FC = () => {
           <TouchableOpacity 
             style={styles.modeButton}
             onPress={() => {
-              setShowManualMode(!showManualMode);
-              setSelectedContainer(null);
-              setScanMode('container');
+              setScanState(prev => ({
+                ...prev,
+                mode: prev.mode === 'manual' ? 'scanner' : 'manual',
+                selectedContainer: null,
+                scanMode: 'container'
+              }));
             }}
           >
             <MaterialIcons 
-              name={showManualMode ? "qr-code-scanner" : "edit"} 
+              name={scanState.mode === 'manual' ? "qr-code-scanner" : "edit"} 
               size={24} 
               color="#fff" 
             />
             <Text style={styles.modeButtonText}>
-              {showManualMode ? 'Mode Scanner' : 'Mode Manuel'}
+              {scanState.mode === 'manual' ? 'Mode Scanner' : 'Mode Manuel'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {showManualMode ? (
+        {scanState.mode === 'manual' ? (
           <View style={styles.manualContainer}>
             <ScrollView>
               <Text style={styles.sectionTitle}>Sélectionner un container:</Text>
               <View style={styles.containerGrid}>
-                {containers.map((container: Container) => (
+                {containers.map((container) => (
                   <TouchableOpacity
                     key={container.id}
                     style={[
                       styles.containerButton,
-                      selectedContainer?.id === container.id && styles.containerSelected
+                      scanState.selectedContainer?.id === container.id && styles.containerSelected
                     ]}
-                    onPress={() => setSelectedContainer(container)}
+                    onPress={() => setScanState(prev => ({ ...prev, selectedContainer: container }))}
                   >
                     <Text style={styles.containerText}>{container.name}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {selectedContainer && (
+              {scanState.selectedContainer && (
                 <>
                   <Text style={styles.sectionTitle}>
-                    Articles à assigner à {selectedContainer.name}:
+                    Articles à assigner à {scanState.selectedContainer.name}:
                   </Text>
                 
                   <View style={styles.searchContainer}>
                     <TextInput
                       style={styles.searchInput}
                       placeholder="Rechercher un article..."
-                      value={searchQuery}
-                      onChangeText={setSearchQuery}
+                      value={scanState.searchQuery}
+                      onChangeText={(text) => setScanState(prev => ({ ...prev, searchQuery: text }))}
                     />
                   </View>
 
                   <View style={styles.filterContainer}>
                     <TouchableOpacity
-                      style={[styles.filterButton, showOnlySelected && styles.filterButtonActive]}
-                      onPress={() => setShowOnlySelected(!showOnlySelected)}
+                      style={[styles.filterButton, scanState.showOnlySelected && styles.filterButtonActive]}
+                      onPress={() => setScanState(prev => ({ ...prev, showOnlySelected: !prev.showOnlySelected }))}
                     >
-                      <Text style={[styles.filterButtonText, showOnlySelected && styles.filterButtonTextActive]}>
+                      <Text style={[styles.filterButtonText, scanState.showOnlySelected && styles.filterButtonTextActive]}>
                         Articles assignés
                       </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.filterButton, showOtherContainers && styles.filterButtonActive]}
-                      onPress={() => setShowOtherContainers(!showOtherContainers)}
+                      style={[styles.filterButton, scanState.showOtherContainers && styles.filterButtonActive]}
+                      onPress={() => setScanState(prev => ({ ...prev, showOtherContainers: !prev.showOtherContainers }))}
                     >
-                      <Text style={[styles.filterButtonText, showOtherContainers && styles.filterButtonTextActive]}>
+                      <Text style={[styles.filterButtonText, scanState.showOtherContainers && styles.filterButtonTextActive]}>
                         Tous les articles
                       </Text>
                     </TouchableOpacity>
@@ -308,10 +288,52 @@ const ScanScreen: React.FC = () => {
               )}
             </ScrollView>
 
-            {selectedContainer && (
+            {scanState.selectedContainer && (
               <FlatList
-                data={filteredItems}
-                renderItem={renderItem}
+                data={filteredItems()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.itemRow,
+                      item.containerId === scanState.selectedContainer?.id && styles.itemSelected,
+                      item.containerId !== null && 
+                      item.containerId !== scanState.selectedContainer?.id && 
+                      styles.itemInOtherContainer,
+                      scanState.assignmentProgress.itemId === item.id && 
+                      scanState.assignmentProgress.status === 'pending' && 
+                      styles.itemLoading
+                    ]}
+                    onPress={() => handleManualAssignment(item.id!)}
+                    disabled={scanState.isAssigning || !scanState.selectedContainer}
+                  >
+                    <View style={styles.itemContent}>
+                      <View>
+                        <Text style={styles.itemText}>{item.name}</Text>
+                        {item.containerId !== null && 
+                         item.containerId !== scanState.selectedContainer?.id && (
+                          <Text style={styles.containerInfo}>
+                            Dans: {containers.find(c => c.id === item.containerId)?.name}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.itemStatus}>
+                        {scanState.assignmentProgress.itemId === item.id ? (
+                          scanState.assignmentProgress.status === 'pending' ? (
+                            <ActivityIndicator size="small" color="#007AFF" />
+                          ) : scanState.assignmentProgress.status === 'success' ? (
+                            <MaterialIcons name="check-circle" size={24} color="#4CAF50" />
+                          ) : (
+                            <MaterialIcons name="error" size={24} color="#FF3B30" />
+                          )
+                        ) : (
+                          item.containerId === scanState.selectedContainer?.id && (
+                            <MaterialIcons name="check" size={24} color="#4CAF50" />
+                          )
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 keyExtractor={item => item.id!.toString()}
                 style={styles.itemList}
               />
@@ -321,7 +343,7 @@ const ScanScreen: React.FC = () => {
           <View style={styles.scannerContainer}>
             <Scanner 
               onClose={() => router.back()} 
-              isActive={isScannerActive}
+              isActive={scanState.isScannerActive}
               onScan={handleScanResult}
             />
           </View>
@@ -500,6 +522,11 @@ const styles = StyleSheet.create({
   },
   itemLoading: {
     opacity: 0.7,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

@@ -6,10 +6,21 @@ import { fetchItems, fetchItemByBarcode, fetchSimilarItems, updateItemStatus, mo
 // Type étendu pour garantir un ID non-null
 export type ItemWithId = Omit<Item, 'id'> & { id: number };
 
-// Création de l'adaptateur pour les items
+// Création de l'adaptateur d'entités
 export const itemsAdapter = createEntityAdapter<ItemWithId>({
-  sortComparer: (a: ItemWithId, b: ItemWithId) => a.name.localeCompare(b.name),
+  sortComparer: (a: ItemWithId, b: ItemWithId) => {
+    const aDate = a.updatedAt || '';
+    const bDate = b.updatedAt || '';
+    return bDate.localeCompare(aDate);
+  }
 });
+
+// Sélecteurs générés par l'adaptateur
+export const {
+  selectAll: selectAllItems,
+  selectById: selectItemById,
+  selectIds: selectItemIds,
+} = itemsAdapter.getSelectors<RootState>((state) => state.items);
 
 // État initial avec l'adaptateur
 const initialState = itemsAdapter.getInitialState({
@@ -106,14 +117,6 @@ const itemsSlice = createSlice({
       });
   }
 });
-
-// Sélecteurs de base
-export const {
-  selectAll: selectAllItems,
-  selectById: selectItemById,
-  selectIds: selectItemIds,
-  selectTotal: selectTotalItems,
-} = itemsAdapter.getSelectors<RootState>((state) => state.items);
 
 // Sélecteurs mémorisés
 export const selectItemsByContainer = createSelector(
