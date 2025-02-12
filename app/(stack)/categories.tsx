@@ -90,15 +90,15 @@ const CategoryScreen = () => {
       if (editingCategory) {
         // Mise à jour optimiste pour l'édition
         const updatedCategory = {
-          id: editingCategory.id,
+          id: editingCategory.id!,
           name: formData.name.trim(),
           description: formData.description.trim(),
           updatedAt: now
         };
-        dispatch(editCategory({ id: editingCategory.id, name: formData.name.trim() }));
+        dispatch(editCategory({ id: editingCategory.id!, name: formData.name.trim() }));
         
         // Mise à jour dans la base de données
-        await updateCategory(editingCategory.id, formData.name.trim(), formData.description.trim());
+        await updateCategory(editingCategory.id!, formData.name.trim(), formData.description.trim());
       } else {
         // Mise à jour optimiste pour l'ajout
         const tempId = Date.now();
@@ -149,6 +149,9 @@ const CategoryScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              if (!category.id) {
+                throw new Error('ID de catégorie manquant');
+              }
               // Mise à jour optimiste
               dispatch(deleteCategory(category.id));
               

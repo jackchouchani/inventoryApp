@@ -4,19 +4,21 @@
     "slug": "inventory-cv",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": null,
+    "icon": "./assets/Logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": null,
+      "image": "./assets/Logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "updates": {
+      "fallbackToCacheTimeout": 0,
       "assetPatternsToBeBundled": [
         "**/*.ttf",
         "**/*.png",
-        "**/*.js"
+        "**/*.js",
+        "**/*.mp3"
       ]
     },
     "plugins": [
@@ -40,7 +42,12 @@
           "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
         }
       ],
-      "expo-system-ui"
+      [
+        "expo-av",
+        {
+          "microphonePermission": "L'application nécessite l'accès au microphone pour les retours sonores."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -51,14 +58,13 @@
           "fetch",
           "remote-notification"
         ],
-        "UIStatusBarHidden": true,
+        "UIStatusBarHidden": false,
         "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
         "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone.",
         "NSHapticsUsageDescription": "L'application utilise les vibrations pour le retour haptique",
         "UIViewControllerBasedStatusBarAppearance": false
-      },
-      "statusBarHidden": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -67,9 +73,13 @@
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "package": "com.anonymous.inventoryApp"
+      "package": "com.anonymous.inventoryApp",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/Logo.png",
@@ -80,7 +90,20 @@
       "backgroundColor": "#ffffff",
       "startUrl": "/",
       "display": "standalone",
-      "orientation": "portrait"
+      "orientation": "portrait",
+      "description": "Application de gestion d'inventaire",
+      "dir": "ltr",
+      "preferRelatedApplications": true,
+      "relatedApplications": [
+        {
+          "platform": "play",
+          "id": "com.anonymous.inventoryApp"
+        },
+        {
+          "platform": "itunes",
+          "url": "https://apps.apple.com/app/inventoryApp"
+        }
+      ]
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
@@ -91,6 +114,9 @@
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
-    }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
   }
 }

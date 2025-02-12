@@ -61,11 +61,14 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         // Haptic feedback
         await haptics.vibrate(success ? haptics.SUCCESS_PATTERN : haptics.ERROR_PATTERN);
         // Sound feedback
-        await sounds.playSound(success ? 'success' : 'error');
+        await sounds.play(success ? 'success' : 'error');
     }, [fadeAnim]);
 
-    const updateScanState = useCallback((updates: Partial<ScanState>) => {
-        setScanState(prev => ({ ...prev, ...updates }));
+    const updateScanState = useCallback((updates: Partial<ScanState> | ((prev: ScanState) => Partial<ScanState>)) => {
+        setScanState(prev => ({
+            ...prev,
+            ...(typeof updates === 'function' ? updates(prev) : updates)
+        }));
     }, []);
 
     const handleContainerScan = useCallback(async (qrData: string) => {
@@ -213,7 +216,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 <Text style={styles.text}>
                     {permission === null ? 'Demande d\'accès à la caméra...' : 'Pas d\'accès à la caméra'}
                 </Text>
-                {permission === false && (
+                {permission?.granted === false && (
                     <TouchableOpacity onPress={onClose} style={styles.button}>
                         <Text style={styles.buttonText}>Fermer</Text>
                     </TouchableOpacity>
