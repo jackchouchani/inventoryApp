@@ -60,4 +60,5 @@ export interface DatabaseInterface {
     containers: Container[],
     categories: Category[]
   }) => Promise<void>;
+  deleteItem: (id: number) => Promise<void>;
 }

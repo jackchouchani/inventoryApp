@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
+import { useRouter, useNavigation } from 'expo-router';
 import { Scanner } from '../../src/components/Scanner';
 import { Container, Item, updateItem, getContainers, getItems } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
@@ -14,6 +14,7 @@ interface ItemProps {
 
 const ScanScreen: React.FC = () => {
   const router = useRouter();
+  const navigation = useNavigation();
   const [showManualMode, setShowManualMode] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [containers, setContainers] = useState<Container[]>([]);
@@ -32,6 +33,20 @@ const ScanScreen: React.FC = () => {
     itemId: 0,
     status: 'pending'
   });
+
+  // Effet pour désactiver le scanner lors du changement d'onglet
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      setIsScannerActive(false);
+      setShowManualMode(false);
+    });
+
+    return () => {
+      unsubscribe();
+      setIsScannerActive(false);
+      setShowManualMode(false);
+    };
+  }, [navigation]);
 
   const loadData = async () => {
     try {
@@ -232,74 +247,68 @@ const ScanScreen: React.FC = () => {
 
         {showManualMode ? (
           <View style={styles.manualContainer}>
-            <Text style={styles.sectionTitle}>Sélectionner un container:</Text>
-            <View style={styles.containerGrid}>
-              {containers.map((container: Container) => (
-                <TouchableOpacity
-                  key={container.id}
-                  style={[
-                    styles.containerButton,
-                    selectedContainer?.id === container.id && styles.containerSelected
-                  ]}
-                  onPress={() => setSelectedContainer(container)}
-                >
-                  <Text style={styles.containerText}>{container.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <ScrollView>
+              <Text style={styles.sectionTitle}>Sélectionner un container:</Text>
+              <View style={styles.containerGrid}>
+                {containers.map((container: Container) => (
+                  <TouchableOpacity
+                    key={container.id}
+                    style={[
+                      styles.containerButton,
+                      selectedContainer?.id === container.id && styles.containerSelected
+                    ]}
+                    onPress={() => setSelectedContainer(container)}
+                  >
+                    <Text style={styles.containerText}>{container.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {selectedContainer && (
+                <>
+                  <Text style={styles.sectionTitle}>
+                    Articles à assigner à {selectedContainer.name}:
+                  </Text>
+                
+                  <View style={styles.searchContainer}>
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Rechercher un article..."
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                  </View>
+
+                  <View style={styles.filterContainer}>
+                    <TouchableOpacity
+                      style={[styles.filterButton, showOnlySelected && styles.filterButtonActive]}
+                      onPress={() => setShowOnlySelected(!showOnlySelected)}
+                    >
+                      <Text style={[styles.filterButtonText, showOnlySelected && styles.filterButtonTextActive]}>
+                        Articles assignés
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.filterButton, showOtherContainers && styles.filterButtonActive]}
+                      onPress={() => setShowOtherContainers(!showOtherContainers)}
+                    >
+                      <Text style={[styles.filterButtonText, showOtherContainers && styles.filterButtonTextActive]}>
+                        Tous les articles
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
 
             {selectedContainer && (
-              <>
-                <Text style={styles.sectionTitle}>
-                  Articles à assigner à {selectedContainer.name}:
-                </Text>
-              
-                <View style={styles.searchContainer}>
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Rechercher un article..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                </View>
-
-                <View style={styles.filterContainer}>
-                  <TouchableOpacity
-                    style={[styles.filterButton, showOnlySelected && styles.filterButtonActive]}
-                    onPress={() => setShowOnlySelected(!showOnlySelected)}
-                  >
-                    <Text style={[styles.filterButtonText, showOnlySelected && styles.filterButtonTextActive]}>
-                      Articles assignés
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.filterButton, showOtherContainers && styles.filterButtonActive]}
-                    onPress={() => setShowOtherContainers(!showOtherContainers)}
-                  >
-                    <Text style={[styles.filterButtonText, showOtherContainers && styles.filterButtonTextActive]}>
-                      Tous les articles
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <FlatList
-                  data={filteredItems}
-                  renderItem={renderItem}
-                  keyExtractor={item => item.id!.toString()}
-                  style={styles.itemList}
-                />
-                <TouchableOpacity 
-                  style={styles.validateButton}
-                  onPress={() => {
-                    Alert.alert('Succès', 'Changements enregistrés');
-                    setSelectedContainer(null);
-                    loadData();
-                  }}
-                >
-                  <Text style={styles.validateButtonText}>Valider les changements</Text>
-                </TouchableOpacity>
-              </>
+              <FlatList
+                data={filteredItems}
+                renderItem={renderItem}
+                keyExtractor={item => item.id!.toString()}
+                style={styles.itemList}
+              />
             )}
           </View>
         ) : (

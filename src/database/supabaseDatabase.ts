@@ -415,6 +415,24 @@ const supabaseDatabase: DatabaseInterface = {
       .single();
     
     return !!data;
+  },
+
+  async deleteItem(id: number): Promise<void> {
+    try {
+      if (!id) {
+        throw handleValidationError('ID de l\'item manquant', 'deleteItem');
+      }
+
+      const { error } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'deleteItem');
+      throw error;
+    }
   }
 };
 

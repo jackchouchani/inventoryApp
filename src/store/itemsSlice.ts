@@ -24,9 +24,12 @@ const itemsSlice = createSlice({
       if (index !== -1) {
         state.items[index] = action.payload;
       }
+    },
+    removeItem: (state, action: PayloadAction<number>) => {
+      state.items = state.items.filter(item => item.id !== action.payload);
     }
   }
 });
 
-export const { setItems, addItem, updateItem } = itemsSlice.actions;
+export const { setItems, addItem, updateItem, removeItem } = itemsSlice.actions;
 export default itemsSlice.reducer; 
