@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { Item, Container, Category } from '../database/types';
+import { Item } from '../types/item';
+import { Container } from '../types/container';
+import { Category } from '../types/category';
 import { supabase } from '../config/supabase';
 import { deflate, inflate } from 'pako';
 
@@ -30,11 +32,32 @@ interface ConflictResolution {
   timestamp: number;
 }
 
+interface MutationQueueItem {
+    id: string;
+    type: 'CREATE' | 'UPDATE' | 'DELETE';
+    table: string;
+    payload: any;
+    retries: number;
+    timestamp: number;
+}
+
+const QUEUE_STORAGE_KEY = 'mutationQueue';
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 seconde
+
+interface MutationError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
 // Compression des données
 const compressData = (data: any): string => {
   const jsonString = JSON.stringify(data);
-  const compressed = deflate(new TextEncoder().encode(jsonString));
-  return btoa(String.fromCharCode.apply(null, compressed));
+  const uint8Array = new TextEncoder().encode(jsonString);
+  const compressed = deflate(uint8Array);
+  const compressedArray = Array.from(compressed);
+  return btoa(String.fromCharCode(...compressedArray));
 };
 
 // Décompression des données
@@ -54,11 +77,16 @@ class OfflineSyncManager {
   private pendingChanges: PendingChange[] = [];
   private isOnline: boolean = true;
   private conflictResolutions: Map<string, ConflictResolution> = new Map();
+  private queue: MutationQueueItem[] = [];
+  private isProcessing: boolean = false;
+  private networkListener: any = null;
 
   constructor() {
     this.initializeNetworkListener();
     this.loadPendingChanges();
     this.loadConflictResolutions();
+    this.initializeQueue();
+    this.setupNetworkListener();
   }
 
   private async initializeNetworkListener() {
@@ -278,6 +306,216 @@ class OfflineSyncManager {
       return true;
     }
   }
+
+  private async initializeQueue() {
+    try {
+      const storedQueue = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
+      if (storedQueue) {
+        this.queue = JSON.parse(storedQueue);
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'initialisation de la file d\'attente:', error);
+    }
+  }
+
+  private setupNetworkListener() {
+    this.networkListener = NetInfo.addEventListener(state => {
+      if (state.isConnected && !this.isProcessing) {
+        this.processQueue();
+      }
+    });
+  }
+
+  private async saveQueue() {
+    try {
+      await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(this.queue));
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de la file d\'attente:', error);
+    }
+  }
+
+  private calculateBackoff(retries: number): number {
+    return Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retries), 30000); // Max 30 seconds
+  }
+
+  async addToQueue(mutation: Omit<MutationQueueItem, 'id' | 'retries' | 'timestamp'>) {
+    const queueItem: MutationQueueItem = {
+      ...mutation,
+      id: Date.now().toString(),
+      retries: 0,
+      timestamp: Date.now()
+    };
+
+    this.queue.push(queueItem);
+    await this.saveQueue();
+
+    const networkState = await NetInfo.fetch();
+    if (networkState.isConnected && !this.isProcessing) {
+      this.processQueue();
+    }
+  }
+
+  private async executeMutation(mutation: MutationQueueItem): Promise<boolean> {
+    try {
+      const { type, table, payload } = mutation;
+      
+      switch (type) {
+        case 'CREATE':
+          const { data: createData, error: createError } = await supabase
+            .from(table)
+            .insert(payload)
+            .select()
+            .single();
+          
+          if (createError) throw this.handleError(createError);
+          return true;
+
+        case 'UPDATE':
+          const { data: updateData, error: updateError } = await supabase
+            .from(table)
+            .update(payload)
+            .eq('id', payload.id)
+            .select()
+            .single();
+          
+          if (updateError) throw this.handleError(updateError);
+          return true;
+
+        case 'DELETE':
+          const { error: deleteError } = await supabase
+            .from(table)
+            .delete()
+            .eq('id', payload.id);
+          
+          if (deleteError) throw this.handleError(deleteError);
+          return true;
+
+        default:
+          console.error(`Type de mutation non supporté: ${type}`);
+          return false;
+      }
+    } catch (error) {
+      const mutationError = error as MutationError;
+      if (!mutationError.retryable) {
+        console.error(`Erreur non récupérable pour la mutation ${mutation.id}:`, error);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private handleError(error: any): MutationError {
+    // Erreurs retryable
+    const retryableErrors = [
+      'network_error',
+      'timeout',
+      'rate_limit',
+      'connection_error'
+    ];
+
+    return {
+      code: error.code || 'unknown',
+      message: error.message || 'Une erreur inconnue est survenue',
+      retryable: retryableErrors.includes(error.code)
+    };
+  }
+
+  private async processQueue() {
+    if (this.isProcessing || this.queue.length === 0) return;
+
+    this.isProcessing = true;
+
+    try {
+      const networkState = await NetInfo.fetch();
+      if (!networkState.isConnected) {
+        this.isProcessing = false;
+        return;
+      }
+
+      const currentQueue = [...this.queue];
+      const failedMutations: MutationQueueItem[] = [];
+
+      for (const mutation of currentQueue) {
+        try {
+          const success = await this.executeMutation(mutation);
+
+          if (!success) {
+            if (mutation.retries < MAX_RETRIES) {
+              const backoffDelay = this.calculateBackoff(mutation.retries);
+              await new Promise(resolve => setTimeout(resolve, backoffDelay));
+              
+              mutation.retries++;
+              failedMutations.push(mutation);
+            } else {
+              // Notifier l'échec via un système d'événements
+              this.emitSyncError({
+                type: 'mutation_failed',
+                mutation,
+                error: `La mutation a échoué après ${MAX_RETRIES} tentatives`
+              });
+            }
+          }
+        } catch (error) {
+          const mutationError = error as MutationError;
+          if (mutationError.retryable && mutation.retries < MAX_RETRIES) {
+            mutation.retries++;
+            failedMutations.push(mutation);
+          } else {
+            this.emitSyncError({
+              type: 'mutation_failed',
+              mutation,
+              error: mutationError.message
+            });
+          }
+        }
+      }
+
+      this.queue = failedMutations;
+      await this.saveQueue();
+
+      // Si des mutations ont échoué, planifier une nouvelle tentative
+      if (failedMutations.length > 0) {
+        const nextRetryDelay = Math.min(
+          ...failedMutations.map(m => this.calculateBackoff(m.retries))
+        );
+        setTimeout(() => this.processQueue(), nextRetryDelay);
+      }
+    } catch (error) {
+      console.error('Erreur lors du traitement de la file d\'attente:', error);
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  private emitSyncError(error: { type: string; mutation: MutationQueueItem; error: string }) {
+    // Émettre l'erreur via un système d'événements (à implémenter selon les besoins)
+    console.error('Erreur de synchronisation:', error);
+  }
+
+  cleanup() {
+    if (this.networkListener) {
+      this.networkListener();
+    }
+  }
 }
 
-export const offlineSyncManager = new OfflineSyncManager(); 
+export const offlineSyncManager = new OfflineSyncManager();
+
+// Hooks pour l'utilisation dans les composants
+export const useOfflineSync = () => {
+  const queueMutation = async (
+    type: MutationQueueItem['type'],
+    table: string,
+    payload: any
+  ) => {
+    await offlineSyncManager.addToQueue({
+      type,
+      table,
+      payload
+    });
+  };
+
+  return {
+    queueMutation
+  };
+}; 

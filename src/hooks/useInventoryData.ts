@@ -1,36 +1,12 @@
 import { useQuery, useMutation, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
 import { supabase } from '../config/supabase';
-import { Container, Item, Category } from '../database/types';
+import { Container } from '../types/container';
+import { Item } from '../types/item';
+import { Category } from '../types/category';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
-import { useInfiniteQuery, useQueries } from '@tanstack/react-query';
-import { getItems, getCategories, getContainers } from '../database/database';
-import { useDispatch, useSelector } from 'react-redux';
-import { setItems } from '../store/itemsSlice';
-import { setCategories } from '../store/categorySlice';
-import { setContainers } from '../store/containersSlice';
-import { fetchItems, fetchSimilarItems } from '../store/itemsThunks';
-import { 
-  selectSearchResults, 
-  selectItemsStatus, 
-  selectItemsError,
-  selectHasMore,
-  selectCurrentPage,
-  selectTotalItemsCount
-} from '../store/itemsSlice';
-import { 
-  selectAllCategories,
-  selectCategoriesStatus,
-  selectCategoriesError 
-} from '../store/categorySlice';
-import { 
-  selectAllContainers,
-  selectContainersStatus,
-  selectContainersError 
-} from '../store/containersSlice';
-import { SearchFilters } from '../services/searchService';
-import { useEffect, useCallback, useState } from 'react';
-import { AppDispatch } from '../store/store';
+
+import { useCallback } from 'react';
 
 const PAGE_SIZE = 20;
 
@@ -83,15 +59,16 @@ const fetchInventoryData = async (): Promise<InventoryData> => {
         id: item.id,
         name: item.name,
         description: item.description,
-        purchasePrice: item.purchase_price,
-        sellingPrice: item.selling_price,
+        purchasePrice: parseFloat(item.purchase_price) || 0,
+        sellingPrice: parseFloat(item.selling_price) || 0,
         status: item.status,
         photoUri: item.photo_uri,
         containerId: item.container_id,
         categoryId: item.category_id,
         qrCode: item.qr_code,
         createdAt: item.created_at,
-        updatedAt: item.updated_at
+        updatedAt: item.updated_at,
+        quantity: item.quantity || 1
       })),
       containers: (containersResponse.data || []).map(container => ({
         id: container.id,
@@ -100,7 +77,9 @@ const fetchInventoryData = async (): Promise<InventoryData> => {
         description: container.description,
         qrCode: container.qr_code,
         createdAt: container.created_at,
-        updatedAt: container.updated_at
+        updatedAt: container.updated_at,
+        capacity: container.capacity || 0,
+        currentItems: container.current_items || 0
       })),
       categories: (categoriesResponse.data || []).map(category => ({
         id: category.id,
@@ -201,7 +180,8 @@ export const useInventoryData = (params: UseInventoryDataParams = {}): UseInvent
           qrCode: item.qr_code,
           createdAt: item.created_at,
           updatedAt: item.updated_at,
-          soldAt: item.sold_at
+          soldAt: item.sold_at,
+          quantity: item.quantity || 1
         }));
       } catch (error) {
         console.error('Error fetching items:', error);
@@ -209,7 +189,10 @@ export const useInventoryData = (params: UseInventoryDataParams = {}): UseInvent
       }
     },
     staleTime: 1000 * 60, // 1 minute
-    gcTime: 1000 * 60 * 5 // 5 minutes
+    gcTime: 1000 * 60 * 5, // 5 minutes
+    enabled: true, // S'assurer que la requête est activée par défaut
+    refetchOnMount: true, // Recharger les données au montage
+    refetchOnWindowFocus: true // Recharger les données quand la fenêtre reprend le focus
   });
 
   const {
@@ -235,12 +218,33 @@ export const useInventoryData = (params: UseInventoryDataParams = {}): UseInvent
   } = useQuery({
     queryKey: queryKeys.containers,
     queryFn: async () => {
+      console.log('Fetching containers...');
       const { data, error } = await supabase
         .from('containers')
         .select('*')
         .is('deleted', false);
-      if (error) throw error;
-      return data || [];
+      
+      if (error) {
+        console.error('Error fetching containers:', error);
+        throw error;
+      }
+
+      console.log('Raw containers data:', data);
+      
+      const mappedContainers = (data || []).map(container => ({
+        id: container.id,
+        name: container.name,
+        number: container.number,
+        description: container.description,
+        qrCode: container.qr_code,
+        createdAt: container.created_at,
+        updatedAt: container.updated_at,
+        deleted: container.deleted,
+        userId: container.user_id
+      }));
+
+      console.log('Mapped containers:', mappedContainers);
+      return mappedContainers;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10 // 10 minutes

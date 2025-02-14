@@ -1,0 +1,87 @@
+React Best Practices:
+
+Use functional components and hooks instead of class components
+Implement proper React memo and useMemo for performance optimization
+Follow the React hooks rules strictly to avoid common pitfalls
+Utilize React.lazy and Suspense for code-splitting and better performance
+Implement proper error boundaries to handle and display errors gracefully
+
+Expo Best Practices:
+
+Use Expo's managed workflow for easier app development and updates
+Implement proper asset management using Expo's asset system
+Utilize Expo's secure storage for sensitive data instead of AsyncStorage
+Leverage Expo's built-in modules (e.g., Camera, BarcodeScanner) for native functionality
+Implement proper error handling and logging using Expo's tools
+
+React Navigation Best Practices:
+
+Use the latest version of React Navigation for better performance and features
+Implement proper navigation state management using the navigation prop
+Utilize the useNavigation hook for better type safety and easier navigation
+Implement proper deep linking for improved user experience and SEO
+Use the navigationOptions prop for consistent styling across screens
+
+Redux Toolkit Best Practices:
+
+Use Redux Toolkit's createSlice for easier state management
+Implement proper state normalization for better performance and data integrity
+Utilize Redux Toolkit's createAsyncThunk for handling asynchronous operations
+Implement proper error handling and loading states in reducers
+Use Redux Toolkit's configureStore for easier store setup and middleware management
+
+React Query Best Practices:
+
+Use React Query for data fetching and caching to improve performance
+Implement proper query keys for efficient cache management
+Utilize the useMutation hook for handling side effects and optimistic updates
+Implement proper error handling and loading states with React Query
+Use the queryClient.invalidateQueries method for efficient cache invalidation
+
+Supabase Best Practices:
+
+Use Supabase's client-side authentication for secure user management
+Implement proper row-level security for data protection
+Utilize Supabase's real-time capabilities for live updates
+Implement proper error handling and logging for Supabase operations
+Use Supabase's storage solution for secure file management
+
+Sentry Best Practices:
+
+Implement Sentry for error tracking and monitoring
+Configure proper error reporting and sampling rates
+Utilize Sentry's breadcrumb feature for better error context
+Implement proper user identification for personalized error reporting
+Use Sentry's performance monitoring for identifying bottlenecks
+
+Async Storage Best Practices:
+
+Use Async Storage for simple key-value storage
+Implement proper error handling for Async Storage operations
+Utilize Async Storage's multi-get and multi-set methods for batch operations
+Implement proper data versioning for backward compatibility
+Use Async Storage's clear method carefully to avoid data loss
+
+Date-fns Best Practices:
+
+Use date-fns for lightweight date manipulation
+Implement proper timezone handling with date-fns-tz
+Utilize date-fns' format and parse functions for consistent date formatting
+Implement proper date validation using date-fns' isValid function
+Use date-fns' locale feature for internationalization
+
+React Native Vector Icons Best Practices:
+
+Use React Native Vector Icons for consistent icon rendering
+Implement proper icon caching for better performance
+Utilize the icon component's props for customization
+Implement proper icon accessibility for better user experience
+Use the icon set that best fits your app's design language
+
+General Standards:
+
+Keep components small and focused for better maintainability
+Follow proper state management patterns to avoid prop drilling
+Implement proper testing practices for both unit and integration tests
+Use TypeScript for better type safety and code quality
+Implement comprehensive error handling and logging throughout the app

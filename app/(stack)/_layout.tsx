@@ -70,6 +70,22 @@ export default function StackLayout() {
           headerBackTitle: "Retour"
         }} 
       />
+      <Stack.Screen 
+        name="add-category" 
+        options={{ 
+          title: "Nouvelle catégorie",
+          presentation: 'modal',
+          headerBackTitle: "Retour"
+        }} 
+      />
+      <Stack.Screen 
+        name="edit-category" 
+        options={{ 
+          title: "Modifier la catégorie",
+          presentation: 'modal',
+          headerBackTitle: "Retour"
+        }} 
+      />
     </Stack>
   );
 } 

@@ -1,17 +1,28 @@
 import { configureStore } from '@reduxjs/toolkit';
-import categoryReducer from './categorySlice';
 import itemsReducer from './itemsSlice';
+import categoriesReducer from './categorySlice';
 import containersReducer from './containersSlice';
 import { ContainersState } from './containersSlice';
 import { categoriesAdapter } from './categorySlice';
-import { itemsAdapter } from './itemsSlice';
+import { itemsAdapter } from './itemsAdapter';
 import { containersAdapter } from './containersSlice';
-import { Item } from '../database/types';
+import { Item } from '../types/item';
+import { errorMiddleware } from './middleware/errorMiddleware';
+
+export const store = configureStore({
+  reducer: {
+    items: itemsReducer,
+    categories: categoriesReducer,
+    containers: containersReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(errorMiddleware),
+});
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 
-const initialState = {
+export const getInitialState = () => ({
   items: itemsAdapter.getInitialState({
     status: 'idle' as const,
     error: null as string | null,
@@ -31,13 +42,4 @@ const initialState = {
     error: null as string | null,
     loading: false,
   }),
-};
-
-export const store = configureStore({
-  reducer: {
-    categories: categoryReducer,
-    items: itemsReducer,
-    containers: containersReducer,
-  },
-  preloadedState: initialState,
 });

@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'expo-router';
-import { getContainers, getCategories, getItems } from '../../src/database/database';
-import { setItems } from '../../src/store/itemsSlice';
+import { database } from '../../src/database/database';
+import { setItems } from '../../src/store/itemsActions';
 import ItemForm from '../../src/components/ItemForm';
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { Container, Category } from '../../src/database/types';
+import { Container } from '../../src/types/container';
+import { Category } from '../../src/types/category';
 
 export default function AddScreen() {
   const [loading, setLoading] = useState(true);
@@ -23,12 +24,12 @@ export default function AddScreen() {
       setLoading(true);
       setError(null);
       const [loadedContainers, loadedCategories] = await Promise.all([
-        getContainers(),
-        getCategories()
+        database.getContainers(),
+        database.getCategories()
       ]);
       setContainers(loadedContainers || []);
       setCategories(loadedCategories || []);
-      const items = await getItems();
+      const items = await database.getItems();
       dispatch(setItems(items || []));
     } catch (error) {
       console.error('Error loading data:', error);
