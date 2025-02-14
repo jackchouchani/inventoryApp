@@ -1,10 +1,13 @@
-import { supabase } from '../config/supabase';
-import { DatabaseInterface, Item, Container, Category } from './types';
+import { supabase } from './supabaseClient';
+import type { DatabaseInterface } from './database';
+import type { Item, ItemInput, ItemUpdate } from '../types/item';
+import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
+import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import { photoService } from '../services/photoService';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
-const supabaseDatabase: DatabaseInterface = {
+export class SupabaseDatabase implements DatabaseInterface {
   async getContainers(): Promise<Container[]> {
     try {
       const { data, error } = await supabase
@@ -17,17 +20,19 @@ const supabaseDatabase: DatabaseInterface = {
       return (data || []).map(container => ({
         id: container.id,
         name: container.name,
-        number: container.number,
         description: container.description,
+        number: container.number,
         qrCode: container.qr_code,
         createdAt: container.created_at,
-        updatedAt: container.updated_at
+        updatedAt: container.updated_at,
+        deleted: container.deleted,
+        userId: container.user_id
       }));
     } catch (error) {
       handleDatabaseError(error as PostgrestError, 'getContainers');
       return [];
     }
-  },
+  }
 
   async getCategories(): Promise<Category[]> {
     try {
@@ -49,55 +54,7 @@ const supabaseDatabase: DatabaseInterface = {
       handleDatabaseError(error as PostgrestError, 'getCategories');
       return [];
     }
-  },
-
-  async updateItem(id: number, item: Omit<Item, "id">): Promise<void> {
-    try {
-      if (!id) {
-        throw handleValidationError('ID de l\'item manquant', 'updateItem');
-      }
-
-      const supabaseItem = {
-        name: item.name,
-        description: item.description,
-        purchase_price: item.purchasePrice,
-        selling_price: item.sellingPrice,
-        status: item.status,
-        photo_uri: item.photoUri,
-        container_id: item.containerId,
-        category_id: item.categoryId,
-        qr_code: item.qrCode
-      };
-
-      const { error } = await supabase
-        .from('items')
-        .update(supabaseItem)
-        .eq('id', id);
-
-      if (error) throw error;
-    } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'updateItem');
-      throw error;
-    }
-  },
-
-  async updateItemStatus(itemId: number, status: string): Promise<void> {
-    try {
-      if (!itemId) {
-        throw handleValidationError('ID de l\'item manquant', 'updateItemStatus');
-      }
-
-      const { error } = await supabase
-        .from('items')
-        .update({ status })
-        .eq('id', itemId);
-
-      if (error) throw error;
-    } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'updateItemStatus');
-      throw error;
-    }
-  },
+  }
 
   async getItems(): Promise<Item[]> {
     try {
@@ -121,83 +78,73 @@ const supabaseDatabase: DatabaseInterface = {
         categoryId: item.category_id,
         qrCode: item.qr_code,
         createdAt: item.created_at,
-        updatedAt: item.updated_at
+        updatedAt: item.updated_at,
+        soldAt: item.sold_at
       }));
     } catch (error) {
       handleDatabaseError(error as PostgrestError, 'getItems');
       return [];
     }
-  },
+  }
 
-  async addItem(item: Omit<Item, "id" | "createdAt" | "updatedAt">): Promise<number> {
-    try {
-      if (!item.name) {
-        throw handleValidationError('Le nom de l\'item est requis', 'addItem');
-      }
+  async updateItem(id: number, item: ItemUpdate): Promise<void> {
+    const updateData: any = {};
+    if (item.name !== undefined) updateData.name = item.name;
+    if (item.description !== undefined) updateData.description = item.description;
+    if (item.purchasePrice !== undefined) updateData.purchase_price = item.purchasePrice;
+    if (item.sellingPrice !== undefined) updateData.selling_price = item.sellingPrice;
+    if (item.status !== undefined) updateData.status = item.status;
+    if (item.photoUri !== undefined) updateData.photo_uri = item.photoUri;
+    if (item.containerId !== undefined) updateData.container_id = item.containerId;
+    if (item.categoryId !== undefined) updateData.category_id = item.categoryId;
+    if (item.qrCode !== undefined) updateData.qr_code = item.qrCode;
+    if (item.soldAt !== undefined) updateData.sold_at = item.soldAt;
+    updateData.updated_at = new Date().toISOString();
 
-      // Vérification de l'authentification
-      const { data: sessionData, error: authError } = await supabase.auth.getSession();
-      
-      if (authError) {
-        console.error('Erreur d\'authentification:', authError);
-        throw handleValidationError('Erreur d\'authentification', 'addItem');
-      }
+    const { error } = await supabase
+      .from('items')
+      .update(updateData)
+      .eq('id', id);
 
-      if (!sessionData.session?.user?.id) {
-        console.error('Utilisateur non authentifié');
-        throw handleValidationError('Utilisateur non authentifié', 'addItem');
-      }
+    if (error) throw error;
+  }
 
-      const userId = sessionData.session.user.id;
+  async updateItemStatus(id: number, status: Item['status']): Promise<void> {
+    const { error } = await supabase
+      .from('items')
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
 
-      // Construction de l'objet à insérer
-      const supabaseItem = {
+    if (error) throw error;
+  }
+
+  async addItem(item: ItemInput): Promise<number> {
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
         name: item.name,
-        description: item.description || null,
-        purchase_price: item.purchasePrice || 0,
-        selling_price: item.sellingPrice || 0,
-        status: item.status || 'available',
-        photo_uri: item.photoUri || null,
-        container_id: item.containerId || null,
-        category_id: item.categoryId || null,
-        qr_code: item.qrCode || null,
-        user_id: userId,
-        created_by: userId,
-        deleted: false
-      };
+        description: item.description,
+        purchase_price: item.purchasePrice,
+        selling_price: item.sellingPrice,
+        status: item.status,
+        photo_uri: item.photoUri,
+        container_id: item.containerId,
+        category_id: item.categoryId,
+        qr_code: item.qrCode,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
 
-      console.log('Données à insérer:', supabaseItem);
+    if (error) throw error;
+    return data.id;
+  }
 
-      // Insertion avec gestion d'erreur détaillée
-      const { data, error } = await supabase
-        .from('items')
-        .insert(supabaseItem)
-        .select('*')
-        .single();
-      
-      if (error) {
-        console.error('Erreur Supabase détaillée:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
-      }
-
-      if (!data) {
-        throw handleValidationError('Aucune donnée retournée après l\'insertion', 'addItem');
-      }
-
-      return data.id;
-    } catch (error) {
-      console.error('Erreur complète:', error);
-      handleDatabaseError(error as PostgrestError, 'addItem');
-      throw error;
-    }
-  },
-
-  async addContainer(container: Omit<Container, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  async addContainer(container: ContainerInput): Promise<number> {
     try {
       if (!container.name) {
         throw handleValidationError('Le nom du container est requis', 'addContainer');
@@ -205,9 +152,11 @@ const supabaseDatabase: DatabaseInterface = {
 
       const supabaseContainer = {
         name: container.name,
-        number: container.number,
         description: container.description,
+        number: container.number,
         qr_code: container.qrCode,
+        user_id: container.userId,
+        deleted: false
       };
 
       const { data, error } = await supabase
@@ -222,19 +171,17 @@ const supabaseDatabase: DatabaseInterface = {
       handleDatabaseError(error as PostgrestError, 'addContainer');
       throw error;
     }
-  },
+  }
 
-  async addCategory(category: Omit<Category, "id" | "createdAt" | "updatedAt">): Promise<number> {
-    // Convertir les noms de colonnes pour correspondre à la structure Supabase
-    const supabaseCategory = {
-      name: category.name,
-      description: category.description
-    };
-
+  async addCategory(category: CategoryInput): Promise<number> {
     const { data, error } = await supabase
       .from('categories')
-      .insert([supabaseCategory])
-      .select()
+      .insert({
+        ...category,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
       .single();
     
     if (error) {
@@ -242,7 +189,7 @@ const supabaseDatabase: DatabaseInterface = {
       throw error;
     }
     return data.id;
-  },
+  }
 
   async resetDatabase(): Promise<void> {
     try {
@@ -271,7 +218,7 @@ const supabaseDatabase: DatabaseInterface = {
       console.error('Erreur lors de la réinitialisation Supabase:', error);
       throw error;
     }
-  },
+  }
 
   async getDatabase(): Promise<{ items: Item[], containers: Container[], categories: Category[] }> {
     const [items, containers, categories] = await Promise.all([
@@ -281,7 +228,7 @@ const supabaseDatabase: DatabaseInterface = {
     ]);
 
     return { items, containers, categories };
-  },
+  }
 
   async validateQRCode(type: 'ITEM' | 'CONTAINER', qrCode: string): Promise<boolean> {
     const { data } = await supabase
@@ -291,7 +238,7 @@ const supabaseDatabase: DatabaseInterface = {
       .single();
     
     return !!data;
-  },
+  }
 
   async getItemByQRCode(qrCode: string): Promise<Item | null> {
     const { data, error } = await supabase
@@ -318,29 +265,62 @@ const supabaseDatabase: DatabaseInterface = {
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
-  },
+  }
 
   async getContainerByQRCode(qrCode: string): Promise<Container | null> {
-    const { data, error } = await supabase
-      .from('containers')
-      .select('*')
-      .eq('qr_code', qrCode)
-      .single();
+    try {
+      console.log('Recherche du container avec le QR code:', qrCode);
 
-    if (error) throw error;
-    
-    if (!data) return null;
+      // Vérifier que le QR code est au bon format
+      if (!qrCode.startsWith('CONT_')) {
+        console.warn('Format de QR code invalide:', qrCode);
+        return null;
+      }
 
-    return {
-      id: data.id,
-      name: data.name,
-      number: data.number,
-      description: data.description,
-      qrCode: data.qr_code,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at
-    };
-  },
+      const { data, error } = await supabase
+        .from('containers')
+        .select('id, name, description, number, qr_code, created_at, updated_at, deleted, user_id')
+        .eq('qr_code', qrCode)
+        .is('deleted', false);
+
+      if (error) {
+        console.error('Erreur Supabase:', error);
+        throw error;
+      }
+      
+      console.log('Résultat de la requête:', data);
+      
+      if (!data || data.length === 0) {
+        console.log('Aucun container trouvé pour le QR code:', qrCode);
+        
+        // Vérifier tous les containers pour déboguer
+        const { data: allContainers } = await supabase
+          .from('containers')
+          .select('qr_code')
+          .is('deleted', false);
+        
+        console.log('QR codes disponibles:', allContainers?.map(c => c.qr_code));
+        
+        return null;
+      }
+
+      const container = data[0];
+      return {
+        id: container.id,
+        name: container.name,
+        description: container.description,
+        number: container.number,
+        qrCode: container.qr_code,
+        createdAt: container.created_at,
+        updatedAt: container.updated_at,
+        deleted: container.deleted,
+        userId: container.user_id
+      };
+    } catch (error) {
+      console.error('Erreur dans getContainerByQRCode:', error);
+      throw error;
+    }
+  }
 
   async deleteContainer(containerId: number): Promise<void> {
     const { error: itemsError } = await supabase
@@ -356,16 +336,16 @@ const supabaseDatabase: DatabaseInterface = {
       .eq('id', containerId);
 
     if (containerError) throw containerError;
-  },
+  }
 
-  async updateContainer(containerId: number, containerData: Omit<Container, "id">): Promise<void> {
+  async updateContainer(id: number, container: ContainerUpdate): Promise<void> {
     const { error } = await supabase
       .from('containers')
-      .update(containerData)
-      .eq('id', containerId);
-
+      .update(container)
+      .eq('id', id);
+    
     if (error) throw error;
-  },
+  }
 
   async getCategory(id: number): Promise<Category | null> {
     const { data, error } = await supabase
@@ -376,16 +356,19 @@ const supabaseDatabase: DatabaseInterface = {
     
     if (error) throw error;
     return data;
-  },
+  }
 
-  async updateCategory(id: number, name: string): Promise<void> {
+  async updateCategory(id: number, data: CategoryUpdate): Promise<void> {
     const { error } = await supabase
       .from('categories')
-      .update({ name })
+      .update({
+        ...data,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id);
 
     if (error) throw error;
-  },
+  }
 
   async deleteCategory(id: number): Promise<void> {
     const { error } = await supabase
@@ -394,54 +377,47 @@ const supabaseDatabase: DatabaseInterface = {
       .eq('id', id);
 
     if (error) throw error;
-  },
+  }
 
   async storePhotoUri(uri: string): Promise<void> {
     // Pour Supabase, cette fonction n'est probablement pas nécessaire
     // car nous utilisons déjà photoService pour gérer les photos
     console.warn('storePhotoUri not needed in Supabase implementation');
-  },
+  }
 
   async getPhotoUris(): Promise<string[]> {
     const { data, error } = await supabase
       .from('items')
-      .select('photoUri')
-      .not('photoUri', 'is', null);
+      .select('image_url')
+      .not('image_url', 'is', null);
 
     if (error) throw error;
-    return data.map(item => item.photoUri).filter(Boolean);
-  },
+    return data.map(item => item.image_url).filter(Boolean);
+  }
 
   async removePhotoUri(uri: string): Promise<void> {
     const { error } = await supabase
       .from('items')
-      .update({ photoUri: null })
-      .eq('photoUri', uri);
+      .update({ image_url: null })
+      .eq('image_url', uri);
 
     if (error) throw error;
-  },
+  }
 
   async saveDatabase(data: {
-    items: Item[],
-    containers: Container[],
-    categories: Category[]
+    items: Array<Omit<Item, 'id' | 'createdAt' | 'updatedAt'>>;
+    containers: Array<Omit<Container, 'id' | 'createdAt' | 'updatedAt'>>;
+    categories: Array<Omit<Category, 'id' | 'createdAt' | 'updatedAt'>>;
   }): Promise<void> {
-    // Implémentation de la sauvegarde complète de la base de données
-    const { error: itemsError } = await supabase
-      .from('items')
-      .upsert(data.items);
+    const { error: itemsError } = await supabase.from('items').upsert(data.items);
     if (itemsError) throw itemsError;
 
-    const { error: containersError } = await supabase
-      .from('containers')
-      .upsert(data.containers);
+    const { error: containersError } = await supabase.from('containers').upsert(data.containers);
     if (containersError) throw containersError;
 
-    const { error: categoriesError } = await supabase
-      .from('categories')
-      .upsert(data.categories);
+    const { error: categoriesError } = await supabase.from('categories').upsert(data.categories);
     if (categoriesError) throw categoriesError;
-  },
+  }
 
   async getItemOrContainerByQRCode(type: 'ITEM' | 'CONTAINER', qrCode: string): Promise<boolean> {
     const { data } = await supabase
@@ -451,25 +427,78 @@ const supabaseDatabase: DatabaseInterface = {
       .single();
     
     return !!data;
-  },
+  }
 
   async deleteItem(id: number): Promise<void> {
-    try {
-      if (!id) {
-        throw handleValidationError('ID de l\'item manquant', 'deleteItem');
-      }
+    const { error } = await supabase
+      .from('items')
+      .update({ deleted: true })
+      .eq('id', id);
 
-      const { error } = await supabase
+    if (error) throw error;
+  }
+
+  async getItem(id: number): Promise<Item | null> {
+    try {
+      const { data, error } = await supabase
         .from('items')
-        .update({ deleted: true })
-        .eq('id', id);
+        .select('*')
+        .eq('id', id)
+        .single();
 
       if (error) throw error;
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        purchasePrice: data.purchase_price,
+        sellingPrice: data.selling_price,
+        status: data.status,
+        photoUri: data.photo_uri,
+        containerId: data.container_id,
+        categoryId: data.category_id,
+        qrCode: data.qr_code,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'deleteItem');
-      throw error;
+      handleDatabaseError(error as PostgrestError, 'getItem');
+      return null;
     }
   }
-};
 
-export default supabaseDatabase;
+  async searchItems(query: string): Promise<Item[]> {
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
+        .is('deleted', false);
+
+      if (error) throw error;
+
+      return (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        purchasePrice: item.purchase_price,
+        sellingPrice: item.selling_price,
+        status: item.status,
+        photoUri: item.photo_uri,
+        containerId: item.container_id,
+        categoryId: item.category_id,
+        qrCode: item.qr_code,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'searchItems');
+      return [];
+    }
+  }
+}
+
+export const database = new SupabaseDatabase();
+export default database;

@@ -1,9 +1,9 @@
 import { createSlice, createEntityAdapter, PayloadAction, createSelector } from '@reduxjs/toolkit';
-import { Category } from '../database/database';
+import { Category } from '../types/category';
 import { RootState } from './store';
 
 // Type étendu pour garantir un ID non-null
-export type CategoryWithId = Omit<Category, 'id'> & { id: number };
+export type CategoryWithId = Category;
 
 // Création de l'adaptateur pour les catégories
 export const categoriesAdapter = createEntityAdapter<CategoryWithId>({
@@ -29,12 +29,14 @@ const categorySlice = createSlice({
         categoriesAdapter.addOne(state, action.payload as CategoryWithId);
       }
     },
-    editCategory: (state, action: PayloadAction<{ id: number; name: string }>) => {
-      const { id, name } = action.payload;
-      categoriesAdapter.updateOne(state, {
-        id,
-        changes: { name }
-      });
+    editCategory: (state, action: PayloadAction<Category>) => {
+      if (action.payload.id) {
+        const { id, ...changes } = action.payload;
+        categoriesAdapter.updateOne(state, {
+          id,
+          changes
+        });
+      }
     },
     deleteCategory: (state, action: PayloadAction<number>) => {
       categoriesAdapter.removeOne(state, action.payload);

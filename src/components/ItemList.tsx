@@ -1,6 +1,8 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, memo, useEffect, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
-import { Item, Container, Category } from '../database/database';
+import { Item } from '../types/item';
+import { Container } from '../types/container';
+import { Category } from '../types/category';
 import { ItemEditForm } from './ItemEditForm';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
@@ -8,6 +10,9 @@ import { selectAllCategories } from '../store/categorySlice';
 import { selectAllContainers } from '../store/containersSlice';
 import { useAnimatedComponents } from '../hooks/useAnimatedComponents';
 import ItemCard from './ItemCard';
+import { Skeleton } from './Skeleton';
+import { withPerformanceMonitoring } from '../hoc/withPerformanceMonitoring';
+import { monitoring } from '../services/monitoring';
 
 interface ItemListProps {
   items: Item[];
@@ -64,7 +69,66 @@ const ItemListModal: React.FC<{
   );
 };
 
-export const ItemList: React.FC<ItemListProps> = ({
+const ItemRow = memo(({ 
+  item, 
+  onMarkAsSold, 
+  onMarkAsAvailable,
+  onPress
+}: { 
+  item: Item; 
+  onMarkAsSold?: (id: number) => void;
+  onMarkAsAvailable?: (id: number) => void;
+  onPress?: () => void;
+}) => {
+  const handleMarkAsSold = () => {
+    if (onMarkAsSold) onMarkAsSold(item.id);
+  };
+
+  const handleMarkAsAvailable = () => {
+    if (onMarkAsAvailable) onMarkAsAvailable(item.id);
+  };
+
+  return (
+    <TouchableOpacity onPress={onPress} style={styles.itemRow}>
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+      </View>
+      <View style={styles.itemActions}>
+        <Text style={[
+          styles.itemStatus,
+          item.status === 'sold' ? styles.soldStatus : styles.availableStatus
+        ]}>
+          {item.status === 'sold' ? 'Vendu' : 'Disponible'}
+        </Text>
+        {item.status === 'available' ? (
+          <TouchableOpacity onPress={handleMarkAsSold} style={styles.actionButton}>
+            <Text style={styles.buttonText}>Marquer comme vendu</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={handleMarkAsAvailable} style={styles.actionButton}>
+            <Text style={styles.buttonText}>Remettre en stock</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+const LoadingSkeleton = memo(() => (
+  <View style={styles.skeletonContainer}>
+    {Array.from({ length: 5 }).map((_, index) => (
+      <View key={index} style={styles.skeletonRow}>
+        <Skeleton style={styles.skeletonName} />
+        <Skeleton style={styles.skeletonPrice} />
+        <Skeleton style={styles.skeletonStatus} />
+        <Skeleton style={styles.skeletonButton} />
+      </View>
+    ))}
+  </View>
+));
+
+const ItemList = memo<ItemListProps>(({
   items,
   onMarkAsSold,
   onMarkAsAvailable,
@@ -97,6 +161,23 @@ export const ItemList: React.FC<ItemListProps> = ({
   const categories = useSelector(selectAllCategories);
   const containers = useSelector(selectAllContainers);
 
+  const renderStartTime = useRef(Date.now());
+  
+  useEffect(() => {
+    return () => {
+      const renderDuration = Date.now() - renderStartTime.current;
+      monitoring.recordMetric({
+        type: 'RENDER',
+        name: 'ItemList',
+        duration: renderDuration,
+        metadata: {
+          itemCount: items.length,
+          isLoading
+        }
+      });
+    };
+  });
+
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchesSearch = item.name.toLowerCase().includes(filters.search.toLowerCase());
@@ -121,20 +202,30 @@ export const ItemList: React.FC<ItemListProps> = ({
 
   const handleItemPress = useCallback((item: Item) => {
     setSelectedItem(item);
-  }, []);
+    if (onItemPress) {
+      onItemPress(item);
+    }
+  }, [onItemPress]);
+
+  const sortedItems = useMemo(() => {
+    return [...filteredItems].sort((a, b) => {
+      // Trier par statut (disponible en premier)
+      if (a.status !== b.status) {
+        return a.status === 'available' ? -1 : 1;
+      }
+      // Puis par date de mise à jour
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [filteredItems]);
 
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+    return <LoadingSkeleton />;
   }
 
   if (!items.length) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Aucun article trouvé</Text>
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>Aucun article trouvé</Text>
       </View>
     );
   }
@@ -152,7 +243,7 @@ export const ItemList: React.FC<ItemListProps> = ({
           style={styles.filterButton}
           onPress={() => setShowFilters(!showFilters)}
         >
-          <Text>Filtres</Text>
+          <MaterialIcons name="filter-list" size={24} color="#007AFF" />
         </TouchableOpacity>
       </View>
 
@@ -272,11 +363,13 @@ export const ItemList: React.FC<ItemListProps> = ({
       )}
 
       <FlatList
-        data={filteredItems}
+        data={sortedItems}
         renderItem={({ item }) => (
           <ItemCard
             item={item}
             onPress={() => handleItemPress(item)}
+            onMarkAsSold={onMarkAsSold}
+            onMarkAsAvailable={onMarkAsAvailable}
             fadeAnimation={{
               opacity,
               fadeIn,
@@ -303,7 +396,7 @@ export const ItemList: React.FC<ItemListProps> = ({
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -398,10 +491,14 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
   },
-  loadingContainer: {
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
   },
   modalContainer: {
     flex: 1,
@@ -431,13 +528,92 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     padding: 8,
   },
-  itemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 10,
+  itemRow: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   itemInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '500',
     flex: 1,
   },
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  itemActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  itemStatus: {
+    fontSize: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  soldStatus: {
+    backgroundColor: '#ffebee',
+    color: '#c62828',
+  },
+  availableStatus: {
+    backgroundColor: '#e8f5e9',
+    color: '#2e7d32',
+  },
+  actionButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  skeletonContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  skeletonName: {
+    height: 20,
+    flex: 2,
+    marginRight: 16,
+    borderRadius: 4,
+  },
+  skeletonPrice: {
+    height: 20,
+    width: 80,
+    marginRight: 16,
+    borderRadius: 4,
+  },
+  skeletonStatus: {
+    height: 20,
+    width: 100,
+    marginRight: 16,
+    borderRadius: 4,
+  },
+  skeletonButton: {
+    height: 36,
+    width: 120,
+    borderRadius: 4,
+  },
 });
+
+ItemList.displayName = 'ItemList';
+ItemRow.displayName = 'ItemRow';
+LoadingSkeleton.displayName = 'LoadingSkeleton';
+
+export default withPerformanceMonitoring(ItemList, 'ItemList');

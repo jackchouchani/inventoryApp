@@ -1,124 +1,94 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
-import { searchItems, searchItemsByBarcode, searchSimilarItems, SearchFilters } from '../services/searchService';
-import { setItems } from './itemsSlice';
-import { handleDatabaseError } from '../utils/errorHandler';
-import { Item } from '../database/types';
-import { supabase } from '../config/supabase';
+import { Item } from '../types/item';
+import { RootState } from './store';
 
-export const fetchItems = createAsyncThunk(
-  'items/fetchItems',
-  async (filters: SearchFilters, { rejectWithValue }) => {
-    try {
-      const response = await searchItems(filters);
-      return response;
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'fetchItems'));
-    }
+// Interface pour la réponse de fetchItems
+interface FetchItemsResponse {
+  items: Item[];
+  total: number;
+  hasMore: boolean;
+}
+
+export const fetchItems = createAsyncThunk<
+  FetchItemsResponse,
+  { page: number; limit: number },
+  { state: RootState }
+>('items/fetchItems', async ({ page, limit }) => {
+  // Simulation d'un appel API
+  return {
+    items: [],
+    total: 0,
+    hasMore: false
+  };
+});
+
+export const fetchItemByBarcode = createAsyncThunk<
+  Item | null,
+  string,
+  { state: RootState }
+>('items/fetchItemByBarcode', async (barcode) => {
+  // Simulation d'un appel API
+  return null;
+});
+
+export const fetchSimilarItems = createAsyncThunk<
+  Item[],
+  number,
+  { state: RootState }
+>('items/fetchSimilarItems', async (itemId) => {
+  // Simulation d'un appel API
+  return [];
+});
+
+// Type pour les mutations optimistes
+interface OptimisticMutation<T> {
+  execute: () => Promise<T>;
+  optimisticData: T;
+  rollback: () => void;
+}
+
+// Fonction utilitaire pour gérer les mutations optimistes
+const handleOptimisticMutation = async <T>(
+  mutation: OptimisticMutation<T>,
+  { dispatch, rejectWithValue }: any
+) => {
+  try {
+    // Appliquer la mise à jour optimiste
+    mutation.rollback();
+    
+    // Exécuter la mutation réelle
+    const result = await mutation.execute();
+    return result;
+  } catch (error) {
+    // Rollback en cas d'erreur
+    mutation.rollback();
+    return rejectWithValue(error instanceof Error ? error.message : 'Une erreur est survenue');
   }
-);
+};
 
-export const fetchItemByBarcode = createAsyncThunk(
-  'items/fetchItemByBarcode',
-  async (barcode: string, { rejectWithValue }) => {
-    try {
-      const item = await searchItemsByBarcode(barcode);
-      return item;
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'fetchItemByBarcode'));
-    }
-  }
-);
+export const updateItemStatus = createAsyncThunk<
+  Item,
+  { itemId: number; status: string },
+  { state: RootState }
+>('items/updateItemStatus', async ({ itemId, status }) => {
+  // Simulation d'un appel API
+  throw new Error('Non implémenté');
+});
 
-export const fetchSimilarItems = createAsyncThunk(
-  'items/fetchSimilarItems',
-  async ({ name, limit }: { name: string; limit?: number }, { rejectWithValue }) => {
-    try {
-      const items = await searchSimilarItems(name, limit);
-      return items;
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'fetchSimilarItems'));
-    }
-  }
-);
+export const moveItem = createAsyncThunk<
+  Item,
+  { itemId: number; containerId: number },
+  { state: RootState }
+>('items/moveItem', async ({ itemId, containerId }) => {
+  // Simulation d'un appel API
+  throw new Error('Non implémenté');
+});
 
-export const updateItemStatus = createAsyncThunk(
-  'items/updateStatus',
-  async ({ 
-    itemId, 
-    status, 
-    soldAt 
-  }: { 
-    itemId: number; 
-    status: 'available' | 'sold'; 
-    soldAt?: string 
-  }, 
-  { rejectWithValue }) => {
-    try {
-      const { data, error } = await supabase
-        .from('items')
-        .update({ 
-          status, 
-          sold_at: soldAt || (status === 'sold' ? new Date().toISOString() : null)
-        })
-        .eq('id', itemId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as Item;
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'updateItemStatus'));
-    }
-  }
-);
-
-export const moveItem = createAsyncThunk(
-  'items/moveItem',
-  async ({ 
-    itemId, 
-    containerId 
-  }: { 
-    itemId: number; 
-    containerId: number | null 
-  }, 
-  { rejectWithValue }) => {
-    try {
-      const { data, error } = await supabase
-        .from('items')
-        .update({ container_id: containerId })
-        .eq('id', itemId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as Item;
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'moveItem'));
-    }
-  }
-);
-
-export const bulkUpdateItems = createAsyncThunk(
-  'items/bulkUpdate',
-  async ({ 
-    itemIds, 
-    updates 
-  }: { 
-    itemIds: number[]; 
-    updates: Partial<Item> 
-  }, 
-  { rejectWithValue }) => {
-    try {
-      const { data, error } = await supabase
-        .from('items')
-        .update(updates)
-        .in('id', itemIds)
-        .select();
-
-      if (error) throw error;
-      return data as Item[];
-    } catch (error) {
-      return rejectWithValue(handleDatabaseError(error as Error, 'bulkUpdateItems'));
-    }
-  }
-); 
+export const bulkUpdateItems = createAsyncThunk<
+  Item[],
+  { items: Item[] },
+  { state: RootState }
+>('items/bulkUpdateItems', async ({ items }) => {
+  // Simulation d'un appel API
+  return items;
+}); 

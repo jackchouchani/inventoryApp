@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, SafeAreaView, TextInput, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, SafeAreaView, TextInput, ScrollView, Platform, Alert } from 'react-native';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { LabelGenerator } from '../../src/components/LabelGenerator';
 import { FilterBar } from '../../src/components/FilterBar';
 import { handleDatabaseError } from '../../src/utils/errorHandler';
-import { Item, Container, Category } from '../../src/database/types';
-import { generateQRValue } from '../../src/utils/qrCodeManager';
+import type { Item } from '../../src/types/item';
+import type { Container } from '../../src/types/container';
+import type { Category } from '../../src/types/category';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { database } from '../../src/database/database';
 
 interface Filters {
   search: string;
@@ -56,7 +58,31 @@ export default function LabelScreen() {
 
   useEffect(() => {
     if (showContainers && containers) {
-      setSelectedContainers(containers.map(container => container.id!));
+      console.log('All containers:', containers);
+      
+      const containersWithQR = containers
+        .filter(container => {
+          console.log('Container:', container.name, 'QR code:', container.qrCode, 'Deleted:', container.deleted);
+          return container.qrCode && !container.deleted;
+        })
+        .map(container => container.id!);
+      
+      console.log('Containers with QR:', containersWithQR);
+      setSelectedContainers(containersWithQR);
+
+      const totalActiveContainers = containers.filter(c => !c.deleted).length;
+      const containersWithoutQR = totalActiveContainers - containersWithQR.length;
+      
+      console.log('Total active containers:', totalActiveContainers);
+      console.log('Containers without QR:', containersWithoutQR);
+      
+      if (containersWithoutQR > 0) {
+        Alert.alert(
+          'Containers sans QR code',
+          `${containersWithoutQR} containers sur ${totalActiveContainers} n'ont pas de QR code et ne seront pas inclus dans la génération d'étiquettes. Veuillez d'abord assigner des QR codes à ces containers.`,
+          [{ text: 'OK', style: 'default' }]
+        );
+      }
     }
   }, [showContainers, containers]);
 
@@ -124,24 +150,37 @@ export default function LabelScreen() {
 
   const getItemsToGenerate = (): InventoryItem[] => {
     if (showContainers) {
-      return (containers || [])
-        .filter(container => selectedContainers.includes(container.id!))
-        .map(container => ({
-          id: container.id!,
-          name: container.name,
-          description: container.description,
-          number: container.number.toString(),
-          qrCode: container.qrCode || generateQRValue('CONTAINER')
-        }));
+      console.log('Generating labels for containers');
+      console.log('Selected container IDs:', selectedContainers);
+      
+      const filteredContainers = (containers || [])
+        .filter(container => {
+          const isSelected = selectedContainers.includes(container.id!);
+          const hasQR = !!container.qrCode;
+          console.log(`Container ${container.name} (ID: ${container.id}):`, 
+            { isSelected, hasQR, qrCode: container.qrCode });
+          return isSelected && hasQR;
+        });
+      
+      console.log('Filtered containers:', filteredContainers);
+      
+      return filteredContainers.map(container => ({
+        id: container.id!,
+        name: container.name,
+        description: container.description,
+        number: container.number?.toString() || '',
+        qrCode: container.qrCode
+      }));
     } else {
       return (items || [])
         .filter(item => selectedItems.includes(item.id!))
+        .filter(item => item.qrCode)
         .map(item => ({
           id: item.id!,
           name: item.name,
           description: item.description,
           sellingPrice: item.sellingPrice,
-          qrCode: item.qrCode || generateQRValue('ITEM')
+          qrCode: item.qrCode
         }));
     }
   };
@@ -190,7 +229,7 @@ export default function LabelScreen() {
             onPress={() => setShowContainers(false)}
           >
             <Text style={[styles.filterButtonText, !showContainers && styles.filterButtonTextActive]}>
-              Articles
+              Articles ({selectedItems.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -198,10 +237,20 @@ export default function LabelScreen() {
             onPress={() => setShowContainers(true)}
           >
             <Text style={[styles.filterButtonText, showContainers && styles.filterButtonTextActive]}>
-              Containers
+              Containers ({selectedContainers.length}/{containers?.filter(c => !c.deleted).length || 0})
             </Text>
           </TouchableOpacity>
         </View>
+        {showContainers && selectedContainers.length === 0 && (
+          <View style={styles.warningContainer}>
+            <Text style={styles.warningText}>
+              Aucun container avec QR code disponible pour la génération d'étiquettes.
+            </Text>
+            <Text style={styles.warningSubText}>
+              Veuillez d'abord assigner des QR codes aux containers dans la section Containers.
+            </Text>
+          </View>
+        )}
       </View>
 
       {!showContainers && (
@@ -499,5 +548,23 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     paddingHorizontal: 10,
     marginHorizontal: 5,
+  },
+  warningContainer: {
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  warningText: {
+    color: '#FF9500',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  warningSubText: {
+    color: '#FF9500',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
   },
 }); 

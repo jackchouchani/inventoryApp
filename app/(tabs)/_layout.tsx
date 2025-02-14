@@ -1,11 +1,29 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform } from "react-native";
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
+import { database } from "../../src/database/database";
 
 export default function TabLayout() {
   const router = useRouter();
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [containers, categories, items] = await Promise.all([
+          database.getContainers(),
+          database.getCategories(),
+          database.getItems()
+        ]);
+        // Utiliser les données si nécessaire
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    };
+
+    loadInitialData();
+  }, []);
 
   return (
     <Tabs

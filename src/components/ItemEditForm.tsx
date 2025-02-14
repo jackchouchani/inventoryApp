@@ -1,49 +1,103 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import { updateItem, deleteItem, Category, Container } from '../database/database';
+import { database, Category, Container } from '../database/database';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { MaterialIcons } from '@expo/vector-icons';
-import { removeItem, updateItem as updateItemAction } from '../store/itemsSlice';
+import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
+import type { MaterialIconName } from '../types/icons';
+import type { Item, ItemInput, ItemUpdate } from '../types/item';
 
 interface ItemEditFormProps {
-    item: {
-        id?: number;
-        name: string;
-        description?: string;
-        purchasePrice: number;
-        sellingPrice: number;
-        status: 'available' | 'sold';
-        photoUri?: string;
-        containerId?: number | null;
-        categoryId?: number;
-        qrCode: string;
-    };
-    containers: Container[];
+    item: Item;
     categories: Category[];
+    containers: Container[];
     onSuccess?: () => void;
     onCancel?: () => void;
 }
 
-export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, categories, onSuccess, onCancel }) => {
+interface EditedItemForm {
+    name: string;
+    description?: string;
+    purchasePrice: string;
+    sellingPrice: string;
+    status: 'available' | 'sold';
+    photoUri?: string;
+    containerId?: number | null;
+    categoryId?: number;
+    qrCode: string;
+}
+
+// Composant mémorisé pour l'option de container
+const ContainerOption = memo(({ 
+    container, 
+    isSelected, 
+    onSelect 
+}: { 
+    container: Container; 
+    isSelected: boolean; 
+    onSelect: () => void;
+}) => (
+    <TouchableOpacity
+        style={[styles.option, isSelected && styles.optionSelected]}
+        onPress={onSelect}
+    >
+        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+            {container.name}
+        </Text>
+    </TouchableOpacity>
+));
+
+// Composant mémorisé pour l'option de catégorie
+const CategoryOption = memo(({ 
+    category, 
+    isSelected, 
+    onSelect 
+}: { 
+    category: Category; 
+    isSelected: boolean; 
+    onSelect: () => void;
+}) => (
+    <TouchableOpacity
+        style={[styles.option, isSelected && styles.optionSelected]}
+        onPress={onSelect}
+    >
+        <MaterialIcons
+            name={(category.icon as MaterialIconName) || 'folder'}
+            size={20}
+            color={isSelected ? '#fff' : '#666'}
+            style={styles.categoryIcon}
+        />
+        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+            {category.name}
+        </Text>
+    </TouchableOpacity>
+));
+
+export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
-    const [editedItem, setEditedItem] = useState({
-        ...item,
-        purchasePrice: item.purchasePrice?.toString() || '0',
-        sellingPrice: item.sellingPrice?.toString() || '0',
+    const [editedItem, setEditedItem] = useState<EditedItemForm>({
+        name: item.name,
+        description: item.description,
+        purchasePrice: item.purchasePrice.toString(),
+        sellingPrice: item.sellingPrice.toString(),
+        status: item.status,
+        photoUri: item.photoUri,
+        containerId: item.containerId,
+        categoryId: item.categoryId,
+        qrCode: item.qrCode
     });
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
         try {
             if (!item.id) {
                 Alert.alert('Erreur', 'ID de l\'article manquant');
                 return;
             }
 
-            // Validation des prix
             const purchasePrice = parseFloat(editedItem.purchasePrice);
             const sellingPrice = parseFloat(editedItem.sellingPrice);
 
@@ -52,72 +106,87 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                 return;
             }
 
-            const updatedItem = {
-                ...editedItem,
-                id: item.id,
+            const itemToUpdate: ItemUpdate = {
+                name: editedItem.name,
+                description: editedItem.description,
                 purchasePrice,
                 sellingPrice,
-                updatedAt: new Date().toISOString()
+                status: editedItem.status,
+                photoUri: editedItem.photoUri,
+                containerId: editedItem.containerId,
+                categoryId: editedItem.categoryId,
+                qrCode: editedItem.qrCode
             };
 
             // Mise à jour dans la base de données
-            await updateItem(item.id, updatedItem);
-
-            // Mise à jour du store Redux
-            dispatch(updateItemAction(updatedItem));
-
-            if (onSuccess) onSuccess();
+            try {
+                await database.updateItem(item.id, itemToUpdate);
+                
+                // Mise à jour optimiste du store Redux avec les champs temporels
+                const updatedItem: Item = {
+                    ...item,
+                    ...itemToUpdate,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                dispatch(updateItem(updatedItem));
+                
+                if (onSuccess) onSuccess();
+            } catch (error) {
+                console.error('Erreur lors de la mise à jour:', error);
+                Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
+            }
         } catch (error) {
             console.error('Erreur lors de la mise à jour:', error);
             Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
         }
-    };
+    }, [editedItem, item, dispatch, onSuccess]);
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!item.id) return;
 
         const confirmDelete = async () => {
             try {
                 const itemId = item.id as number;
-                await deleteItem(itemId);
-                dispatch(removeItem(itemId));
-                queryClient.invalidateQueries({ queryKey: ['items'] });
-                queryClient.invalidateQueries({ queryKey: ['inventory'] });
-                if (onCancel) onCancel();
-            } catch (error) {
-                console.error('Erreur lors de la suppression:', error);
-                if (Platform.OS === 'web') {
-                    window.alert('Impossible de supprimer l\'article');
-                } else {
+                
+                // Suppression optimiste
+                dispatch(deleteItem(itemId));
+                
+                try {
+                    await database.deleteItem(itemId);
+                    queryClient.invalidateQueries({ queryKey: ['items'] });
+                    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                    if (onCancel) onCancel();
+                } catch (error) {
+                    // Rollback en cas d'erreur
+                    dispatch(updateItem(item));
+                    console.error('Erreur lors de la suppression:', error);
                     Alert.alert('Erreur', 'Impossible de supprimer l\'article');
                 }
+            } catch (error) {
+                console.error('Erreur lors de la suppression:', error);
+                Alert.alert('Erreur', 'Impossible de supprimer l\'article');
             }
         };
 
-        if (Platform.OS === 'web') {
-            if (window.confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
-                await confirmDelete();
-            }
-        } else {
-            Alert.alert(
-                'Confirmation de suppression',
-                'Êtes-vous sûr de vouloir supprimer cet article ?',
-                [
-                    {
-                        text: 'Annuler',
-                        style: 'cancel'
-                    },
-                    {
-                        text: 'Supprimer',
-                        style: 'destructive',
-                        onPress: confirmDelete
-                    }
-                ]
-            );
-        }
-    };
+        Alert.alert(
+            'Confirmation de suppression',
+            'Êtes-vous sûr de vouloir supprimer cet article ?',
+            [
+                {
+                    text: 'Annuler',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Supprimer',
+                    style: 'destructive',
+                    onPress: confirmDelete
+                }
+            ]
+        );
+    }, [item, dispatch, queryClient, onCancel]);
 
-    const pickImage = async () => {
+    const pickImage = useCallback(async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
@@ -128,7 +197,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
         if (!result.canceled && result.assets[0]) {
             setEditedItem(prev => ({ ...prev, photoUri: result.assets[0].uri }));
         }
-    };
+    }, []);
 
     return (
         <ScrollView style={styles.container}>
@@ -194,38 +263,16 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                     <Text style={styles.sectionTitle}>Container</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
                         <View style={styles.optionsContainer}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.option,
-                                    editedItem.containerId === null && styles.optionSelected
-                                ]}
-                                onPress={() => setEditedItem(prev => ({
-                                    ...prev,
-                                    containerId: null
-                                }))}
-                            >
-                                <Text style={[
-                                    styles.optionText,
-                                    editedItem.containerId === null && styles.optionTextSelected
-                                ]}>Sans container</Text>
-                            </TouchableOpacity>
                             {containers && containers.map((container) => (
-                                <TouchableOpacity
+                                <ContainerOption
                                     key={container.id}
-                                    style={[
-                                        styles.option,
-                                        editedItem.containerId === container.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => setEditedItem(prev => ({
+                                    container={container}
+                                    isSelected={editedItem.containerId === container.id}
+                                    onSelect={() => setEditedItem(prev => ({
                                         ...prev,
                                         containerId: container.id ?? prev.containerId
                                     }))}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        editedItem.containerId === container.id && styles.optionTextSelected
-                                    ]}>{container.name}</Text>
-                                </TouchableOpacity>
+                                />
                             ))}
                         </View>
                     </ScrollView>
@@ -236,22 +283,15 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
                         <View style={styles.optionsContainer}>
                             {categories.map((category) => (
-                                <TouchableOpacity
+                                <CategoryOption
                                     key={category.id}
-                                    style={[
-                                        styles.option,
-                                        editedItem.categoryId === category.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => setEditedItem(prev => ({
+                                    category={category}
+                                    isSelected={editedItem.categoryId === category.id}
+                                    onSelect={() => setEditedItem(prev => ({
                                         ...prev,
                                         categoryId: category.id ?? prev.categoryId
                                     }))}
-                                >
-                                    <Text style={[
-                                        styles.optionText,
-                                        editedItem.categoryId === category.id && styles.optionTextSelected
-                                    ]}>{category.name}</Text>
-                                </TouchableOpacity>
+                                />
                             ))}
                         </View>
                     </ScrollView>
@@ -277,7 +317,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = ({ item, containers, ca
             </View>
         </ScrollView>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -386,12 +426,14 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
     },
     option: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
         paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: '#f5f5f5',
+        borderRadius: 8,
+        backgroundColor: '#f8f9fa',
         borderWidth: 1,
-        borderColor: '#e0e0e0',
+        borderColor: '#e5e5e5',
     },
     optionSelected: {
         backgroundColor: '#007AFF',
@@ -404,6 +446,9 @@ const styles = StyleSheet.create({
     optionTextSelected: {
         color: '#fff',
         fontWeight: '500',
+    },
+    categoryIcon: {
+        marginRight: 8,
     },
     qrCodeContainer: {
         alignItems: 'center',

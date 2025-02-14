@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Item } from '../database/types';
+import { Item } from '../types/item';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
@@ -8,6 +8,8 @@ import { AnimationConfig } from '../hooks/useAnimatedComponents';
 export interface ItemCardProps {
   item: Item;
   onPress?: (item: Item) => void;
+  onMarkAsSold?: (itemId: number) => void;
+  onMarkAsAvailable?: (itemId: number) => void;
   fadeAnimation?: {
     opacity: SharedValue<number>;
     fadeIn: (config?: AnimationConfig) => void;
@@ -25,6 +27,8 @@ export interface ItemCardProps {
 const ItemCard: React.FC<ItemCardProps> = ({ 
   item, 
   onPress,
+  onMarkAsSold,
+  onMarkAsAvailable,
   fadeAnimation,
   scaleAnimation
 }) => {
@@ -39,6 +43,14 @@ const ItemCard: React.FC<ItemCardProps> = ({
   const handlePressOut = useCallback(() => {
     scaleAnimation?.scaleDown();
   }, [scaleAnimation]);
+
+  const handleMarkAsSold = useCallback(() => {
+    onMarkAsSold?.(item.id);
+  }, [item.id, onMarkAsSold]);
+
+  const handleMarkAsAvailable = useCallback(() => {
+    onMarkAsAvailable?.(item.id);
+  }, [item.id, onMarkAsAvailable]);
 
   useEffect(() => {
     fadeAnimation?.fadeIn();
@@ -74,16 +86,35 @@ const ItemCard: React.FC<ItemCardProps> = ({
               </Text>
             )}
             <View style={styles.footer}>
-              <Text style={styles.price}>
-                {item.sellingPrice !== undefined && item.sellingPrice !== null
-                  ? `${Number(item.sellingPrice).toFixed(2)} €`
-                  : 'Prix non défini'}
-              </Text>
-              <MaterialIcons
-                name={item.status === 'available' ? 'check-circle' : 'cancel'}
-                size={24}
-                color={item.status === 'available' ? '#4CAF50' : '#F44336'}
-              />
+              <View style={styles.priceContainer}>
+                <Text style={styles.price}>
+                  {item.sellingPrice !== undefined && item.sellingPrice !== null
+                    ? `${Number(item.sellingPrice).toFixed(2)} €`
+                    : 'Prix non défini'}
+                </Text>
+                <MaterialIcons
+                  name={item.status === 'available' ? 'check-circle' : 'cancel'}
+                  size={24}
+                  color={item.status === 'available' ? '#4CAF50' : '#F44336'}
+                />
+              </View>
+              {item.status === 'available' ? (
+                <TouchableOpacity 
+                  style={[styles.statusButton, styles.soldButton]}
+                  onPress={handleMarkAsSold}
+                >
+                  <MaterialIcons name="local-offer" size={16} color="#fff" />
+                  <Text style={styles.statusButtonText}>Marquer comme vendu</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity 
+                  style={[styles.statusButton, styles.availableButton]}
+                  onPress={handleMarkAsAvailable}
+                >
+                  <MaterialIcons name="refresh" size={16} color="#fff" />
+                  <Text style={styles.statusButtonText}>Remettre en stock</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -136,10 +167,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   price: {
     fontSize: 16,
     fontWeight: '500',
     color: '#2196F3',
+  },
+  statusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginTop: 8,
+    gap: 6,
+  },
+  soldButton: {
+    backgroundColor: '#F44336',
+  },
+  availableButton: {
+    backgroundColor: '#4CAF50',
+  },
+  statusButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

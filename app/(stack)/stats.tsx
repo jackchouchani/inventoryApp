@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Platform } from 'react-native';
-import { getItems, Item } from '../../src/database/database';
-import { getCategories, Category } from '../../src/database/database';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions, Platform, Pressable } from 'react-native';
+import { database } from '../../src/database/database';
+import type { Item } from '../../src/types/item';
+import type { Category } from '../../src/types/category';
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryLegend } from 'victory';
-import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
+import { SalesChart } from '../../src/components/SalesChart';
+import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, subWeeks, subYears } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 interface Stats {
@@ -140,10 +142,12 @@ const Chart: React.FC<ChartProps> = (props) => {
 };
 
 const StatsScreen = () => {
-  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const navigation = useNavigation();
@@ -153,33 +157,118 @@ const StatsScreen = () => {
     visible: false,
     index: 0
   });
+  const isFocused = useIsFocused();
 
-  useEffect(() => {
-    loadStats();
-  }, [refreshTimestamp]);
-
-  const loadStats = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [items, loadedCategories] = await Promise.all([
-        getItems(),
-        getCategories()
-      ]);
-      setCategories(loadedCategories);
-      const calculatedStats = calculateStats(items, loadedCategories);
-      const calculatedMonthlyStats = calculateMonthlyStats(items);
-      setMonthlyStats(calculatedMonthlyStats);
-      setStats(calculatedStats);
-    } catch (err) {
-      setError('Failed to load statistics. Please try again.');
-      console.error('Error loading stats:', err);
-    } finally {
-      setLoading(false);
-    }
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(value);
   };
 
-  const calculateStats = (items: Item[], categories: Category[]): Stats => {
+  const handlePeriodChange = useCallback((period: 'week' | 'month' | 'year') => {
+    setSelectedPeriod(period);
+  }, []);
+
+  const calculateMonthlyStats = useCallback((items: Item[], period: 'week' | 'month' | 'year'): MonthlyStats[] => {
+    // Vérifier si nous avons des articles
+    if (!items || items.length === 0) {
+      return [];
+    }
+
+    const now = new Date();
+    let startDate: Date;
+
+    // Définir la période de début
+    switch (period) {
+      case 'week':
+        startDate = subWeeks(now, 1);
+        break;
+      case 'month':
+        startDate = subMonths(now, 1);
+        break;
+      case 'year':
+        startDate = subYears(now, 1);
+        break;
+      default:
+        startDate = subMonths(now, 1);
+    }
+
+    // Filtrer les articles vendus
+    const soldItems = items.filter(item => {
+      if (item.status !== 'sold') return false;
+      if (!item.soldAt) return false;
+
+      try {
+        const soldDate = new Date(item.soldAt);
+        // Vérifier si la date est valide
+        if (isNaN(soldDate.getTime())) {
+          console.error('Date invalide:', item.soldAt);
+          return false;
+        }
+        return soldDate >= startDate && soldDate <= now;
+      } catch (error) {
+        console.error('Erreur de parsing de date:', error, item.soldAt);
+        return false;
+      }
+    });
+
+    const stats: { [key: string]: MonthlyStats } = {};
+
+    // Traiter chaque article vendu
+    soldItems.forEach(item => {
+      if (!item.soldAt) return;
+
+      try {
+        const soldDate = new Date(item.soldAt);
+        let key: string;
+        
+        // Formater la clé selon la période
+        switch (period) {
+          case 'week':
+            key = format(soldDate, 'EEE', { locale: fr }).toLowerCase();
+            break;
+          case 'month':
+            key = format(soldDate, 'dd/MM', { locale: fr });
+            break;
+          case 'year':
+            key = format(soldDate, 'MMM', { locale: fr }).toLowerCase();
+            break;
+        }
+
+        // Initialiser ou mettre à jour les statistiques
+        if (!stats[key]) {
+          stats[key] = {
+            month: key,
+            revenue: 0,
+            profit: 0,
+            itemCount: 0
+          };
+        }
+
+        // Ajouter les valeurs
+        stats[key].revenue += item.sellingPrice || 0;
+        stats[key].profit += (item.sellingPrice || 0) - (item.purchasePrice || 0);
+        stats[key].itemCount += 1;
+      } catch (error) {
+        console.error('Erreur lors du traitement de l\'article:', error, item);
+      }
+    });
+
+    // Convertir l'objet stats en tableau et trier
+    const sortedStats = Object.values(stats).sort((a, b) => {
+      if (period === 'week') {
+        const weekDays = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
+        return weekDays.indexOf(a.month) - weekDays.indexOf(b.month);
+      }
+      return a.month.localeCompare(b.month);
+    });
+
+    setMonthlyStats(sortedStats);
+    return sortedStats;
+  }, []);
+
+  const calculateStats = useCallback((items: Item[], categories: Category[]): Stats => {
     const availableItems = items.filter(item => item.status === 'available');
     const soldItems = items.filter(item => item.status === 'sold');
 
@@ -187,15 +276,13 @@ const StatsScreen = () => {
     const totalSellingValue = items.reduce((sum, item) => sum + item.sellingPrice, 0);
     const totalProfit = totalSellingValue - totalPurchaseValue;
 
-    // Calcul des marges par item
     const itemsWithMargins = soldItems.map(item => ({
       ...item,
       profit: item.sellingPrice - item.purchasePrice,
       margin: ((item.sellingPrice - item.purchasePrice) / item.purchasePrice) * 100
     }));
 
-    // Meilleure et pire vente
-    const bestSellingItem = itemsWithMargins.length > 0 
+    const bestSellingItem = itemsWithMargins.length > 0
       ? itemsWithMargins.reduce((best, current) => 
           current.profit > best.profit ? current : best
         )
@@ -207,32 +294,23 @@ const StatsScreen = () => {
         )
       : null;
 
-    // Fonction utilitaire pour obtenir le nom de la catégorie
-    const getCategoryName = (item: Item): string => {
-      const category = categories.find((cat: Category) => cat.id === item.categoryId);
-      return category?.name || 'Sans catégorie';
-    };
+    const categoryStats = categories.map(category => {
+      const categoryItems = items.filter(item => item.categoryId === category.id);
+      const categoryProfit = categoryItems.reduce((sum, item) => 
+        sum + (item.sellingPrice - item.purchasePrice), 0);
+      const categoryRevenue = categoryItems.reduce((sum, item) => 
+        sum + item.sellingPrice, 0);
 
-    // Statistiques par catégorie
-    const categoryStats = items.reduce((stats, item) => {
-      const categoryId = item.categoryId ?? 0;
-      const categoryIndex = stats.findIndex(s => s.categoryId === categoryId);
-
-      if (categoryIndex === -1) {
-        stats.push({
-          categoryId: categoryId,
-          categoryName: getCategoryName(item),
-          itemCount: 1,
-          totalProfit: item.sellingPrice - item.purchasePrice,
-          averageMargin: ((item.sellingPrice - item.purchasePrice) / item.purchasePrice) * 100
-        });
-      } else {
-        stats[categoryIndex].itemCount++;
-        stats[categoryIndex].totalProfit += (item.sellingPrice - item.purchasePrice);
-        stats[categoryIndex].averageMargin = (stats[categoryIndex].totalProfit / stats[categoryIndex].itemCount);
-      }
-      return stats;
-    }, [] as Stats['categoryStats']);
+      return {
+        categoryId: category.id,
+        categoryName: category.name,
+        itemCount: categoryItems.length,
+        totalProfit: categoryProfit,
+        averageMargin: categoryItems.length > 0 
+          ? (categoryProfit / categoryRevenue) * 100 
+          : 0
+      };
+    });
 
     return {
       totalItems: items.length,
@@ -241,9 +319,9 @@ const StatsScreen = () => {
       totalPurchaseValue,
       totalSellingValue,
       totalProfit,
-      averageProfit: items.length > 0 ? totalProfit / items.length : 0,
+      averageProfit: soldItems.length > 0 ? totalProfit / soldItems.length : 0,
       averageMarginPercentage: soldItems.length > 0 
-        ? itemsWithMargins.reduce((sum, item) => sum + item.margin, 0) / soldItems.length 
+        ? (itemsWithMargins.reduce((sum, item) => sum + item.margin, 0) / soldItems.length)
         : 0,
       bestSellingItem: bestSellingItem ? {
         name: bestSellingItem.name,
@@ -257,41 +335,97 @@ const StatsScreen = () => {
       } : null,
       categoryStats
     };
-  };
+  }, []);
 
-  const calculateMonthlyStats = (items: Item[]): MonthlyStats[] => {
-    // Obtenir les 12 derniers mois
-    const endDate = new Date();
-    const startDate = subMonths(endDate, 11);
-    const months = eachMonthOfInterval({ start: startDate, end: endDate });
+  const loadStats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-    return months.map(month => {
-      const monthStart = startOfMonth(month);
-      const monthEnd = endOfMonth(month);
+      const [loadedItems, loadedCategories] = await Promise.all([
+        database.getItems(),
+        database.getCategories()
+      ]);
 
-      const soldItemsInMonth = items.filter(item => 
-        item.soldAt && 
-        parseISO(item.soldAt) >= monthStart && 
-        parseISO(item.soldAt) <= monthEnd
-      );
+      setItems(loadedItems);
+      setCategories(loadedCategories);
 
-      const revenue = soldItemsInMonth.reduce((sum, item) => sum + item.sellingPrice, 0);
-      const profit = soldItemsInMonth.reduce((sum, item) => 
-        sum + (item.sellingPrice - item.purchasePrice), 0
-      );
+      const calculatedStats = calculateStats(loadedItems, loadedCategories);
+      setStats(calculatedStats);
 
-      return {
-        month: format(month, 'MMM yyyy', { locale: fr }),
-        revenue,
-        profit,
-        itemCount: soldItemsInMonth.length
-      };
-    });
-  };
+      const calculatedMonthlyStats = calculateMonthlyStats(loadedItems, selectedPeriod);
+      setMonthlyStats(calculatedMonthlyStats);
+    } catch (error) {
+      console.error('Erreur lors du chargement des statistiques:', error);
+      setError('Erreur lors du chargement des statistiques');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPeriod, calculateStats, calculateMonthlyStats]);
 
-  const formatCurrency = (value: number): string => {
-    return `$${value.toFixed(2)}`;
-  };
+  const updateSoldItemsWithoutDate = useCallback(async (items: Item[]) => {
+    const soldItemsWithoutDate = items.filter(item => 
+      item.status === 'sold' && !item.soldAt
+    );
+
+    if (soldItemsWithoutDate.length > 0) {      
+      try {
+        const now = new Date().toISOString();
+        await Promise.all(
+          soldItemsWithoutDate.map(item =>
+            database.updateItem(item.id, {
+              status: 'sold',
+              soldAt: now
+            })
+          )
+        );
+        
+        // Recharger les données après la mise à jour
+        await loadStats();
+      } catch (error) {
+        console.error('Erreur lors de la mise à jour des dates de vente:', error);
+      }
+    }
+  }, [loadStats]);
+
+  const initializeData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [loadedItems, loadedCategories] = await Promise.all([
+        database.getItems(),
+        database.getCategories()
+      ]);
+      setItems(loadedItems);
+      setCategories(loadedCategories);
+
+      const calculatedStats = calculateStats(loadedItems, loadedCategories);
+      setStats(calculatedStats);
+
+      const calculatedMonthlyStats = calculateMonthlyStats(loadedItems, selectedPeriod);
+      setMonthlyStats(calculatedMonthlyStats);
+    } catch (error) {
+      console.error('Erreur lors du chargement des statistiques:', error);
+      setError('Erreur lors du chargement des statistiques');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPeriod, calculateStats, calculateMonthlyStats]);
+
+  // Chargement initial des données
+  useEffect(() => {
+    if (isFocused) {
+      initializeData();
+    }
+  }, [isFocused, initializeData, refreshTimestamp]);
+
+  // Mise à jour des données lorsque la période change
+  useEffect(() => {
+    if (isFocused) {
+      loadStats();
+    }
+  }, [selectedPeriod, isFocused, loadStats]);
 
   const renderMonthlyChart = () => {
     if (!stats) return null;
@@ -395,7 +529,6 @@ const StatsScreen = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading statistics...</Text>
       </View>
     );
   }
@@ -416,287 +549,202 @@ const StatsScreen = () => {
           <View style={styles.statRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats?.totalItems || 0}</Text>
-              <Text style={styles.statLabel}>Total Items</Text>
+              <Text style={styles.statLabel}>Total Articles</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats?.availableItems || 0}</Text>
-              <Text style={styles.statLabel}>Available</Text>
+              <Text style={styles.statLabel}>Disponibles</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats?.soldItems || 0}</Text>
-              <Text style={styles.statLabel}>Sold</Text>
+              <Text style={styles.statLabel}>Vendus</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Financial Summary</Text>
+          <Text style={styles.sectionTitle}>Résumé Financier</Text>
           <View style={styles.financialStats}>
             <View style={styles.financialRow}>
-              <Text style={styles.financialLabel}>Total Purchase Value:</Text>
+              <Text style={styles.financialLabel}>Valeur d'Achat Totale:</Text>
               <Text style={styles.financialValue}>
                 {formatCurrency(stats?.totalPurchaseValue || 0)}
               </Text>
             </View>
             <View style={styles.financialRow}>
-              <Text style={styles.financialLabel}>Total Selling Value:</Text>
+              <Text style={styles.financialLabel}>Valeur de Vente Totale:</Text>
               <Text style={styles.financialValue}>
                 {formatCurrency(stats?.totalSellingValue || 0)}
               </Text>
             </View>
             <View style={styles.financialRow}>
-              <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Total Profit:</Text>
+              <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Bénéfice Total:</Text>
               <Text style={[styles.financialValue, styles.totalProfitValue]}>
                 {formatCurrency(stats?.totalProfit || 0)}
               </Text>
             </View>
-            <View style={styles.financialRow}>
-              <Text style={styles.financialLabel}>Average Profit per Item:</Text>
-              <Text style={styles.financialValue}>
-                {formatCurrency(stats?.averageProfit || 0)}
-              </Text>
-            </View>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Performance des Ventes</Text>
-          <View style={styles.performanceStats}>
-            <View style={styles.performanceRow}>
-              <Text style={styles.performanceLabel}>Marge Moyenne:</Text>
-              <Text style={styles.performanceValue}>
-                {stats?.averageMarginPercentage.toFixed(1)}%
-              </Text>
-            </View>
-            
-            {stats?.bestSellingItem && (
-              <View style={styles.performanceRow}>
-                <Text style={styles.performanceLabel}>Meilleure Vente:</Text>
-                <View>
-                  <Text style={styles.performanceValue}>{stats.bestSellingItem.name}</Text>
-                  <Text style={styles.performanceSubtext}>
-                    Profit: {formatCurrency(stats.bestSellingItem.profit)}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {stats?.worstSellingItem && (
-              <View style={styles.performanceRow}>
-                <Text style={styles.performanceLabel}>Vente la Moins Rentable:</Text>
-                <View>
-                  <Text style={styles.performanceValue}>{stats.worstSellingItem.name}</Text>
-                  <Text style={styles.performanceSubtext}>
-                    Profit: {formatCurrency(stats.worstSellingItem.profit)}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        </View>
+        <SalesChart 
+          monthlyStats={monthlyStats}
+          selectedPeriod={selectedPeriod}
+          onPeriodChange={handlePeriodChange}
+        />
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Statistiques par Catégorie</Text>
+          <Text style={styles.sectionTitle}>Performance par Catégorie</Text>
           {stats?.categoryStats.map((catStat, index) => (
-            <View key={index} style={styles.categoryRow}>
-              <Text style={styles.categoryName}>{catStat.categoryName}</Text>
+            <View key={catStat.categoryId} style={styles.categoryRow}>
+              <View style={styles.categoryNameContainer}>
+                <Text style={styles.categoryName}>{catStat.categoryName}</Text>
+                <Text style={styles.itemCount}>{catStat.itemCount} articles</Text>
+              </View>
               <View style={styles.categoryStats}>
                 <View style={styles.categoryStatItem}>
-                  <Text style={styles.categoryStatValue}>{catStat.itemCount}</Text>
-                  <Text style={styles.categoryStatLabel}>Articles</Text>
-                </View>
-                <View style={styles.categoryStatItem}>
-                  <Text style={styles.categoryStatValue}>
+                  <Text style={styles.categoryStatLabel}>Chiffre d'affaires</Text>
+                  <Text style={styles.categoryValue}>
                     {formatCurrency(catStat.totalProfit)}
                   </Text>
-                  <Text style={styles.categoryStatLabel}>Profit Total</Text>
                 </View>
                 <View style={styles.categoryStatItem}>
-                  <Text style={styles.categoryStatValue}>
+                  <Text style={styles.categoryStatLabel}>Marge</Text>
+                  <Text style={styles.categoryMargin}>
                     {catStat.averageMargin.toFixed(1)}%
                   </Text>
-                  <Text style={styles.categoryStatLabel}>Marge Moy.</Text>
                 </View>
               </View>
             </View>
           ))}
         </View>
-
-        {renderMonthlyChart()}
       </ScrollView>
     </View>
   );
 };
-
-export default StatsScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    height: 60,
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginLeft: 16,
-  },
-  content: {
-    flex: 1,
-  },
-  section: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e1e1e1',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#000',
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: -10,
-  },
-  statItem: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
-    marginHorizontal: 10,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 5,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  financialStats: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
-  },
-  financialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e1e1e1',
-  },
-  financialLabel: {
-    fontSize: 16,
-    color: '#333',
-  },
-  financialValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  totalProfitLabel: {
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  totalProfitValue: {
-    color: '#34c759',
-    fontWeight: 'bold',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
     padding: 20,
   },
   errorText: {
-    color: '#ff3b30',
+    color: '#FF3B30',
     fontSize: 16,
     textAlign: 'center',
   },
-  performanceStats: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
-  },
-  performanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e1e1e1',
-  },
-  performanceLabel: {
-    fontSize: 16,
-    color: '#333',
+  content: {
     flex: 1,
   },
-  performanceValue: {
-    fontSize: 16,
+  section: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    marginBottom: 16,
+    color: '#1a1a1a',
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
     color: '#007AFF',
   },
-  performanceSubtext: {
+  statLabel: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'right',
+    marginTop: 4,
   },
-  categoryRow: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
+  financialStats: {
+    gap: 12,
   },
-  categoryName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  categoryStats: {
+  financialRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  categoryStatItem: {
     alignItems: 'center',
+  },
+  financialLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  financialValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  totalProfitLabel: {
+    color: '#1a1a1a',
+    fontWeight: '600',
+  },
+  totalProfitValue: {
+    color: '#34C759',
+    fontSize: 18,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  categoryNameContainer: {
     flex: 1,
   },
-  categoryStatValue: {
+  categoryName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#1a1a1a',
+    fontWeight: '600',
   },
-  categoryStatLabel: {
+  itemCount: {
     fontSize: 12,
     color: '#666',
     marginTop: 4,
   },
+  categoryStats: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  categoryStatItem: {
+    alignItems: 'flex-end',
+  },
+  categoryStatLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  categoryValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  categoryMargin: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#34C759',
+  },
 });
+
+export default StatsScreen;

@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
-import { ItemList } from '../../src/components/ItemList';
+import ItemList from '../../src/components/ItemList';
 import { FilterBar } from '../../src/components/FilterBar';
-import { updateItem, Item } from '../../src/database/database';
+import { database } from '../../src/database/database';
 import { useDispatch } from 'react-redux';
-import { updateItem as updateItemAction } from '../../src/store/itemsSlice';
+import { updateItem as updateItemAction } from '../../src/store/itemsActions';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 
 export default function StockScreen() {
@@ -14,23 +14,29 @@ export default function StockScreen() {
     search: filter
   });
 
+  // Charger les données au montage du composant
+  useEffect(() => {
+    refetch();
+  }, []);
+
   const handleMarkAsSold = useCallback(async (itemId: number) => {
     try {
-      const item = items.find((i: Item) => i.id === itemId);
+      const item = items.find((i) => i.id === itemId);
       if (!item) return;
 
-      const updateData: Item = {
+      const now = new Date().toISOString();
+      const updateData = {
         ...item,
         status: 'sold' as const,
-        soldAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        soldAt: now,
+        updatedAt: now
       };
 
       // Mise à jour optimiste
       dispatch(updateItemAction(updateData));
 
       try {
-        await updateItem(itemId, updateData);
+        await database.updateItem(itemId, updateData);
         refetch();
       } catch (error) {
         // Rollback en cas d'erreur
@@ -46,21 +52,22 @@ export default function StockScreen() {
 
   const handleMarkAsAvailable = useCallback(async (itemId: number) => {
     try {
-      const item = items.find((i: Item) => i.id === itemId);
+      const item = items.find((i) => i.id === itemId);
       if (!item) return;
 
-      const updateData: Item = {
+      const now = new Date().toISOString();
+      const updateData = {
         ...item,
         status: 'available' as const,
-        soldAt: null,
-        updatedAt: new Date().toISOString()
+        soldAt: undefined,
+        updatedAt: now
       };
 
       // Mise à jour optimiste
       dispatch(updateItemAction(updateData));
 
       try {
-        await updateItem(itemId, updateData);
+        await database.updateItem(itemId, updateData);
         refetch();
       } catch (error) {
         // Rollback en cas d'erreur
@@ -104,6 +111,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    paddingBottom: 60,
   },
   loadingContainer: {
     flex: 1,

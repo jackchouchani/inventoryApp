@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import { addItem as addItemToDb, Category, Container } from '../database/database';
+import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { generateQRValue } from '../utils/qrCodeManager';
-import { addItem } from '../store/itemsSlice';
+import { addItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
+import { MaterialIcons } from '@expo/vector-icons';
+import type { MaterialIconName } from '../types/icons';
 
 interface ItemFormProps {
     containers: Container[];
@@ -83,7 +85,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
             const qrCode = generateQRValue('ITEM');
 
             // Ajout dans la base de données
-            const newItemId = await addItemToDb({
+            const newItemId = await database.addItem({
                 name: item.name.trim(),
                 description: item.description.trim(),
                 purchasePrice,
@@ -262,6 +264,12 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                                 ]}
                                 onPress={() => handleCategorySelect(category.id)}
                             >
+                                <MaterialIcons
+                                    name={(category.icon as MaterialIconName) || 'folder'}
+                                    size={20}
+                                    color={item.categoryId === category.id ? '#fff' : '#666'}
+                                    style={styles.categoryIcon}
+                                />
                                 <Text style={[
                                     styles.optionText,
                                     item.categoryId === category.id && styles.optionTextSelected
@@ -392,6 +400,8 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     option: {
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 8,
@@ -409,6 +419,9 @@ const styles = StyleSheet.create({
     },
     optionTextSelected: {
         color: '#fff',
+    },
+    categoryIcon: {
+        marginRight: 8,
     },
 });
 

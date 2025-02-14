@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,20 +16,23 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../src/store/store';
 import { deleteCategory, editCategory, setCategories, addNewCategory } from '../../src/store/categorySlice';
-import { getCategories as fetchCategories, addCategory as addCategoryToDatabase, updateCategory, deleteCategory as deleteCategoryFromDB, Category } from '../../src/database/database';
+import { database } from '../../src/database/database';
+import type { Category } from '../../src/types/category';
 import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIconName } from '../../src/types/icons';
 import { useAnimatedComponents } from '../../src/hooks/useAnimatedComponents';
+import { useRouter } from 'expo-router';
+import { selectAllCategories } from '../../src/store/categorySlice';
 
 const CategoryScreen = () => {
   const dispatch = useDispatch();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState({ name: '', description: '' });
-  const [error, setError] = useState('');
-  const categories = useSelector((state: RootState) => 
-    Object.values(state.categories.entities) as Category[]
-  );
+  const [error, setError] = useState<string | null>(null);
+  const categories = useSelector((state: RootState) => selectAllCategories(state)) as Category[];
+  const router = useRouter();
 
   const {
     opacity,
@@ -42,9 +45,23 @@ const CategoryScreen = () => {
     scaleStyle
   } = useAnimatedComponents();
 
+  const loadCategories = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const loadedCategories = await database.getCategories();
+      dispatch(setCategories(loadedCategories));
+    } catch (error) {
+      console.error('Erreur lors du chargement des catégories:', error);
+      setError('Erreur lors du chargement des catégories');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dispatch]);
+
   useEffect(() => {
     loadCategories();
-  }, []);
+  }, [loadCategories]);
 
   useEffect(() => {
     if (editingCategory) {
@@ -57,26 +74,6 @@ const CategoryScreen = () => {
     }
   }, [editingCategory]);
 
-  const loadCategories = async () => {
-    setIsLoading(true);
-    try {
-      const dbCategories = await fetchCategories();
-      const formattedCategories = dbCategories.map(cat => ({
-        id: cat.id!,
-        name: cat.name,
-        description: cat.description,
-        createdAt: cat.createdAt,
-        updatedAt: cat.updatedAt
-      }));
-      dispatch(setCategories(formattedCategories));
-    } catch (error) {
-      console.error('Erreur lors du chargement des catégories:', error);
-      Alert.alert('Erreur', 'Impossible de charger les catégories');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
       setError('Le nom de la catégorie est requis');
@@ -88,17 +85,28 @@ const CategoryScreen = () => {
 
     try {
       if (editingCategory) {
-        // Mise à jour optimiste pour l'édition
-        const updatedCategory = {
-          id: editingCategory.id!,
-          name: formData.name.trim(),
-          description: formData.description.trim(),
+        const now = new Date().toISOString();
+        const formData = {
+          name: editingCategory.name.trim(),
+          description: editingCategory.description?.trim(),
+          icon: editingCategory.icon,
           updatedAt: now
         };
-        dispatch(editCategory({ id: editingCategory.id!, name: formData.name.trim() }));
-        
+        dispatch(editCategory({
+          id: editingCategory.id!,
+          name: formData.name,
+          description: formData.description,
+          icon: formData.icon,
+          createdAt: editingCategory.createdAt,
+          updatedAt: formData.updatedAt
+        }));
+
         // Mise à jour dans la base de données
-        await updateCategory(editingCategory.id!, formData.name.trim(), formData.description.trim());
+        await database.updateCategory(editingCategory.id!, {
+          name: formData.name,
+          description: formData.description,
+          icon: formData.icon
+        });
       } else {
         // Mise à jour optimiste pour l'ajout
         const tempId = Date.now();
@@ -112,7 +120,7 @@ const CategoryScreen = () => {
         dispatch(addNewCategory(newCategory));
 
         // Ajout dans la base de données
-        const categoryId = await addCategoryToDatabase({
+        const categoryId = await database.addCategory({
           name: formData.name.trim(),
           description: formData.description.trim()
         });
@@ -131,7 +139,7 @@ const CategoryScreen = () => {
       console.error('Erreur:', error);
       Alert.alert(
         'Erreur',
-        editingCategory 
+        editingCategory
           ? 'Impossible de modifier la catégorie'
           : 'Impossible d\'ajouter la catégorie'
       );
@@ -154,9 +162,9 @@ const CategoryScreen = () => {
               }
               // Mise à jour optimiste
               dispatch(deleteCategory(category.id));
-              
+
               // Suppression dans la base de données
-              await deleteCategoryFromDB(category.id);
+              await database.deleteCategory(category.id);
             } catch (error) {
               console.error('Erreur:', error);
               Alert.alert('Erreur', 'Impossible de supprimer la catégorie');
@@ -169,29 +177,48 @@ const CategoryScreen = () => {
     );
   };
 
+  const handleAddCategory = () => {
+    router.push('/(stack)/add-category');
+  };
+
+  const handleEditCategory = (category: Category) => {
+    router.push({
+      pathname: '/(stack)/edit-category',
+      params: { id: category.id }
+    });
+  };
+
   const renderItem = ({ item }: { item: Category }) => (
     <Animated.View style={[styles.categoryCard, fadeStyle, scaleStyle]}>
       <View style={styles.categoryContent}>
-        <Text style={styles.categoryName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.categoryDescription}>{item.description}</Text>
-        )}
+        <View style={styles.iconContainer}>
+          <MaterialIcons
+            name={(item.icon as MaterialIconName) || 'folder'}
+            size={24}
+            color="#007AFF"
+          />
+        </View>
+        <View style={styles.categoryInfo}>
+          <Text style={styles.categoryName}>{item.name}</Text>
+          {item.description && (
+            <Text style={styles.categoryDescription} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+        </View>
       </View>
-      <View style={styles.actionButtons}>
+      <View style={styles.categoryActions}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => {
-            setEditingCategory(item);
-            setModalVisible(true);
-          }}
+          style={styles.actionButton}
+          onPress={() => handleEditCategory(item)}
         >
-          <MaterialIcons name="edit" size={22} color="#007AFF" />
+          <MaterialIcons name="edit" size={20} color="#007AFF" />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => handleDeleteCategory(item)}
         >
-          <MaterialIcons name="delete" size={22} color="#FF3B30" />
+          <MaterialIcons name="delete" size={20} color="#FF3B30" />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -206,19 +233,24 @@ const CategoryScreen = () => {
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Catégories</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
-          onPress={() => {
-            setEditingCategory(null);
-            setModalVisible(true);
-          }}
+          onPress={handleAddCategory}
         >
           <MaterialIcons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Nouvelle catégorie</Text>
+          <Text style={styles.addButtonText}>Ajouter une catégorie</Text>
         </TouchableOpacity>
       </View>
 
@@ -254,7 +286,7 @@ const CategoryScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => {
                   setModalVisible(false);
@@ -301,7 +333,7 @@ const CategoryScreen = () => {
                 />
               </View>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.submitButton}
                 onPress={handleSubmit}
               >
@@ -356,47 +388,56 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   categoryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
     padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   categoryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  categoryInfo: {
     flex: 1,
   },
   categoryName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: '#333',
     marginBottom: 4,
   },
   categoryDescription: {
     fontSize: 14,
     color: '#666',
   },
-  actionButtons: {
+  categoryActions: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
     gap: 8,
   },
   actionButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#f8f9fa',
-  },
-  editButton: {
-    borderWidth: 1,
-    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
   },
   deleteButton: {
-    borderWidth: 1,
-    borderColor: '#FF3B30',
+    backgroundColor: '#FFF0F0',
   },
   modalContainer: {
     flex: 1,
@@ -502,6 +543,12 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 8,
     textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
 });
 
