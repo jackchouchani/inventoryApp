@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Text, 
-  View, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Platform, 
-  Animated,
-  Dimensions,
-  StatusBar
+    Text, 
+    View, 
+    StyleSheet, 
+    TouchableOpacity, 
+    Platform, 
+    Animated,
+    Dimensions,
+    StatusBar,
+    FlatList
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Audio } from 'expo-av';
@@ -18,6 +19,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as haptics from '../utils/vibrationManager';
 import * as sounds from '../utils/soundManager';
 import type { Container } from '../database/database';
+import type { Item } from '../types/item';
 import { handleScannerError } from '../utils/errorHandler';
 import { useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
@@ -28,27 +30,29 @@ interface ScannerProps {
     isActive: boolean;
 }
 
+interface ScannedItem extends Item {
+    scannedAt: number;
+}
+
 interface ScanState {
     mode: 'container' | 'item';
     currentContainer: Container | null;
-    history: Array<{ name: string; success: boolean; timestamp: number }>;
-    lastResult: { success: boolean; message: string; type?: 'container' | 'item'; data?: any } | null;
+    scannedItems: ScannedItem[];
     isScanning: boolean;
-    pendingItem: any | null;
+    pendingItem: Item | null;
     showConfirmation: boolean;
 }
 
 const INITIAL_STATE: ScanState = {
     mode: 'container',
     currentContainer: null,
-    history: [],
-    lastResult: null,
+    scannedItems: [],
     isScanning: true,
     pendingItem: null,
     showConfirmation: false
 };
 
-const SCAN_DELAY = 500;
+const SCAN_DELAY = 1000;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCANNER_SIZE = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.7;
 
@@ -61,58 +65,23 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     const queryClient = useQueryClient();
     const [lastScanTime, setLastScanTime] = useState(0);
 
-    const resetScanner = useCallback(() => {
-        setScanState(INITIAL_STATE);
-        Animated.timing(overlayAnim, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-        }).start();
-    }, [overlayAnim]);
-
     const handleFeedback = useCallback(async (success: boolean) => {
-        // Animation
-        fadeAnim.setValue(1);
-        Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 2000,
-            useNativeDriver: true,
-        }).start();
-
-        // Overlay animation
-        Animated.sequence([
-            Animated.timing(overlayAnim, {
-                toValue: 1,
-                duration: 200,
-                useNativeDriver: true,
-            }),
-            Animated.timing(overlayAnim, {
-                toValue: 0,
-                duration: 200,
-                delay: 1000,
-                useNativeDriver: true,
-            })
-        ]).start();
-
         await haptics.vibrate(success ? haptics.SUCCESS_PATTERN : haptics.ERROR_PATTERN);
         await sounds.play(success ? 'success' : 'error');
-    }, [fadeAnim, overlayAnim]);
+    }, []);
 
     const handleScan = useCallback(async ({ data: qrData }: BarcodeScanningResult) => {
         const now = Date.now();
-        if (now - lastScanTime < SCAN_DELAY) return;
+        if (now - lastScanTime < SCAN_DELAY) {
+            console.log('Scan trop rapide, ignoré');
+            return;
+        }
         setLastScanTime(now);
 
-        if (!scanState.isScanning || scanState.showConfirmation) return;
+        if (!scanState.isScanning) return;
 
         try {
-            console.log('Mode actuel:', scanState.mode);
-            console.log('QR code scanné:', qrData);
-            console.log('État complet du scanner:', scanState);
-
-            // Vérifier le format du QR code
             if (!qrData.startsWith('CONT_') && !qrData.startsWith('ART_')) {
-                console.warn('Format de QR code non reconnu:', qrData);
                 await handleFeedback(false);
                 return;
             }
@@ -120,64 +89,62 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             const isContainer = qrData.startsWith('CONT_');
             const isItem = qrData.startsWith('ART_');
 
-            // Mode container : on ne peut scanner que des containers
+            // Mode container
             if (scanState.mode === 'container') {
                 if (!isContainer) {
-                    console.warn('Veuillez scanner un QR code de container');
                     await handleFeedback(false);
                     return;
                 }
 
                 const container = await database.getContainerByQRCode(qrData);
                 if (container) {
-                    console.log('Container trouvé, passage en mode item');
-                    setScanState(prev => {
-                        const newState = {
-                            ...prev,
-                            mode: 'item' as const,
-                            currentContainer: container,
-                            isScanning: false,
-                            showConfirmation: true,
-                            history: [
-                                { name: container.name, success: true, timestamp: Date.now() }
-                            ]
-                        };
-                        console.log('Nouveau state après scan container:', newState);
-                        return newState;
-                    });
+                    setScanState(prev => ({
+                        ...prev,
+                        currentContainer: container,
+                        isScanning: false,
+                        showConfirmation: true
+                    }));
                     await handleFeedback(true);
                 } else {
-                    console.warn('Container non trouvé:', qrData);
                     await handleFeedback(false);
                 }
                 return;
             }
 
-            // Mode article : on ne peut scanner que des articles
+            // Mode article
             if (scanState.mode === 'item') {
-                console.log('En mode item, scan d\'article');
                 if (!isItem) {
-                    console.warn('Veuillez scanner un QR code d\'article');
                     await handleFeedback(false);
                     return;
                 }
 
                 const item = await database.getItemByQRCode(qrData);
                 if (item) {
-                    console.log('Article trouvé:', item.name);
-                    setScanState(prev => ({
-                        ...prev,
-                        pendingItem: item,
-                        isScanning: false,
-                        showConfirmation: true,
-                        history: [
-                            { name: item.name, success: true, timestamp: Date.now() },
-                            ...prev.history
-                        ]
-                    }));
+                    const isAlreadyScanned = scanState.scannedItems.some(
+                        scannedItem => scannedItem.id === item.id || scannedItem.qrCode === item.qrCode
+                    );
+
+                    if (isAlreadyScanned) {
+                        console.log('Article déjà scanné:', item.name);
+                        await handleFeedback(false);
+                        return;
+                    }
+
+                    setScanState(prev => {
+                        // Vérification des doublons avant l'ajout
+                        if (prev.scannedItems.some(si => si.id === item.id)) {
+                            return prev; // Ne pas modifier l'état si c'est un doublon
+                        }
+                        return {
+                            ...prev,
+                            scannedItems: [
+                                { ...item, scannedAt: Date.now() },
+                                ...prev.scannedItems
+                            ]
+                        };
+                    });
                     await handleFeedback(true);
                 } else {
-                    console.warn('Article non trouvé:', qrData);
                     await handleFeedback(false);
                 }
             }
@@ -187,81 +154,72 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         }
     }, [scanState, lastScanTime, handleFeedback]);
 
-    const handleConfirmItem = async () => {
-        if (!scanState.pendingItem || !scanState.currentContainer) return;
+    const startScanningItems = async () => {
+        if (!scanState.currentContainer) return;
 
-        try {
-            const updateData = {
-                ...scanState.pendingItem,
-                containerId: scanState.currentContainer.id,
-                updatedAt: new Date().toISOString()
-            };
-
-            await database.updateItem(scanState.pendingItem.id!, updateData);
-            
-            setScanState(prev => ({
-                ...prev,
-                history: [
-                    { name: scanState.pendingItem!.name, success: true, timestamp: Date.now() },
-                    ...prev.history
-                ].slice(0, 5),
-                pendingItem: null,
-                showConfirmation: false,
-                isScanning: true
-            }));
-
-            queryClient.invalidateQueries({ queryKey: ['items'] });
-            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-            
-            triggerRefresh();
-            onScan({ 
-                success: true, 
-                message: `Article assigné: ${scanState.pendingItem.name}`, 
-                type: 'item', 
-                data: scanState.pendingItem 
-            });
-        } catch (error) {
-            console.error('Erreur lors de l\'ajout de l\'article:', error);
-            handleScannerError(error as Error, 'Scanner.handleConfirmItem');
-        }
-    };
-
-    const handleCancelItem = () => {
         setScanState(prev => ({
             ...prev,
-            pendingItem: null,
+            mode: 'item',
+            isScanning: true,
             showConfirmation: false,
-            isScanning: true
+            scannedItems: []
+        }));
+
+        onScan({
+            success: true,
+            message: `Container sélectionné: ${scanState.currentContainer.name}`,
+            type: 'container',
+            data: scanState.currentContainer
+        });
+    };
+
+    const removeScannedItem = (itemId: number) => {
+        setScanState(prev => ({
+            ...prev,
+            scannedItems: prev.scannedItems.filter(item => item.id !== itemId)
         }));
     };
 
-    const startScanningItems = () => {
-        console.log('Démarrage du scan d\'articles...');
-        setScanState(prev => {
-            const newState = {
-                ...prev,
-                mode: 'item' as const,
-                isScanning: true,
-                showConfirmation: false,
-                history: []
-            };
-            console.log('Nouveau state après passage en mode item:', newState);
-            return newState;
-        });
+    const handleFinishItemScanning = async () => {
+        if (!scanState.currentContainer || scanState.scannedItems.length === 0) return;
 
-        // Attendre que le state soit mis à jour avant d'appeler onScan
-        setTimeout(() => {
-            console.log('État actuel après changement de mode:', scanState);
-            onScan({ 
-                success: true, 
-                message: `Container sélectionné: ${scanState.currentContainer?.name}`, 
-                type: 'container', 
-                data: scanState.currentContainer 
+        try {
+            // Mettre à jour tous les articles scannés
+            await Promise.all(
+                scanState.scannedItems.map(item =>
+                    database.updateItem(item.id!, {
+                        containerId: scanState.currentContainer!.id
+                    })
+                )
+            );
+
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            triggerRefresh();
+
+            // Réinitialiser le scanner pour un nouveau container
+            setScanState(INITIAL_STATE);
+
+            onScan({
+                success: true,
+                message: `${scanState.scannedItems.length} articles assignés au container ${scanState.currentContainer.name}`,
+                type: 'item',
+                data: {
+                    container: scanState.currentContainer,
+                    items: scanState.scannedItems
+                }
             });
-        }, 0);
+        } catch (error) {
+            console.error('Erreur lors de la finalisation:', error);
+            handleScannerError(error as Error, 'Scanner.handleFinishItemScanning');
+        }
     };
 
     const cancelContainerScan = () => {
+        setScanState(INITIAL_STATE);
+    };
+
+    const resetScanner = () => {
         setScanState(INITIAL_STATE);
     };
 
@@ -289,13 +247,35 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         );
     }
 
+    const renderScannedItem = ({ item }: { item: ScannedItem }) => (
+        <View style={styles.scannedItem}>
+            <View style={styles.scannedItemInfo}>
+                <Text style={styles.scannedItemName}>{item.name}</Text>
+                <View style={styles.scannedItemDetails}>
+                    <Text style={styles.scannedItemPrice}>{item.sellingPrice} €</Text>
+                    {item.containerId && item.containerId !== scanState.currentContainer?.id && (
+                        <Text style={styles.containerChange}>
+                            Changement de container
+                        </Text>
+                    )}
+                </View>
+            </View>
+            <TouchableOpacity
+                style={styles.removeItemButton}
+                onPress={() => removeScannedItem(item.id!)}
+            >
+                <MaterialIcons name="close" size={20} color="#FF3B30" />
+            </TouchableOpacity>
+        </View>
+    );
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             
             <CameraView
                 style={StyleSheet.absoluteFill}
-                onBarcodeScanned={handleScan}
+                onBarcodeScanned={scanState.isScanning ? handleScan : undefined}
                 barcodeScannerSettings={{
                     barcodeTypes: ['qr'],
                 }}
@@ -333,7 +313,12 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     <View style={styles.scannerFrame}>
                         {scanState.isScanning ? (
                             <View style={styles.scannerContainer}>
-                                <View style={styles.scanner} />
+                                <View style={styles.scanner}>
+                                    <View style={styles.scannerCorner} />
+                                    <View style={[styles.scannerCorner, styles.topRight]} />
+                                    <View style={[styles.scannerCorner, styles.bottomLeft]} />
+                                    <View style={[styles.scannerCorner, styles.bottomRight]} />
+                                </View>
                                 <Animated.View 
                                     style={[
                                         styles.scanLine,
@@ -349,102 +334,75 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                                 />
                             </View>
                         ) : (
-                            <View style={styles.confirmationContainer}>
-                                {scanState.mode === 'container' && scanState.currentContainer && (
-                                    <>
-                                        <Text style={styles.confirmationTitle}>
-                                            Container sélectionné
-                                        </Text>
-                                        <Text style={styles.confirmationText}>
-                                            {scanState.currentContainer.name}
-                                        </Text>
-                                        <View style={styles.buttonGroup}>
-                                            <TouchableOpacity
-                                                style={[styles.button, styles.cancelButton]}
-                                                onPress={cancelContainerScan}
-                                            >
-                                                <MaterialIcons name="close" size={20} color="#fff" />
-                                                <Text style={styles.buttonText}>Annuler</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={[styles.button, styles.confirmButton]}
-                                                onPress={startScanningItems}
-                                            >
-                                                <MaterialIcons name="check" size={20} color="#fff" />
-                                                <Text style={styles.buttonText}>Scanner des articles</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </>
-                                )}
-
-                                {scanState.mode === 'item' && scanState.showConfirmation && scanState.pendingItem && (
-                                    <>
-                                        <Text style={styles.confirmationTitle}>
-                                            Ajouter l'article ?
-                                        </Text>
-                                        <Text style={styles.confirmationText}>
-                                            {scanState.pendingItem.name}
-                                        </Text>
-                                        <View style={styles.buttonGroup}>
-                                            <TouchableOpacity
-                                                style={[styles.button, styles.cancelButton]}
-                                                onPress={handleCancelItem}
-                                            >
-                                                <MaterialIcons name="close" size={20} color="#fff" />
-                                                <Text style={styles.buttonText}>Annuler</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={[styles.button, styles.confirmButton]}
-                                                onPress={handleConfirmItem}
-                                            >
-                                                <MaterialIcons name="check" size={20} color="#fff" />
-                                                <Text style={styles.buttonText}>Confirmer</Text>
-                                            </TouchableOpacity>
-                                        </View>
-                                    </>
-                                )}
-                            </View>
+                            <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
+                                <View style={styles.confirmationContainer}>
+                                    {scanState.mode === 'container' && scanState.currentContainer && (
+                                        <>
+                                            <View style={styles.confirmationHeader}>
+                                                <MaterialIcons name="check-circle" size={40} color="#4CAF50" />
+                                                <Text style={styles.confirmationTitle}>
+                                                    Container scanné avec succès
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.confirmationText}>
+                                                {scanState.currentContainer.name}
+                                            </Text>
+                                            <View style={styles.buttonGroup}>
+                                                <TouchableOpacity
+                                                    style={[styles.button, styles.cancelButton]}
+                                                    onPress={cancelContainerScan}
+                                                >
+                                                    <MaterialIcons name="close" size={20} color="#fff" />
+                                                    <Text style={styles.buttonText}>Annuler</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[styles.button, styles.confirmButton]}
+                                                    onPress={startScanningItems}
+                                                >
+                                                    <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
+                                                    <Text style={styles.buttonText}>Scanner des articles</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </>
+                                    )}
+                                </View>
+                            </BlurView>
                         )}
                     </View>
 
-                    <View style={[styles.footer, { backgroundColor: 'rgba(0,0,0,0.8)' }]}>
-                        {scanState.mode === 'item' && scanState.currentContainer && (
+                    {scanState.mode === 'item' && (
+                        <View style={styles.footer}>
                             <View style={styles.containerInfo}>
                                 <Text style={styles.containerTitle}>
-                                    Container sélectionné: {scanState.currentContainer.name}
+                                    Container : {scanState.currentContainer?.name}
                                 </Text>
-                                <Text style={styles.containerSubtitle}>
-                                    {scanState.isScanning ? 'Scannez les articles à ajouter' : 'Confirmez l\'ajout de l\'article'}
+                                <Text style={styles.itemCount}>
+                                    {scanState.scannedItems.length} articles scannés
                                 </Text>
                             </View>
-                        )}
 
-                        {scanState.history.length > 0 && (
-                            <View style={styles.historyContainer}>
-                                {scanState.history.map((item, index) => (
-                                    <Animated.View 
-                                        key={index}
-                                        style={[
-                                            styles.historyItem,
-                                            {
-                                                opacity: fadeAnim.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [0.5, 1]
-                                                })
-                                            }
-                                        ]}
+                            <View style={styles.scannedItemsContainer}>
+                                <FlatList
+                                    data={scanState.scannedItems}
+                                    renderItem={renderScannedItem}
+                                    keyExtractor={item => item.id!.toString()}
+                                    style={styles.scannedItemsList}
+                                />
+
+                                {scanState.scannedItems.length > 0 && (
+                                    <TouchableOpacity
+                                        style={styles.finishButton}
+                                        onPress={handleFinishItemScanning}
                                     >
-                                        <MaterialIcons
-                                            name={item.success ? 'check-circle' : 'error'}
-                                            size={20}
-                                            color={item.success ? '#4CAF50' : '#F44336'}
-                                        />
-                                        <Text style={styles.historyText}>{item.name}</Text>
-                                    </Animated.View>
-                                ))}
+                                        <MaterialIcons name="check" size={24} color="#fff" />
+                                        <Text style={styles.finishButtonText}>
+                                            Terminer et assigner les articles
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                        )}
-                    </View>
+                        </View>
+                    )}
                 </View>
             </CameraView>
         </View>
@@ -458,7 +416,7 @@ const styles = StyleSheet.create({
     },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.3)',
     },
     header: {
         flexDirection: 'row',
@@ -468,17 +426,21 @@ const styles = StyleSheet.create({
         paddingTop: Platform.OS === 'ios' ? 60 : 20,
     },
     closeButton: {
-        padding: 8,
+        padding: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 30,
     },
     resetButton: {
-        padding: 8,
+        padding: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 30,
     },
     modeIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: 8,
-        borderRadius: 20,
+        padding: 12,
+        borderRadius: 25,
         gap: 8,
     },
     modeText: {
@@ -502,6 +464,35 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#fff',
         borderRadius: 20,
+        position: 'relative',
+    },
+    scannerCorner: {
+        position: 'absolute',
+        width: 20,
+        height: 20,
+        borderColor: '#007AFF',
+        borderWidth: 3,
+    },
+    topRight: {
+        top: -2,
+        right: -2,
+        borderLeftWidth: 0,
+        borderBottomWidth: 0,
+        borderTopRightRadius: 20,
+    },
+    bottomLeft: {
+        bottom: -2,
+        left: -2,
+        borderRightWidth: 0,
+        borderTopWidth: 0,
+        borderBottomLeftRadius: 20,
+    },
+    bottomRight: {
+        bottom: -2,
+        right: -2,
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        borderBottomRightRadius: 20,
     },
     scanLine: {
         position: 'absolute',
@@ -513,10 +504,15 @@ const styles = StyleSheet.create({
     footer: {
         padding: 20,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        maxHeight: '50%',
     },
     containerInfo: {
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 15,
+        borderRadius: 12,
     },
     containerTitle: {
         color: '#fff',
@@ -524,25 +520,153 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 4,
     },
-    containerSubtitle: {
+    itemCount: {
         color: '#fff',
         fontSize: 14,
         opacity: 0.8,
     },
-    historyContainer: {
-        gap: 10,
+    scannedItemsContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 12,
+        overflow: 'hidden',
     },
-    historyItem: {
+    scannedItemsList: {
+        flex: 1,
+    },
+    scannedItem: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255,255,255,0.1)',
-        padding: 10,
+        padding: 12,
+        marginVertical: 4,
+        marginHorizontal: 8,
         borderRadius: 8,
+    },
+    scannedItemInfo: {
+        flex: 1,
+        marginRight: 12,
+    },
+    scannedItemName: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    scannedItemDetails: {
+        flexDirection: 'row',
+        alignItems: 'center',
         gap: 8,
     },
-    historyText: {
+    scannedItemPrice: {
         color: '#fff',
         fontSize: 14,
+        opacity: 0.8,
+    },
+    containerChange: {
+        color: '#FFA500',
+        fontSize: 12,
+        fontStyle: 'italic',
+    },
+    removeItemButton: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,59,48,0.2)',
+    },
+    finishButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#4CAF50',
+        padding: 16,
+        margin: 12,
+        borderRadius: 12,
+        gap: 8,
+    },
+    finishButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    confirmationWrapper: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    confirmationContainer: {
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: 24,
+        borderRadius: 16,
+        alignItems: 'center',
+        width: '90%',
+        maxWidth: 400,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    confirmationHeader: {
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 12,
+    },
+    confirmationTitle: {
+        color: '#fff',
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    confirmationText: {
+        color: '#fff',
+        fontSize: 18,
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+    button: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 14,
+        borderRadius: 12,
+        gap: 8,
+        minWidth: 140,
+        justifyContent: 'center',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    confirmButton: {
+        backgroundColor: '#4CAF50',
+        borderWidth: 1,
+        borderColor: '#43A047',
+    },
+    cancelButton: {
+        backgroundColor: '#F44336',
+        borderWidth: 1,
+        borderColor: '#E53935',
+    },
+    buttonGroup: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 16,
+        marginTop: 20,
+        width: '100%',
+        paddingHorizontal: 20,
     },
     permissionText: {
         color: '#fff',
@@ -560,60 +684,5 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         textAlign: 'center',
-    },
-    confirmationContainer: {
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        padding: 20,
-        borderRadius: 12,
-        alignItems: 'center',
-        width: '90%',
-        maxWidth: 400,
-    },
-    confirmationTitle: {
-        color: '#fff',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 10,
-    },
-    confirmationText: {
-        color: '#fff',
-        fontSize: 16,
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 8,
-        gap: 8,
-        minWidth: 120,
-        justifyContent: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    confirmButton: {
-        backgroundColor: '#4CAF50',
-    },
-    cancelButton: {
-        backgroundColor: '#F44336',
-    },
-    buttonGroup: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 16,
-        marginTop: 20,
-        width: '100%',
-        paddingHorizontal: 20,
     },
 });

@@ -233,50 +233,60 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Emplacement</Text>
-                    <View style={styles.optionsContainer}>
-                        {containers.map((container) => (
-                            <TouchableOpacity
-                                key={container.id}
-                                style={[
-                                    styles.option,
-                                    item.containerId === container.id && styles.optionSelected
-                                ]}
-                                onPress={() => handleContainerSelect(container.id)}
-                            >
-                                <Text style={[
-                                    styles.optionText,
-                                    item.containerId === container.id && styles.optionTextSelected
-                                ]}>{container.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+                        <View style={styles.optionsContainer}>
+                            {containers.map((container) => (
+                                <TouchableOpacity
+                                    key={container.id}
+                                    style={[
+                                        styles.option,
+                                        item.containerId === container.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => handleContainerSelect(container.id)}
+                                >
+                                    <MaterialIcons
+                                        name="inbox"
+                                        size={20}
+                                        color={item.containerId === container.id ? '#fff' : '#666'}
+                                        style={styles.containerIcon}
+                                    />
+                                    <Text style={[
+                                        styles.optionText,
+                                        item.containerId === container.id && styles.optionTextSelected
+                                    ]}>{container.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
                 </View>
 
                 <View style={[styles.formSection, styles.formSectionLast]}>
                     <Text style={styles.sectionTitle}>Catégorie</Text>
-                    <View style={styles.optionsContainer}>
-                        {categories.map((category) => (
-                            <TouchableOpacity
-                                key={category.id}
-                                style={[
-                                    styles.option,
-                                    item.categoryId === category.id && styles.optionSelected
-                                ]}
-                                onPress={() => handleCategorySelect(category.id)}
-                            >
-                                <MaterialIcons
-                                    name={(category.icon as MaterialIconName) || 'folder'}
-                                    size={20}
-                                    color={item.categoryId === category.id ? '#fff' : '#666'}
-                                    style={styles.categoryIcon}
-                                />
-                                <Text style={[
-                                    styles.optionText,
-                                    item.categoryId === category.id && styles.optionTextSelected
-                                ]}>{category.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+                        <View style={styles.optionsContainer}>
+                            {categories.map((category) => (
+                                <TouchableOpacity
+                                    key={category.id}
+                                    style={[
+                                        styles.option,
+                                        item.categoryId === category.id && styles.optionSelected
+                                    ]}
+                                    onPress={() => handleCategorySelect(category.id)}
+                                >
+                                    <MaterialIcons
+                                        name={(category.icon as MaterialIconName) || 'folder'}
+                                        size={20}
+                                        color={item.categoryId === category.id ? '#fff' : '#666'}
+                                        style={styles.categoryIcon}
+                                    />
+                                    <Text style={[
+                                        styles.optionText,
+                                        item.categoryId === category.id && styles.optionTextSelected
+                                    ]}>{category.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
                 </View>
             </ScrollView>
         </View>
@@ -394,10 +404,13 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 16,
     },
+    optionsScrollView: {
+        marginBottom: 0,
+    },
     optionsContainer: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
         gap: 8,
+        paddingVertical: 4,
     },
     option: {
         flexDirection: 'row',
@@ -414,13 +427,17 @@ const styles = StyleSheet.create({
         borderColor: '#007AFF',
     },
     optionText: {
-        color: '#000',
         fontSize: 14,
+        color: '#333',
     },
     optionTextSelected: {
         color: '#fff',
+        fontWeight: '500',
     },
     categoryIcon: {
+        marginRight: 8,
+    },
+    containerIcon: {
         marginRight: 8,
     },
 });

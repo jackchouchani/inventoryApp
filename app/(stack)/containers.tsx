@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Container, Item } from '../../src/database/types';
+import { Container } from '../../src/types/container';
+import { Item } from '../../src/types/item';
 import { ContainerGrid } from '../../src/components/ContainerGrid';
 import { ContainerForm } from '../../src/components/ContainerForm';
-import { ItemList } from '../../src/components/ItemList';
+import ItemList from '../../src/components/ItemList';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { handleDatabaseError } from '../../src/utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../../src/config/supabase';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useDispatch } from 'react-redux';
-import { updateItem } from '../../src/store/itemsSlice';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateItem, setItems } from '../../src/store/itemsActions';
+import { selectAllItems } from '../../src/store/itemsAdapter';
+import { RootState } from '../../src/store/store';
 
 const ContainerScreen = () => {
   const dispatch = useDispatch();
@@ -22,27 +25,56 @@ const ContainerScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const { items: initialItems, containers, categories, isLoading: isLoadingInventory } = useInventoryData();
-  const [items, setItems] = useState<Item[]>([]);
+  const items = useSelector((state: RootState) => selectAllItems(state));
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
 
+  // Synchroniser les données de useInventoryData avec Redux
   useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
+    if (initialItems?.length > 0) {
+      dispatch(setItems(initialItems));
+    }
+  }, [initialItems, dispatch]);
 
-  const handleContainerPress = (containerId: number) => {
+  // Utiliser useMemo pour les items filtrés avec une meilleure logique de filtrage
+  const { assignedItems, filteredAvailableItems } = useMemo(() => {
+    const assigned = items.filter(item => 
+      item.containerId === selectedContainer?.id && 
+      item.status === 'available'
+    );
+
+    const available = items.filter(item => 
+      item.status === 'available' && 
+      (item.containerId === null || item.containerId !== selectedContainer?.id)
+    );
+    
+    const filtered = available.filter(item => {
+      const matchesSearch = searchQuery ? 
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) : true;
+      const matchesCategory = selectedCategory ? 
+        item.categoryId === selectedCategory : true;
+      return matchesSearch && matchesCategory;
+    });
+
+    return {
+      assignedItems: assigned,
+      filteredAvailableItems: filtered
+    };
+  }, [items, selectedContainer, searchQuery, selectedCategory]);
+
+  const handleContainerPress = useCallback((containerId: number) => {
     const container = containers.find(c => c.id === containerId);
     if (container) {
       setSelectedContainer(container);
     }
-  };
+  }, [containers]);
 
-  const handleEditContainer = (container: Container) => {
+  const handleEditContainer = useCallback((container: Container) => {
     setEditingContainer(container);
     setShowContainerForm(true);
     setSelectedContainer(null);
-  };
+  }, []);
 
-  const handleContainerSubmit = async (containerData: Partial<Container>) => {
+  const handleContainerSubmit = useCallback(async (containerData: Partial<Container>) => {
     try {
       if (editingContainer?.id) {
         const { error } = await supabase
@@ -67,7 +99,93 @@ const ContainerScreen = () => {
         handleDatabaseError(error, 'ContainerScreen.handleContainerSubmit');
       }
     }
-  };
+  }, [editingContainer, triggerRefresh]);
+
+  const handleAddToContainer = useCallback(async (itemId: number) => {
+    if (!selectedContainer?.id) return;
+
+    const itemToUpdate = items.find(item => item.id === itemId);
+    if (!itemToUpdate) return;
+
+    // Mise à jour optimiste immédiate avec Redux
+    const updatedItemData = {
+      ...itemToUpdate,
+      containerId: selectedContainer.id,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Dispatch immédiat pour mise à jour UI
+    dispatch(updateItem(updatedItemData));
+
+    // Mise à jour Supabase en arrière-plan
+    (async () => {
+      try {
+        const { error } = await supabase
+          .from('items')
+          .update({
+            container_id: selectedContainer.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', itemId);
+
+        if (error) {
+          // En cas d'erreur, on revient à l'état précédent
+          dispatch(updateItem(itemToUpdate));
+          console.error('Erreur lors de l\'ajout au container:', error);
+          Alert.alert(
+            'Erreur',
+            'Une erreur est survenue lors de l\'ajout de l\'article au container.'
+          );
+        }
+      } catch (error) {
+        dispatch(updateItem(itemToUpdate));
+        console.error('Erreur lors de l\'ajout au container:', error);
+      }
+    })();
+
+  }, [selectedContainer, items, dispatch]);
+
+  const handleDeleteFromContainer = useCallback(async (itemId: number) => {
+    const itemToUpdate = items.find(item => item.id === itemId);
+    if (!itemToUpdate) return;
+
+    // Mise à jour optimiste immédiate avec Redux
+    const updatedItemData = {
+      ...itemToUpdate,
+      containerId: null,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Dispatch immédiat pour mise à jour UI
+    dispatch(updateItem(updatedItemData));
+
+    // Mise à jour Supabase en arrière-plan
+    (async () => {
+      try {
+        const { error } = await supabase
+          .from('items')
+          .update({
+            container_id: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', itemId);
+
+        if (error) {
+          // En cas d'erreur, on revient à l'état précédent
+          dispatch(updateItem(itemToUpdate));
+          console.error('Erreur lors de la suppression du container:', error);
+          Alert.alert(
+            'Erreur',
+            'Une erreur est survenue lors de la suppression de l\'article du container.'
+          );
+        }
+      } catch (error) {
+        dispatch(updateItem(itemToUpdate));
+        console.error('Erreur lors de la suppression du container:', error);
+      }
+    })();
+
+  }, [items, dispatch]);
 
   const handleDeleteContainer = async (containerId: number) => {
     Alert.alert(
@@ -99,111 +217,6 @@ const ContainerScreen = () => {
       ]
     );
   };
-
-  const handleAddToContainer = async (itemId: number) => {
-    try {
-      if (!selectedContainer?.id) return;
-
-      // Mise à jour optimiste du UI
-      const itemToUpdate = items.find(item => item.id === itemId);
-      if (itemToUpdate) {
-        const updatedItemData = {
-          ...itemToUpdate,
-          containerId: selectedContainer.id,
-          updatedAt: new Date().toISOString()
-        };
-        
-        // Mise à jour Redux
-        dispatch(updateItem(updatedItemData));
-        
-        // Mise à jour locale des items
-        const updatedItems = items.map(item => 
-          item.id === itemId ? updatedItemData : item
-        );
-        setItems(updatedItems);
-      }
-
-      // Mise à jour DB
-      const { error } = await supabase
-        .from('items')
-        .update({
-          container_id: selectedContainer.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', itemId);
-
-      if (error) {
-        // Rollback si erreur
-        if (itemToUpdate) {
-          dispatch(updateItem(itemToUpdate));
-          const rollbackItems = items.map(item => 
-            item.id === itemId ? itemToUpdate : item
-          );
-          setItems(rollbackItems);
-        }
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-    }
-  };
-
-  const handleDeleteFromContainer = async (itemId: number) => {
-    try {
-      // Mise à jour optimiste du UI
-      const itemToUpdate = items.find(item => item.id === itemId);
-      if (itemToUpdate) {
-        const updatedItemData = {
-          ...itemToUpdate,
-          containerId: null,
-          updatedAt: new Date().toISOString()
-        };
-        
-        // Mise à jour Redux
-        dispatch(updateItem(updatedItemData));
-        
-        // Mise à jour locale des items
-        const updatedItems = items.map(item => 
-          item.id === itemId ? updatedItemData : item
-        );
-        setItems(updatedItems);
-      }
-
-      // Mise à jour DB
-      const { error } = await supabase
-        .from('items')
-        .update({
-          container_id: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', itemId);
-
-      if (error) {
-        // Rollback si erreur
-        if (itemToUpdate) {
-          dispatch(updateItem(itemToUpdate));
-          const rollbackItems = items.map(item => 
-            item.id === itemId ? itemToUpdate : item
-          );
-          setItems(rollbackItems);
-        }
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-    }
-  };
-
-  // D'abord on sépare les articles assignés et disponibles
-  const assignedItems = items.filter(item => item.containerId === selectedContainer?.id);
-  const availableItems = items.filter(item => 
-    item.status === 'available' && item.containerId !== selectedContainer?.id
-  );
-
-  // Ensuite on applique les filtres uniquement sur les articles disponibles
-  const filteredAvailableItems = availableItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || item.categoryId === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
 
   if (isLoadingInventory) {
     return (

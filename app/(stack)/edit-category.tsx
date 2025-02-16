@@ -19,7 +19,7 @@ export default function EditCategoryScreen() {
   
   const [name, setName] = useState(category?.name || '');
   const [description, setDescription] = useState(category?.description || '');
-  const [selectedIcon, setSelectedIcon] = useState(category?.icon || '');
+  const [selectedIcon, setSelectedIcon] = useState<MaterialIconName>(category?.icon || 'folder');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +29,14 @@ export default function EditCategoryScreen() {
       router.back();
     }
   }, [category, router]);
+
+  useEffect(() => {
+    if (category) {
+      setName(category.name);
+      setDescription(category.description || '');
+      setSelectedIcon(category.icon || 'folder');
+    }
+  }, [category]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -45,19 +53,21 @@ export default function EditCategoryScreen() {
       setLoading(true);
       setError(null);
 
-      // Mise à jour dans la base de données
-      await database.updateCategory(categoryId, {
+      const updateData = {
         name: name.trim(),
         description: description.trim(),
-        icon: selectedIcon as MaterialIconName
-      });
+        icon: selectedIcon
+      };
+
+      console.log('Mise à jour de la catégorie avec les données:', updateData);
+
+      // Mise à jour dans la base de données
+      await database.updateCategory(categoryId, updateData);
 
       // Mise à jour dans le store
       dispatch(editCategory({
         id: categoryId,
-        name: name.trim(),
-        description: description.trim(),
-        icon: selectedIcon as MaterialIconName,
+        ...updateData,
         createdAt: category?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }));
@@ -105,7 +115,7 @@ export default function EditCategoryScreen() {
       <Text style={styles.label}>Icône</Text>
       <IconSelector
         selectedIcon={selectedIcon}
-        onSelectIcon={setSelectedIcon}
+        onSelectIcon={(icon: MaterialIconName) => setSelectedIcon(icon)}
       />
 
       {error && (

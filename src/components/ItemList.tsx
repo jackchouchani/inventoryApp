@@ -34,11 +34,12 @@ interface Filters {
 
 const ItemListModal: React.FC<{
   selectedItem: Item | null;
-  containers: Container[];
-  categories: Category[];
   onSuccess: () => void;
   onCancel: () => void;
-}> = ({ selectedItem, containers, categories, onSuccess, onCancel }) => {
+}> = ({ selectedItem, onSuccess, onCancel }) => {
+  const categories = useSelector(selectAllCategories);
+  const containers = useSelector(selectAllContainers);
+
   return (
     <Modal
       visible={!!selectedItem}
@@ -91,23 +92,30 @@ const ItemRow = memo(({
   return (
     <TouchableOpacity onPress={onPress} style={styles.itemRow}>
       <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+        <View style={styles.itemHeader}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={[
+            styles.itemStatus,
+            item.status === 'sold' ? styles.soldStatus : styles.availableStatus
+          ]}>
+            {item.status === 'sold' ? 'Vendu' : 'Disponible'}
+          </Text>
+        </View>
+        <View style={styles.itemDetails}>
+          <Text style={styles.itemDescription}>{item.description}</Text>
+          <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+        </View>
       </View>
       <View style={styles.itemActions}>
-        <Text style={[
-          styles.itemStatus,
-          item.status === 'sold' ? styles.soldStatus : styles.availableStatus
-        ]}>
-          {item.status === 'sold' ? 'Vendu' : 'Disponible'}
-        </Text>
         {item.status === 'available' ? (
           <TouchableOpacity onPress={handleMarkAsSold} style={styles.actionButton}>
-            <Text style={styles.buttonText}>Marquer comme vendu</Text>
+            <MaterialIcons name="shopping-cart" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Vendu</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={handleMarkAsAvailable} style={styles.actionButton}>
-            <Text style={styles.buttonText}>Remettre en stock</Text>
+          <TouchableOpacity onPress={handleMarkAsAvailable} style={[styles.actionButton, styles.restoreButton]}>
+            <MaterialIcons name="restore" size={20} color="#fff" />
+            <Text style={styles.buttonText}>En stock</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -137,15 +145,8 @@ const ItemList = memo<ItemListProps>(({
   isLoading
 }) => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<Filters>({
-    search: '',
-    categoryId: null,
-    containerId: null,
-    status: 'all',
-    minPrice: '',
-    maxPrice: '',
-  });
+  const categories = useSelector(selectAllCategories);
+  const containers = useSelector(selectAllContainers);
 
   const {
     opacity,
@@ -157,9 +158,6 @@ const ItemList = memo<ItemListProps>(({
     scaleDown,
     scaleStyle
   } = useAnimatedComponents();
-
-  const categories = useSelector(selectAllCategories);
-  const containers = useSelector(selectAllContainers);
 
   const renderStartTime = useRef(Date.now());
   
@@ -178,20 +176,6 @@ const ItemList = memo<ItemListProps>(({
     };
   });
 
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(filters.search.toLowerCase());
-      const matchesCategory = !filters.categoryId || item.categoryId === filters.categoryId;
-      const matchesContainer = !filters.containerId || 
-        (filters.containerId === 'none' ? !item.containerId : item.containerId === filters.containerId);
-      const matchesStatus = filters.status === 'all' || item.status === filters.status;
-      const matchesPrice = (!filters.minPrice || item.sellingPrice >= parseFloat(filters.minPrice)) &&
-        (!filters.maxPrice || item.sellingPrice <= parseFloat(filters.maxPrice));
-
-      return matchesSearch && matchesCategory && matchesContainer && matchesStatus && matchesPrice;
-    });
-  }, [items, filters]);
-
   const handleModalSuccess = useCallback(() => {
     setSelectedItem(null);
   }, []);
@@ -207,17 +191,6 @@ const ItemList = memo<ItemListProps>(({
     }
   }, [onItemPress]);
 
-  const sortedItems = useMemo(() => {
-    return [...filteredItems].sort((a, b) => {
-      // Trier par statut (disponible en premier)
-      if (a.status !== b.status) {
-        return a.status === 'available' ? -1 : 1;
-      }
-      // Puis par date de mise à jour
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
-  }, [filteredItems]);
-
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -232,138 +205,8 @@ const ItemList = memo<ItemListProps>(({
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Rechercher des articles..."
-          value={filters.search}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, search: text }))}
-        />
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <MaterialIcons name="filter-list" size={24} color="#007AFF" />
-        </TouchableOpacity>
-      </View>
-
-      {showFilters && (
-        <View style={styles.filtersContainer}>
-          <ScrollView>
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Catégorie</Text>
-              <View style={styles.filterOptions}>
-                {categories?.map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.filterOption,
-                      filters.categoryId === category.id && styles.filterOptionSelected,
-                    ]}
-                    onPress={() => setFilters(prev => ({
-                      ...prev,
-                      categoryId: prev.categoryId === category.id ? null : category.id
-                    }))}
-                  >
-                    <Text style={[
-                      styles.filterOptionText,
-                      filters.categoryId === category.id && styles.filterOptionTextSelected
-                    ]}>{category.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Container</Text>
-              <View style={styles.filterOptions}>
-                <TouchableOpacity
-                  style={[
-                    styles.filterOption,
-                    filters.containerId === 'none' && styles.filterOptionSelected,
-                  ]}
-                  onPress={() => setFilters(prev => ({
-                    ...prev,
-                    containerId: prev.containerId === 'none' ? null : 'none'
-                  }))}
-                >
-                  <Text style={[
-                    styles.filterOptionText,
-                    filters.containerId === 'none' && styles.filterOptionTextSelected
-                  ]}>Sans container</Text>
-                </TouchableOpacity>
-                {containers?.map((container) => (
-                  <TouchableOpacity
-                    key={container.id}
-                    style={[
-                      styles.filterOption,
-                      filters.containerId === container.id && styles.filterOptionSelected,
-                    ]}
-                    onPress={() => setFilters(prev => ({
-                      ...prev,
-                      containerId: prev.containerId === container.id ? null : container.id
-                    }))}
-                  >
-                    <Text style={[
-                      styles.filterOptionText,
-                      filters.containerId === container.id && styles.filterOptionTextSelected
-                    ]}>{container.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>État</Text>
-              <View style={styles.filterOptions}>
-                {[
-                  { value: 'all', label: 'Tous' },
-                  { value: 'available', label: 'Disponible' },
-                  { value: 'sold', label: 'Vendu' }
-                ].map((status) => (
-                  <TouchableOpacity
-                    key={status.value}
-                    style={[
-                      styles.filterOption,
-                      filters.status === status.value && styles.filterOptionSelected,
-                    ]}
-                    onPress={() => setFilters(prev => ({ ...prev, status: status.value as any }))}
-                  >
-                    <Text style={[
-                      styles.filterOptionText,
-                      filters.status === status.value && styles.filterOptionTextSelected
-                    ]}>{status.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Prix</Text>
-              <View style={styles.priceInputs}>
-                <TextInput
-                  style={styles.priceInput}
-                  placeholder="Min"
-                  value={filters.minPrice}
-                  onChangeText={(value) => setFilters(prev => ({ ...prev, minPrice: value }))}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.priceSeparator}>-</Text>
-                <TextInput
-                  style={styles.priceInput}
-                  placeholder="Max"
-                  value={filters.maxPrice}
-                  onChangeText={(value) => setFilters(prev => ({ ...prev, maxPrice: value }))}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
       <FlatList
-        data={sortedItems}
+        data={items}
         renderItem={({ item }) => (
           <ItemCard
             item={item}
@@ -389,8 +232,6 @@ const ItemList = memo<ItemListProps>(({
 
       <ItemListModal
         selectedItem={selectedItem}
-        containers={containers}
-        categories={categories}
         onSuccess={handleModalSuccess}
         onCancel={handleModalCancel}
       />
@@ -401,7 +242,7 @@ const ItemList = memo<ItemListProps>(({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
   },
   searchBar: {
     flexDirection: 'row',
@@ -495,10 +336,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   emptyText: {
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
@@ -529,86 +372,114 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   itemRow: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginVertical: 6,
+    borderRadius: 12,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  itemInfo: {
+  itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
+  },
+  itemInfo: {
+    flex: 1,
   },
   itemName: {
     fontSize: 16,
-    fontWeight: '500',
-    flex: 1,
+    fontWeight: '600',
+    color: '#333',
   },
-  itemPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
+  itemDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
-  itemActions: {
+  itemDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  itemPrice: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
   itemStatus: {
-    fontSize: 14,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  soldStatus: {
-    backgroundColor: '#ffebee',
-    color: '#c62828',
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '500',
   },
   availableStatus: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
+    backgroundColor: '#E8F5E9',
+    color: '#2E7D32',
+  },
+  soldStatus: {
+    backgroundColor: '#FFEBEE',
+    color: '#C62828',
+  },
+  itemActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#007AFF',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 4,
+    borderRadius: 20,
+    elevation: 1,
+  },
+  restoreButton: {
+    backgroundColor: '#FF9800',
   },
   buttonText: {
-    color: 'white',
+    color: '#fff',
     fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
   },
   skeletonContainer: {
-    flex: 1,
-    padding: 16,
+    padding: 12,
   },
   skeletonRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'center',
+    height: 120,
+    backgroundColor: '#fff',
+    marginVertical: 6,
+    borderRadius: 12,
+    padding: 16,
   },
   skeletonName: {
+    width: '60%',
     height: 20,
-    flex: 2,
-    marginRight: 16,
-    borderRadius: 4,
+    marginBottom: 8,
   },
   skeletonPrice: {
-    height: 20,
-    width: 80,
-    marginRight: 16,
-    borderRadius: 4,
+    width: '20%',
+    height: 24,
   },
   skeletonStatus: {
-    height: 20,
-    width: 100,
-    marginRight: 16,
-    borderRadius: 4,
+    width: '30%',
+    height: 24,
+    marginLeft: 'auto',
   },
   skeletonButton: {
+    width: '40%',
     height: 36,
-    width: 120,
-    borderRadius: 4,
+    marginLeft: 'auto',
+    marginTop: 12,
+    borderRadius: 20,
   },
 });
 

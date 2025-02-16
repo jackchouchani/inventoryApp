@@ -47,6 +47,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         id: category.id,
         name: category.name,
         description: category.description,
+        icon: category.icon,
         createdAt: category.created_at,
         updatedAt: category.updated_at
       }));
@@ -355,19 +356,34 @@ export class SupabaseDatabase implements DatabaseInterface {
       .single();
     
     if (error) throw error;
-    return data;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      icon: data.icon,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
   }
 
   async updateCategory(id: number, data: CategoryUpdate): Promise<void> {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.icon !== undefined) updateData.icon = data.icon;
+    updateData.updated_at = new Date().toISOString();
+
     const { error } = await supabase
       .from('categories')
-      .update({
-        ...data,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur lors de la mise à jour de la catégorie:', error);
+      throw error;
+    }
   }
 
   async deleteCategory(id: number): Promise<void> {

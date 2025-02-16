@@ -2,10 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CATEGORY_ICONS } from '../constants/categoryIcons';
+import { MaterialIconName } from '../types/icons';
 
 interface IconSelectorProps {
-  selectedIcon?: string;
-  onSelectIcon: (icon: string) => void;
+  selectedIcon?: MaterialIconName;
+  onSelectIcon: (icon: MaterialIconName) => void;
 }
 
 export const IconSelector: React.FC<IconSelectorProps> = ({

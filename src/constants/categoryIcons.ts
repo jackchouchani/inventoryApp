@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIconName } from '../types/icons';
 
 export interface CategoryIcon {
   id: string;
   label: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
+  icon: MaterialIconName;
 }
 
 export const CATEGORY_ICONS: CategoryIcon[] = [

@@ -10,6 +10,13 @@ const STATIC_ASSETS = [
   '/logo512.png'
 ];
 
+// Configuration pour iOS
+const iOS_CONFIG = {
+  standalone: true,
+  bounceBackDisabled: true,
+  overscrollPreventionEnabled: true
+};
+
 // Précache lors de l'installation
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -20,8 +27,17 @@ self.addEventListener('install', (event) => {
 
 // Stratégie de cache : Network First avec fallback sur le cache
 self.addEventListener('fetch', (event) => {
-  // Ne pas mettre en cache les requêtes POST
+  // Ignorer les requêtes non GET
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Gestion spéciale pour les requêtes de navigation
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match('/offline.html'))
+    );
     return;
   }
 

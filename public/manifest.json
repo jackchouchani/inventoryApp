@@ -59,5 +59,6 @@
     "launch_handler": {
       "client_mode": "focus-existing"
     },
-    "id": "/"
+    "id": "/",
+    "handle_links": "suppress"
 }

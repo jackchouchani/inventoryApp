@@ -79,6 +79,13 @@ const CategoryOption = memo(({
 export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
+
+    // Ajout de logs de débogage
+    useEffect(() => {
+        console.log('Containers reçus:', containers);
+        console.log('Categories reçues:', categories);
+    }, [containers, categories]);
+
     const [editedItem, setEditedItem] = useState<EditedItemForm>({
         name: item.name,
         description: item.description,
@@ -263,17 +270,21 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                     <Text style={styles.sectionTitle}>Container</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
                         <View style={styles.optionsContainer}>
-                            {containers && containers.map((container) => (
-                                <ContainerOption
-                                    key={container.id}
-                                    container={container}
-                                    isSelected={editedItem.containerId === container.id}
-                                    onSelect={() => setEditedItem(prev => ({
-                                        ...prev,
-                                        containerId: container.id ?? prev.containerId
-                                    }))}
-                                />
-                            ))}
+                            {containers && containers.length > 0 ? (
+                                containers.map((container) => (
+                                    <ContainerOption
+                                        key={container.id}
+                                        container={container}
+                                        isSelected={editedItem.containerId === container.id}
+                                        onSelect={() => setEditedItem(prev => ({
+                                            ...prev,
+                                            containerId: container.id
+                                        }))}
+                                    />
+                                ))
+                            ) : (
+                                <Text style={styles.noDataText}>Aucun container disponible</Text>
+                            )}
                         </View>
                     </ScrollView>
                 </View>
@@ -282,17 +293,21 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                     <Text style={styles.sectionTitle}>Catégorie</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
                         <View style={styles.optionsContainer}>
-                            {categories.map((category) => (
-                                <CategoryOption
-                                    key={category.id}
-                                    category={category}
-                                    isSelected={editedItem.categoryId === category.id}
-                                    onSelect={() => setEditedItem(prev => ({
-                                        ...prev,
-                                        categoryId: category.id ?? prev.categoryId
-                                    }))}
-                                />
-                            ))}
+                            {categories && categories.length > 0 ? (
+                                categories.map((category) => (
+                                    <CategoryOption
+                                        key={category.id}
+                                        category={category}
+                                        isSelected={editedItem.categoryId === category.id}
+                                        onSelect={() => setEditedItem(prev => ({
+                                            ...prev,
+                                            categoryId: category.id
+                                        }))}
+                                    />
+                                ))
+                            ) : (
+                                <Text style={styles.noDataText}>Aucune catégorie disponible</Text>
+                            )}
                         </View>
                     </ScrollView>
                 </View>

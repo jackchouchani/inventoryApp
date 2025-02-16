@@ -11,6 +11,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Inventory" />
     <meta name="theme-color" content="#007AFF" />
+    <meta name="apple-touch-fullscreen" content="yes" />
+    <meta name="apple-mobile-web-app-orientations" content="portrait" />
+    <meta name="apple-mobile-web-app-navigation-bar-style" content="black-translucent" />
 
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -31,50 +34,71 @@
         :root {
             --safe-area-inset-top: env(safe-area-inset-top);
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
+            --tab-height: 65px;
         }
 
         html, body {
             height: 100%;
             margin: 0;
             padding: 0;
-            background-color: #f5f5f5;
             overflow: hidden;
+            background-color: #f5f5f5;
         }
         
         body {
             padding-top: var(--safe-area-inset-top);
-            padding-bottom: var(--safe-area-inset-bottom);
             -webkit-tap-highlight-color: transparent;
             overscroll-behavior: none;
-            position: fixed;
-            width: 100%;
         }
         
         #root {
             display: flex;
             flex-direction: column;
             height: 100%;
-            height: -webkit-fill-available;
-            position: fixed;
-            width: 100%;
-            top: env(safe-area-inset-top);
-            bottom: env(safe-area-inset-bottom);
+            overflow: hidden;
         }
 
         .page-transition {
             flex: 1;
-            display: flex;
-            flex-direction: column;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: calc(var(--tab-height) + env(safe-area-inset-bottom) + 120px);
         }
 
-        html {
-            min-height: calc(100% + env(safe-area-inset-top));
-            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-            background-attachment: fixed;
-            background-image: url('/bg.svg');
-            background-position: center;
-            background-repeat: no-repeat;
-            background-size: cover;
+        nav.expo-tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: var(--tab-height);
+            background-color: #fff;
+            border-top: 1px solid #e5e5e5;
+            z-index: 9999;
+            padding-bottom: env(safe-area-inset-bottom);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        nav a {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 2px 0;
+        }
+
+        @media screen and (orientation: portrait) and (width: 390px) and (height: 844px) {
+            nav {
+                transform: none;
+            }
+        }
+
+        @supports (padding: env(safe-area-inset-bottom)) {
+            .page-transition {
+                padding-bottom: var(--tab-height);
+            }
         }
     </style>
 </head>
@@ -118,27 +142,6 @@
                 e.preventDefault();
             }
         }, { passive: false });
-
-        // Gestion du swipe back/forward
-        let touchStartX = 0;
-        document.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-        });
-
-        document.addEventListener('touchend', (e) => {
-            const touchEndX = e.changedTouches[0].clientX;
-            const diff = touchStartX - touchEndX;
-
-            if (Math.abs(diff) > 100) {
-                if (diff > 0) {
-                    // Swipe gauche
-                    window.history.forward();
-                } else {
-                    // Swipe droite
-                    window.history.back();
-                }
-            }
-        });
     </script>
 </body>
 </html>

@@ -11,13 +11,15 @@ interface LabelGeneratorProps {
   onComplete: () => void;
   onError: (error: Error) => void;
   mode: 'items' | 'containers';
+  compact?: boolean;
 }
 
 export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   items,
   onComplete,
   onError,
-  mode
+  mode,
+  compact = false
 }) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -204,23 +206,27 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Génération des étiquettes</Text>
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      {!compact && <Text style={styles.title}>Génération des étiquettes</Text>}
       
       {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.progressText}>{Math.round(progress)}%</Text>
+        <View style={[styles.loadingContainer, compact && styles.loadingContainerCompact]}>
+          <ActivityIndicator size={compact ? "small" : "large"} color="#007AFF" />
+          <Text style={[styles.progressText, compact && styles.progressTextCompact]}>{Math.round(progress)}%</Text>
         </View>
       )}
 
       <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[
+          styles.button, 
+          loading && styles.buttonDisabled,
+          compact && styles.buttonCompact
+        ]}
         onPress={mode === 'containers' ? generateContainerPDF : generateItemsPDF}
         disabled={loading || items.length === 0}
       >
-        <Text style={styles.buttonText}>
-          {loading ? 'Génération en cours...' : 'Générer les étiquettes'}
+        <Text style={[styles.buttonText, compact && styles.buttonTextCompact]}>
+          {loading ? 'Génération...' : `Générer ${items.length} étiquette${items.length > 1 ? 's' : ''}`}
         </Text>
       </TouchableOpacity>
 
@@ -242,6 +248,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  containerCompact: {
+    padding: 8,
+    borderRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -252,16 +266,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 20,
   },
+  loadingContainerCompact: {
+    marginVertical: 8,
+  },
   progressText: {
     marginTop: 10,
     fontSize: 16,
     color: '#666',
+  },
+  progressTextCompact: {
+    marginTop: 4,
+    fontSize: 12,
   },
   button: {
     backgroundColor: '#007AFF',
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  buttonCompact: {
+    padding: 10,
+    borderRadius: 6,
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
@@ -270,6 +295,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonTextCompact: {
+    fontSize: 14,
   },
   infoText: {
     marginTop: 10,

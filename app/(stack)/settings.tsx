@@ -1,18 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../src/store/store';
-import { 
-  resetDatabase, 
-  addCategory, 
-  addContainer, 
-  addItem,
-  getItems,
-  getCategories,
-  getContainers 
-} from '../../src/database/database';
+import { database } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { generateQRValue } from 'utils/qrCodeManager';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -24,21 +16,6 @@ const SettingsScreen = () => {
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
-
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const cats = await getCategories();
-        dispatch({ type: 'categories/setCategories', payload: cats });
-      } catch (error) {
-        console.error('Erreur lors du chargement des catégories:', error);
-      }
-    };
-    
-    if (!Array.isArray(categories) || categories.length === 0) {
-      loadCategories();
-    }
-  }, [dispatch]);
 
   const handleLogout = async () => {
     try {
@@ -52,27 +29,27 @@ const SettingsScreen = () => {
   const generateTestData = async () => {
     try {
       // Ajouter des catégories comme dans CategoryScreen
-      const cat1Id = await addCategory({ 
+      const cat1Id = await database.addCategory({ 
         name: 'Vêtements', 
         description: 'Tous types de vêtements',
       });
-      const cat2Id = await addCategory({ 
+      const cat2Id = await database.addCategory({ 
         name: 'Électronique', 
         description: 'Appareils électroniques',
       });
-      const cat3Id = await addCategory({ 
+      const cat3Id = await database.addCategory({ 
         name: 'Livres', 
         description: 'Livres et magazines',
       });
 
       // Ajouter des containers comme dans ContainerForm
-      const cont1Id = await addContainer({ 
+      const cont1Id = await database.addContainer({ 
         number: 1,
         name: 'Box A1', 
         description: 'Premier container',
         qrCode: generateQRValue('CONTAINER'),
       });
-      const cont2Id = await addContainer({ 
+      const cont2Id = await database.addContainer({ 
         number: 2,
         name: 'Box B2', 
         description: 'Deuxième container',
@@ -80,7 +57,7 @@ const SettingsScreen = () => {
       });
 
       // Ajouter des items comme dans ItemForm
-      await addItem({
+      await database.addItem({
         name: 'T-shirt bleu',
         description: 'T-shirt en coton',
         purchasePrice: 5,
@@ -91,7 +68,7 @@ const SettingsScreen = () => {
         containerId: cont1Id
       });
 
-      await addItem({
+      await database.addItem({
         name: 'Smartphone',
         description: 'Téléphone Android',
         purchasePrice: 100,
@@ -102,7 +79,7 @@ const SettingsScreen = () => {
         containerId: cont1Id
       });
 
-      await addItem({
+      await database.addItem({
         name: 'Roman policier',
         description: 'Livre de poche',
         purchasePrice: 3,
@@ -132,10 +109,6 @@ const SettingsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Paramètres</Text>
-      </View>
-      
       <TouchableOpacity 
         style={styles.menuItem}
         onPress={() => router.push('/(stack)/containers')}
@@ -197,22 +170,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    padding: 15,
-    position: 'relative',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
   },
   menuItem: {
     flexDirection: 'row',

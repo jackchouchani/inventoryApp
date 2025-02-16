@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Animated,
   SafeAreaView,
   Platform
 } from 'react-native';
@@ -19,31 +18,24 @@ import { deleteCategory, editCategory, setCategories, addNewCategory } from '../
 import { database } from '../../src/database/database';
 import type { Category } from '../../src/types/category';
 import { MaterialIcons } from '@expo/vector-icons';
-import { MaterialIconName } from '../../src/types/icons';
-import { useAnimatedComponents } from '../../src/hooks/useAnimatedComponents';
+import type { MaterialIconName } from '../../src/types/icons';
 import { useRouter } from 'expo-router';
 import { selectAllCategories } from '../../src/store/categorySlice';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 const CategoryScreen = () => {
   const dispatch = useDispatch();
   const [isLoading, setIsLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState({ name: '', description: '' });
   const [error, setError] = useState<string | null>(null);
   const categories = useSelector((state: RootState) => selectAllCategories(state)) as Category[];
   const router = useRouter();
 
-  const {
-    opacity,
-    fadeIn,
-    fadeOut,
-    fadeStyle,
-    scale,
-    scaleUp,
-    scaleDown,
-    scaleStyle
-  } = useAnimatedComponents();
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: withSpring(1) }],
+      opacity: withSpring(1)
+    };
+  });
 
   const loadCategories = useCallback(async () => {
     try {
@@ -63,90 +55,18 @@ const CategoryScreen = () => {
     loadCategories();
   }, [loadCategories]);
 
-  useEffect(() => {
-    if (editingCategory) {
-      setFormData({
-        name: editingCategory.name,
-        description: editingCategory.description || ''
-      });
-    } else {
-      setFormData({ name: '', description: '' });
-    }
-  }, [editingCategory]);
-
-  const handleSubmit = async () => {
-    if (!formData.name.trim()) {
-      setError('Le nom de la catégorie est requis');
-      return;
-    }
-
-    setError('');
-    const now = new Date().toISOString();
-
-    try {
-      if (editingCategory) {
-        const now = new Date().toISOString();
-        const formData = {
-          name: editingCategory.name.trim(),
-          description: editingCategory.description?.trim(),
-          icon: editingCategory.icon,
-          updatedAt: now
-        };
-        dispatch(editCategory({
-          id: editingCategory.id!,
-          name: formData.name,
-          description: formData.description,
-          icon: formData.icon,
-          createdAt: editingCategory.createdAt,
-          updatedAt: formData.updatedAt
-        }));
-
-        // Mise à jour dans la base de données
-        await database.updateCategory(editingCategory.id!, {
-          name: formData.name,
-          description: formData.description,
-          icon: formData.icon
-        });
-      } else {
-        // Mise à jour optimiste pour l'ajout
-        const tempId = Date.now();
-        const newCategory = {
-          id: tempId,
-          name: formData.name.trim(),
-          description: formData.description.trim(),
-          createdAt: now,
-          updatedAt: now
-        };
-        dispatch(addNewCategory(newCategory));
-
-        // Ajout dans la base de données
-        const categoryId = await database.addCategory({
-          name: formData.name.trim(),
-          description: formData.description.trim()
-        });
-
-        // Mise à jour avec l'ID réel
-        dispatch(setCategories([
-          ...categories.filter(c => c.id !== tempId),
-          { ...newCategory, id: categoryId }
-        ]));
-      }
-
-      setModalVisible(false);
-      setEditingCategory(null);
-      setFormData({ name: '', description: '' });
-    } catch (error) {
-      console.error('Erreur:', error);
-      Alert.alert(
-        'Erreur',
-        editingCategory
-          ? 'Impossible de modifier la catégorie'
-          : 'Impossible d\'ajouter la catégorie'
-      );
-    }
+  const handleAddCategory = () => {
+    router.push('/(stack)/add-category');
   };
 
-  const handleDeleteCategory = (category: Category) => {
+  const handleEditCategory = (category: Category) => {
+    router.push({
+      pathname: '/(stack)/edit-category',
+      params: { id: category.id }
+    });
+  };
+
+  const handleDeleteCategory = async (category: Category) => {
     Alert.alert(
       'Supprimer la catégorie',
       `Êtes-vous sûr de vouloir supprimer "${category.name}" ?`,
@@ -177,19 +97,8 @@ const CategoryScreen = () => {
     );
   };
 
-  const handleAddCategory = () => {
-    router.push('/(stack)/add-category');
-  };
-
-  const handleEditCategory = (category: Category) => {
-    router.push({
-      pathname: '/(stack)/edit-category',
-      params: { id: category.id }
-    });
-  };
-
   const renderItem = ({ item }: { item: Category }) => (
-    <Animated.View style={[styles.categoryCard, fadeStyle, scaleStyle]}>
+    <Animated.View style={[styles.categoryCard, animatedStyle]}>
       <View style={styles.categoryContent}>
         <View style={styles.iconContainer}>
           <MaterialIcons
@@ -200,11 +109,11 @@ const CategoryScreen = () => {
         </View>
         <View style={styles.categoryInfo}>
           <Text style={styles.categoryName}>{item.name}</Text>
-          {item.description && (
+          {item.description ? (
             <Text style={styles.categoryDescription} numberOfLines={2}>
               {item.description}
             </Text>
-          )}
+          ) : null}
         </View>
       </View>
       <View style={styles.categoryActions}>
@@ -266,85 +175,11 @@ const CategoryScreen = () => {
         <FlatList
           data={categories}
           renderItem={renderItem}
-          keyExtractor={item => item.id!.toString() || Math.random().toString()}
+          keyExtractor={item => item.id?.toString() || Math.random().toString()}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
         />
       )}
-
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setModalVisible(false);
-          setEditingCategory(null);
-          setFormData({ name: '', description: '' });
-          setError('');
-        }}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => {
-                  setModalVisible(false);
-                  setEditingCategory(null);
-                  setFormData({ name: '', description: '' });
-                  setError('');
-                }}
-              >
-                <Text style={styles.modalCloseButtonText}>Annuler</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>
-                {editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
-              </Text>
-              <View style={styles.modalHeaderSpacer} />
-            </View>
-
-            <View style={styles.formContainer}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Nom</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.name}
-                  onChangeText={(text) => {
-                    setFormData(prev => ({ ...prev, name: text }));
-                    setError('');
-                  }}
-                  placeholder="Nom de la catégorie"
-                  placeholderTextColor="#999"
-                />
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={formData.description}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
-                  placeholder="Description (optionnelle)"
-                  placeholderTextColor="#999"
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleSubmit}
-              >
-                <Text style={styles.submitButtonText}>
-                  {editingCategory ? 'Mettre à jour' : 'Créer'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -439,82 +274,6 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: '#FFF0F0',
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-  },
-  modalCloseButton: {
-    padding: 8,
-  },
-  modalCloseButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  modalHeaderSpacer: {
-    width: 50,
-  },
-  formContainer: {
-    padding: 16,
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#000',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -550,6 +309,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    marginTop: 4,
+  }
 });
 
 export default CategoryScreen;

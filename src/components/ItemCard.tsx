@@ -92,11 +92,6 @@ const ItemCard: React.FC<ItemCardProps> = ({
                     ? `${Number(item.sellingPrice).toFixed(2)} €`
                     : 'Prix non défini'}
                 </Text>
-                <MaterialIcons
-                  name={item.status === 'available' ? 'check-circle' : 'cancel'}
-                  size={24}
-                  color={item.status === 'available' ? '#4CAF50' : '#F44336'}
-                />
               </View>
               {item.status === 'available' ? (
                 <TouchableOpacity 
@@ -104,7 +99,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
                   onPress={handleMarkAsSold}
                 >
                   <MaterialIcons name="local-offer" size={16} color="#fff" />
-                  <Text style={styles.statusButtonText}>Marquer comme vendu</Text>
+                  <Text style={styles.statusButtonText}>Vendu</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity 
@@ -112,7 +107,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
                   onPress={handleMarkAsAvailable}
                 >
                   <MaterialIcons name="refresh" size={16} color="#fff" />
-                  <Text style={styles.statusButtonText}>Remettre en stock</Text>
+                  <Text style={styles.statusButtonText}>En stock</Text>
                 </TouchableOpacity>
               )}
             </View>
