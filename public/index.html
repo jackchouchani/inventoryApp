@@ -36,13 +36,13 @@
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --tab-height: 65px;
             --header-height: 44px;
-            --status-bar-height: 20px;
         }
 
         html {
             height: 100%;
             overflow: hidden;
             background-color: #f5f5f5;
+            padding-top: env(safe-area-inset-top);
         }
 
         body {
@@ -60,7 +60,6 @@
             flex-direction: column;
             height: 100%;
             overflow: hidden;
-            padding-top: var(--safe-area-inset-top);
         }
 
         .page-transition {
@@ -82,53 +81,32 @@
             padding-bottom: var(--safe-area-inset-bottom);
         }
 
-        .stack-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 50;
-            background-color: #f5f5f5;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .stack-header {
-            position: fixed;
-            top: env(safe-area-inset-top);
-            left: 0;
-            right: 0;
-            height: var(--header-height);
-            background-color: #f8f9fa;
-            z-index: 51;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-bottom: 1px solid #e5e5e5;
-        }
-
-        .stack-content {
-            flex: 1;
-            overflow-y: auto;
-            margin-top: calc(var(--header-height) + env(safe-area-inset-top));
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Styles spécifiques pour PWA iOS */
         @supports (-webkit-touch-callout: none) {
             .expo-navigation-header {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
                 height: var(--header-height) !important;
-                min-height: var(--header-height) !important;
-                max-height: var(--header-height) !important;
-                padding-top: 0 !important;
-                margin-top: 0 !important;
+                background-color: #f8f9fa;
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.1);
             }
 
-            .expo-navigation-header > * {
+            .expo-navigation-header > div {
                 height: var(--header-height) !important;
                 min-height: var(--header-height) !important;
                 max-height: var(--header-height) !important;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .stack-screen-content {
+                padding-top: calc(var(--header-height) + env(safe-area-inset-top));
             }
         }
     </style>

@@ -7,6 +7,58 @@ import { photoService } from '../services/photoService';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
+// Sélection optimisée des champs pour les listes
+const ITEM_LIST_FIELDS = `
+  id,
+  name,
+  status,
+  selling_price,
+  category_id,
+  container_id,
+  photo_uri,
+  qr_code,
+  created_at,
+  updated_at,
+  purchase_price
+`;
+
+const ITEM_DETAIL_FIELDS = `
+  id,
+  name,
+  description,
+  purchase_price,
+  selling_price,
+  status,
+  photo_uri,
+  container_id,
+  category_id,
+  qr_code,
+  created_at,
+  updated_at,
+  sold_at
+`;
+
+const CONTAINER_FIELDS = `
+  id,
+  name,
+  description,
+  number,
+  qr_code,
+  created_at,
+  updated_at,
+  deleted,
+  user_id
+`;
+
+const CATEGORY_FIELDS = `
+  id,
+  name,
+  description,
+  icon,
+  created_at,
+  updated_at
+`;
+
 export class SupabaseDatabase implements DatabaseInterface {
   async getContainers(): Promise<Container[]> {
     try {
@@ -60,17 +112,16 @@ export class SupabaseDatabase implements DatabaseInterface {
   async getItems(): Promise<Item[]> {
     try {
       const { data, error } = await supabase
-        .from('items')
-        .select('*')
-        .is('deleted', false)
+        .from('mv_items_list')
+        .select(ITEM_LIST_FIELDS)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-
+      
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
-        description: item.description,
+        description: '', // Champ non nécessaire dans la liste
         purchasePrice: item.purchase_price,
         sellingPrice: item.selling_price,
         status: item.status,
@@ -79,8 +130,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         categoryId: item.category_id,
         qrCode: item.qr_code,
         createdAt: item.created_at,
-        updatedAt: item.updated_at,
-        soldAt: item.sold_at
+        updatedAt: item.updated_at
       }));
     } catch (error) {
       handleDatabaseError(error as PostgrestError, 'getItems');
@@ -242,30 +292,35 @@ export class SupabaseDatabase implements DatabaseInterface {
   }
 
   async getItemByQRCode(qrCode: string): Promise<Item | null> {
-    const { data, error } = await supabase
-      .from('items')
-      .select('*')
-      .eq('qr_code', qrCode)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select(ITEM_DETAIL_FIELDS)
+        .eq('qr_code', qrCode)
+        .single();
 
-    if (error) throw error;
-    
-    if (!data) return null;
+      if (error) throw error;
+      if (!data) return null;
 
-    return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      purchasePrice: data.purchase_price,
-      sellingPrice: data.selling_price,
-      status: data.status,
-      photoUri: data.photo_uri,
-      containerId: data.container_id,
-      categoryId: data.category_id,
-      qrCode: data.qr_code,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at
-    };
+      return {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        purchasePrice: data.purchase_price,
+        sellingPrice: data.selling_price,
+        status: data.status,
+        photoUri: data.photo_uri,
+        containerId: data.container_id,
+        categoryId: data.category_id,
+        qrCode: data.qr_code,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        soldAt: data.sold_at
+      };
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError, 'getItemByQRCode');
+      return null;
+    }
   }
 
   async getContainerByQRCode(qrCode: string): Promise<Container | null> {
@@ -458,7 +513,7 @@ export class SupabaseDatabase implements DatabaseInterface {
     try {
       const { data, error } = await supabase
         .from('items')
-        .select('*')
+        .select(ITEM_DETAIL_FIELDS)
         .eq('id', id)
         .single();
 
@@ -477,7 +532,8 @@ export class SupabaseDatabase implements DatabaseInterface {
         categoryId: data.category_id,
         qrCode: data.qr_code,
         createdAt: data.created_at,
-        updatedAt: data.updated_at
+        updatedAt: data.updated_at,
+        soldAt: data.sold_at
       };
     } catch (error) {
       handleDatabaseError(error as PostgrestError, 'getItem');
@@ -489,16 +545,17 @@ export class SupabaseDatabase implements DatabaseInterface {
     try {
       const { data, error } = await supabase
         .from('items')
-        .select('*')
-        .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-        .is('deleted', false);
+        .select(ITEM_LIST_FIELDS)
+        .is('deleted', false)
+        .ilike('name', `%${query}%`)
+        .limit(20);
 
       if (error) throw error;
 
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
-        description: item.description,
+        description: '', // Champ non nécessaire dans la recherche
         purchasePrice: item.purchase_price,
         sellingPrice: item.selling_price,
         status: item.status,

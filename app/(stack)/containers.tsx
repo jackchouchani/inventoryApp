@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Container } from '../../src/types/container';
 import { Item } from '../../src/types/item';
@@ -27,6 +27,7 @@ const ContainerScreen = () => {
   const { items: initialItems, containers, categories, isLoading: isLoadingInventory } = useInventoryData();
   const items = useSelector((state: RootState) => selectAllItems(state));
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  const router = useRouter();
 
   // Synchroniser les données de useInventoryData avec Redux
   useEffect(() => {
@@ -281,6 +282,16 @@ const ContainerScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.push('/(stack)/settings')}
+        >
+          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity 
         style={styles.addButton} 
         onPress={() => setShowContainerForm(true)}
@@ -501,6 +512,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  topBar: {
+    height: Platform.OS === 'ios' ? 44 : 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    marginTop: Platform.OS === 'ios' ? 47 : 0,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginLeft: -8,
+  },
+  backButtonText: {
+    fontSize: 17,
+    color: '#007AFF',
+    marginLeft: -4,
   },
   loadingContainer: {
     flex: 1,

@@ -13,7 +13,7 @@ export default function AddCategoryScreen() {
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedIcon, setSelectedIcon] = useState('');
+  const [selectedIcon, setSelectedIcon] = useState<MaterialIconName>('folder');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

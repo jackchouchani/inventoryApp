@@ -8,11 +8,14 @@ import {
     Animated,
     Dimensions,
     StatusBar,
-    FlatList
+    FlatList,
+    Alert,
+    ActivityIndicator,
+    Linking
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Audio } from 'expo-av';
-import { parseQRCode } from '../utils/qrCodeManager';
+import { parseId, ID_TYPES } from '../utils/identifierManager';
 import { database } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,6 +26,7 @@ import type { Item } from '../types/item';
 import { handleScannerError } from '../utils/errorHandler';
 import { useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ScannerProps {
     onClose: () => void;
@@ -56,8 +60,11 @@ const SCAN_DELAY = 1000;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCANNER_SIZE = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.7;
 
+const CAMERA_PERMISSION_KEY = '@app:camera_permission';
+
 export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
     const [permission, requestPermission] = useCameraPermissions();
+    const [hasCheckedPermission, setHasCheckedPermission] = useState(false);
     const [scanState, setScanState] = useState<ScanState>(INITIAL_STATE);
     const [fadeAnim] = useState(new Animated.Value(0));
     const [overlayAnim] = useState(new Animated.Value(0));
@@ -65,12 +72,72 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     const queryClient = useQueryClient();
     const [lastScanTime, setLastScanTime] = useState(0);
 
+    // Vérifier si l'autorisation a déjà été accordée
+    useEffect(() => {
+        const checkStoredPermission = async () => {
+            try {
+                // Si la permission est déjà accordée, pas besoin de vérifier AsyncStorage
+                if (permission?.granted) {
+                    setHasCheckedPermission(true);
+                    return;
+                }
+
+                const storedPermission = await AsyncStorage.getItem(CAMERA_PERMISSION_KEY);
+                
+                // Si nous avons une permission stockée et que la permission actuelle n'est pas accordée
+                if (storedPermission === 'granted' && !permission?.granted) {
+                    const result = await requestPermission();
+                    if (result.granted) {
+                        await AsyncStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
+                    } else {
+                        // Si la permission a été révoquée, mettre à jour AsyncStorage
+                        await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
+                    }
+                }
+                setHasCheckedPermission(true);
+            } catch (error) {
+                console.error('Erreur lors de la vérification des permissions:', error);
+                setHasCheckedPermission(true);
+            }
+        };
+
+        checkStoredPermission();
+    }, [permission?.granted, requestPermission]);
+
+    const handleRequestPermission = async () => {
+        try {
+            const result = await requestPermission();
+            if (result.granted) {
+                await AsyncStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
+            } else {
+                await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
+                Alert.alert(
+                    'Permission requise',
+                    'L\'accès à la caméra est nécessaire pour scanner les codes QR. Veuillez l\'autoriser dans les paramètres de votre appareil.',
+                    [
+                        { text: 'Annuler', style: 'cancel' },
+                        { 
+                            text: 'Ouvrir les paramètres', 
+                            onPress: () => {
+                                Linking.openSettings();
+                                onClose(); // Fermer le scanner quand on ouvre les paramètres
+                            }
+                        }
+                    ]
+                );
+            }
+        } catch (error) {
+            console.error('Erreur lors de la demande de permission:', error);
+            await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
+        }
+    };
+
     const handleFeedback = useCallback(async (success: boolean) => {
         await haptics.vibrate(success ? haptics.SUCCESS_PATTERN : haptics.ERROR_PATTERN);
         await sounds.play(success ? 'success' : 'error');
     }, []);
 
-    const handleScan = useCallback(async ({ data: qrData }: BarcodeScanningResult) => {
+    const handleScan = useCallback(async ({ data: scannedData, type: barcodeType }: BarcodeScanningResult) => {
         const now = Date.now();
         if (now - lastScanTime < SCAN_DELAY) {
             console.log('Scan trop rapide, ignoré');
@@ -81,13 +148,35 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         if (!scanState.isScanning) return;
 
         try {
-            if (!qrData.startsWith('CONT_') && !qrData.startsWith('ART_')) {
+            // Vérifier le cache
+            const cachedData = queryClient.getQueryData(['scan', scannedData]);
+            if (cachedData) {
+                console.log('Utilisation des données en cache pour:', scannedData);
+                await handleFeedback(true);
+                return cachedData;
+            }
+
+            // Parse l'identifiant
+            const { type, value } = parseId(scannedData);
+            if (!type || !value) {
                 await handleFeedback(false);
                 return;
             }
 
-            const isContainer = qrData.startsWith('CONT_');
-            const isItem = qrData.startsWith('ART_');
+            // Vérifie le type de code-barres
+            const isContainer = type === 'CONTAINER';
+            const isItem = type === 'ITEM';
+            const isQRCode = barcodeType === 'qr';
+            const isDataMatrix = barcodeType === 'datamatrix';
+
+            // Vérifie la correspondance entre le type d'identifiant et le type de code-barres
+            if ((isContainer && !isQRCode) || (isItem && !isDataMatrix)) {
+                console.log('Type de code-barres incorrect pour cet identifiant');
+                await handleFeedback(false);
+                return;
+            }
+
+            let result;
 
             // Mode container
             if (scanState.mode === 'container') {
@@ -96,7 +185,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     return;
                 }
 
-                const container = await database.getContainerByQRCode(qrData);
+                const container = await database.getContainerByQRCode(scannedData);
                 if (container) {
                     setScanState(prev => ({
                         ...prev,
@@ -105,10 +194,10 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                         showConfirmation: true
                     }));
                     await handleFeedback(true);
+                    result = { type: 'container', data: container };
                 } else {
                     await handleFeedback(false);
                 }
-                return;
             }
 
             // Mode article
@@ -118,7 +207,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     return;
                 }
 
-                const item = await database.getItemByQRCode(qrData);
+                const item = await database.getItemByQRCode(scannedData);
                 if (item) {
                     const isAlreadyScanned = scanState.scannedItems.some(
                         scannedItem => scannedItem.id === item.id || scannedItem.qrCode === item.qrCode
@@ -131,9 +220,8 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     }
 
                     setScanState(prev => {
-                        // Vérification des doublons avant l'ajout
                         if (prev.scannedItems.some(si => si.id === item.id)) {
-                            return prev; // Ne pas modifier l'état si c'est un doublon
+                            return prev;
                         }
                         return {
                             ...prev,
@@ -144,15 +232,23 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                         };
                     });
                     await handleFeedback(true);
+                    result = { type: 'item', data: item };
                 } else {
                     await handleFeedback(false);
                 }
             }
+
+            // Mettre en cache le résultat
+            if (result) {
+                queryClient.setQueryData(['scan', scannedData], result);
+            }
+
+            return result;
         } catch (error) {
             console.error('Erreur lors du scan:', error);
             await handleFeedback(false);
         }
-    }, [scanState, lastScanTime, handleFeedback]);
+    }, [scanState, lastScanTime, handleFeedback, queryClient]);
 
     const startScanningItems = async () => {
         if (!scanState.currentContainer) return;
@@ -231,6 +327,14 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
         }
     }, [isActive]);
 
+    if (!hasCheckedPermission) {
+        return (
+            <View style={styles.container}>
+                <ActivityIndicator size="large" color="#007AFF" />
+            </View>
+        );
+    }
+
     if (!permission?.granted) {
         return (
             <View style={styles.container}>
@@ -239,7 +343,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 </Text>
                 <TouchableOpacity
                     style={styles.permissionButton}
-                    onPress={requestPermission}
+                    onPress={handleRequestPermission}
                 >
                     <Text style={styles.permissionButtonText}>Autoriser la caméra</Text>
                 </TouchableOpacity>

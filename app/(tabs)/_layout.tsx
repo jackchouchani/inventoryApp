@@ -11,44 +11,44 @@ export default function TabLayout() {
   return (
     <ProtectedRoute>
       <Tabs
-        screenOptions={{
-          headerShown: true,
-          headerTitle: "Comptoir Vintage",
-          headerTitleStyle: {
-            fontSize: 20,
-            fontWeight: '700',
-          },
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: '#f5f5f5',
-            height: 60,
-          },
-          headerStatusBarHeight: 0,
-          tabBarStyle: {
-            backgroundColor: '#fff',
-            borderTopWidth: 1,
-            borderTopColor: '#e5e5e5',
-            height: 65,
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 9999,
-            paddingBottom: Platform.OS === 'ios' ? 45 : 0,
-            paddingTop: 8,
-          },
-          tabBarActiveTintColor: '#007AFF',
-          tabBarInactiveTintColor: '#8E8E93',
-          tabBarLabelStyle: {
-            fontSize: 13,
-            paddingBottom: Platform.OS === 'ios' ? 8 : 0,
-            fontWeight: '500',
-          },
-          tabBarItemStyle: {
-            padding: 0,
-            height: 65,
-          },
-        }}
+          screenOptions={{
+            headerShown: true,
+            headerTitle: "Comptoir Vintage",
+            headerTitleStyle: {
+              fontSize: 20,
+              fontWeight: '700',
+            },
+            headerTitleAlign: 'center',
+            headerStyle: {
+              backgroundColor: '#f5f5f5',
+              height: 60,
+            },
+            headerStatusBarHeight: 0,
+            tabBarStyle: {
+              backgroundColor: '#fff',
+              borderTopWidth: 1,
+              borderTopColor: '#e5e5e5',
+              height: 65,
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 9999,
+              paddingBottom: Platform.OS === 'ios' ? 45 : 0,
+              paddingTop: 8,
+            },
+            tabBarActiveTintColor: '#007AFF',
+            tabBarInactiveTintColor: '#8E8E93',
+            tabBarLabelStyle: {
+              fontSize: 13,
+              paddingBottom: Platform.OS === 'ios' ? 8 : 0,
+              fontWeight: '500',
+            },
+            tabBarItemStyle: {
+              padding: 0,
+              height: 65,
+            },
+          }}
       >
         <Tabs.Screen
           name="stock"

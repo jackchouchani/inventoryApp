@@ -10,6 +10,7 @@ import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryLegend } f
 import { SalesChart } from '../../src/components/SalesChart';
 import { format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths, subWeeks, subYears } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useRouter } from 'expo-router';
 
 interface Stats {
   totalItems: number;
@@ -158,6 +159,7 @@ const StatsScreen = () => {
     index: 0
   });
   const isFocused = useIsFocused();
+  const router = useRouter();
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('fr-FR', {
@@ -543,6 +545,16 @@ const StatsScreen = () => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.push('/(tabs)/stock')}
+        >
+          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView style={styles.content}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Vue d'ensemble</Text>
@@ -626,6 +638,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  topBar: {
+    height: Platform.OS === 'ios' ? 44 : 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    marginTop: Platform.OS === 'ios' ? 47 : 0,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginLeft: -8,
+  },
+  backButtonText: {
+    fontSize: 17,
+    color: '#007AFF',
+    marginLeft: -4,
   },
   loadingContainer: {
     flex: 1,

@@ -1,10 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons as Icon } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../src/store/store';
-import { database } from '../../src/database/database';
+import { database, createContainer, createItem } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { generateQRValue } from 'utils/qrCodeManager';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -28,7 +28,7 @@ const SettingsScreen = () => {
 
   const generateTestData = async () => {
     try {
-      // Ajouter des catégories comme dans CategoryScreen
+      // Ajouter des catégories
       const cat1Id = await database.addCategory({ 
         name: 'Vêtements', 
         description: 'Tous types de vêtements',
@@ -42,52 +42,47 @@ const SettingsScreen = () => {
         description: 'Livres et magazines',
       });
 
-      // Ajouter des containers comme dans ContainerForm
-      const cont1Id = await database.addContainer({ 
+      // Ajouter des containers avec le nouveau système d'identifiants
+      const container1 = await createContainer({ 
         number: 1,
         name: 'Box A1', 
-        description: 'Premier container',
-        qrCode: generateQRValue('CONTAINER'),
+        description: 'Premier container'
       });
-      const cont2Id = await database.addContainer({ 
+      const container2 = await createContainer({ 
         number: 2,
         name: 'Box B2', 
-        description: 'Deuxième container',
-        qrCode: generateQRValue('CONTAINER'),
+        description: 'Deuxième container'
       });
 
-      // Ajouter des items comme dans ItemForm
-      await database.addItem({
+      // Ajouter des items avec le nouveau système d'identifiants
+      await createItem({
         name: 'T-shirt bleu',
         description: 'T-shirt en coton',
         purchasePrice: 5,
         sellingPrice: 15,
         status: 'available',
-        qrCode: generateQRValue('ITEM'),
         categoryId: cat1Id,
-        containerId: cont1Id
+        containerId: container1.id
       });
 
-      await database.addItem({
+      await createItem({
         name: 'Smartphone',
         description: 'Téléphone Android',
         purchasePrice: 100,
         sellingPrice: 200,
         status: 'available',
-        qrCode: generateQRValue('ITEM'),
         categoryId: cat2Id,
-        containerId: cont1Id
+        containerId: container1.id
       });
 
-      await database.addItem({
+      await createItem({
         name: 'Roman policier',
         description: 'Livre de poche',
         purchasePrice: 3,
         sellingPrice: 8,
         status: 'available',
-        qrCode: generateQRValue('ITEM'),
         categoryId: cat3Id,
-        containerId: cont2Id
+        containerId: container2.id
       });
 
       triggerRefresh();
@@ -109,58 +104,59 @@ const SettingsScreen = () => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.push('/(tabs)/stock')}
+        >
+          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity 
         style={styles.menuItem}
         onPress={() => router.push('/(stack)/containers')}
       >
-        <Icon name="inbox" size={24} color="#007AFF" />
+        <MaterialIcons name="inbox" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Gérer les containers</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={styles.menuItem}
         onPress={() => router.push('/(stack)/categories')}
       >
-        <Icon name="category" size={24} color="#007AFF" />
+        <MaterialIcons name="category" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Gérer les catégories</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={styles.menuItem}
         onPress={() => router.push('/(stack)/labels')}
       >
-        <Icon name="label" size={24} color="#007AFF" />
+        <MaterialIcons name="label" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Générer des étiquettes</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.menuItem}
-        onPress={() => router.push('/(stack)/backup')}
-      >
-        <Icon name="backup" size={24} color="#007AFF" />
-        <Text style={styles.menuText}>Sauvegarde</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.menuItem, styles.dangerItem]}
         onPress={generateTestData}
       >
-        <Icon name="science" size={24} color="#FF3B30" />
+        <MaterialIcons name="science" size={24} color="#FF3B30" />
         <Text style={[styles.menuText, styles.dangerText]}>Générer données de test</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.menuItem, { marginTop: 20, borderTopWidth: 1, borderTopColor: '#e5e5e5' }]}
         onPress={handleLogout}
       >
-        <Icon name="logout" size={24} color="#FF3B30" />
+        <MaterialIcons name="logout" size={24} color="#FF3B30" />
         <Text style={[styles.menuText, { color: '#FF3B30' }]}>Se déconnecter</Text>
-        <Icon name="chevron-right" size={24} color="#999" />
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
     </View>
   );
@@ -170,6 +166,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  topBar: {
+    height: Platform.OS === 'ios' ? 44 : 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    marginTop: Platform.OS === 'ios' ? 47 : 0,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginLeft: -8,
+  },
+  backButtonText: {
+    fontSize: 17,
+    color: '#007AFF',
+    marginLeft: -4,
   },
   menuItem: {
     flexDirection: 'row',

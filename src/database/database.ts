@@ -4,6 +4,9 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
+import { generateId, ID_TYPES } from '../utils/identifierManager';
+
+export const database = supabaseDatabase;
 
 // Wrapper pour ajouter le logging aux fonctions
 const withLogging = (fn: Function, actionName: string) => {
@@ -51,7 +54,7 @@ const boundDatabase = {
 };
 
 // Exporter les fonctions avec logging
-export const database: DatabaseInterface = {
+export const databaseInterface: DatabaseInterface = {
   ...boundDatabase,
   addItem: withLogging(boundDatabase.addItem, 'ADD_ITEM'),
   updateItem: withLogging(boundDatabase.updateItem, 'UPDATE_ITEM'),
@@ -129,3 +132,31 @@ export interface DatabaseInterface {
         categories: Category[];
     }>;
 }
+
+export const createContainer = async (data: Omit<Container, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Container> => {
+  const qrCode = generateId('CONTAINER');
+  
+  const containerId = await database.addContainer({
+    ...data,
+    qrCode
+  });
+
+  const container = await database.getContainerByQRCode(qrCode);
+  if (!container) throw new Error('Container not found after creation');
+  
+  return container;
+};
+
+export const createItem = async (data: Omit<Item, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Item> => {
+  const qrCode = generateId('ITEM');
+  
+  const itemId = await database.addItem({
+    ...data,
+    qrCode
+  });
+
+  const item = await database.getItemByQRCode(qrCode);
+  if (!item) throw new Error('Item not found after creation');
+  
+  return item;
+};

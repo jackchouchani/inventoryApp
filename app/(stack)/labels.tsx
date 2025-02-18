@@ -22,6 +22,7 @@ import { handleDatabaseError } from '../../src/utils/errorHandler';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import type { Category } from '../../src/types/category';
+import { useRouter } from 'expo-router';
 
 interface Filters {
   search: string;
@@ -57,6 +58,8 @@ export default function LabelScreen() {
     isLoading,
     error
   } = useInventoryData({});
+
+  const router = useRouter();
 
   const filteredItems = useMemo(() => {
     if (!items?.length) return [];
@@ -177,196 +180,217 @@ export default function LabelScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Générateur d'étiquettes</Text>
-        <View style={styles.modeSelector}>
-          <TouchableOpacity
-            style={[styles.modeButton, !showContainers && styles.modeButtonActive]}
-            onPress={() => setShowContainers(false)}
-          >
-            <MaterialIcons 
-              name="shopping-bag" 
-              size={24} 
-              color={!showContainers ? '#007AFF' : '#666'} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              !showContainers && styles.modeButtonTextActive
-            ]}>
-              Articles ({selectedItems.size})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, showContainers && styles.modeButtonActive]}
-            onPress={() => setShowContainers(true)}
-          >
-            <MaterialIcons 
-              name="inbox" 
-              size={24} 
-              color={showContainers ? '#007AFF' : '#666'} 
-            />
-            <Text style={[
-              styles.modeButtonText,
-              showContainers && styles.modeButtonTextActive
-            ]}>
-              Containers ({selectedContainers.size})
-            </Text>
-          </TouchableOpacity>
-        </View>
+    <View style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.push('/(stack)/settings')}
+        >
+          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        <FilterBar
-          value={filters.search}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, search: text }))}
-          placeholder="Rechercher..."
-          onCategoryChange={(categoryId) => 
-            setFilters(prev => ({ ...prev, categoryId: categoryId || null }))}
-          onContainerChange={(containerId) => 
-            setFilters(prev => ({ ...prev, containerId: containerId === 'none' ? null : containerId || null }))}
-          onStatusChange={(status) => 
-            setFilters(prev => ({ ...prev, status }))}
-          onPriceChange={(min, max) => 
-            setFilters(prev => ({ 
-              ...prev, 
-              minPrice: min?.toString() || '', 
-              maxPrice: max?.toString() || '' 
-            }))}
-        />
+      <View style={styles.segmentedControl}>
+        <TouchableOpacity
+          style={[styles.segmentButton, !showContainers && styles.segmentButtonActive]}
+          onPress={() => setShowContainers(false)}
+        >
+          <MaterialIcons 
+            name="shopping-bag" 
+            size={20} 
+            color={!showContainers ? '#007AFF' : '#666'} 
+            style={styles.segmentIcon}
+          />
+          <Text style={[
+            styles.segmentButtonText,
+            !showContainers && styles.segmentButtonTextActive
+          ]}>
+            Articles ({selectedItems.size})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentButton, showContainers && styles.segmentButtonActive]}
+          onPress={() => setShowContainers(true)}
+        >
+          <MaterialIcons 
+            name="inbox" 
+            size={20} 
+            color={showContainers ? '#007AFF' : '#666'} 
+            style={styles.segmentIcon}
+          />
+          <Text style={[
+            styles.segmentButtonText,
+            showContainers && styles.segmentButtonTextActive
+          ]}>
+            Containers ({selectedContainers.size})
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.dateFilters}>
-          {Platform.OS === 'web' ? (
-            <>
-              <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
-                <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
-                <input
-                  type="date"
-                  className="web-date-input"
-                  style={{
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: '#333',
-                    fontSize: '14px',
-                    padding: '8px',
-                    cursor: 'pointer',
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    width: '100%',
-                    outline: 'none',
-                    borderRadius: '8px'
-                  }}
-                  value={filters.startDate ? format(filters.startDate, 'yyyy-MM-dd') : ''}
-                  onChange={(e) => {
-                    const date = e.target.value ? new Date(e.target.value) : null;
-                    setFilters(prev => ({ ...prev, startDate: date }));
-                  }}
-                  placeholder="Date début"
-                />
-                {filters.startDate && (
-                  <TouchableOpacity onPress={() => handleResetDate('start')}>
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
-                <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
-                <input
-                  type="date"
-                  className="web-date-input"
-                  style={{
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: '#333',
-                    fontSize: '14px',
-                    padding: '8px',
-                    cursor: 'pointer',
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    width: '100%',
-                    outline: 'none',
-                    borderRadius: '8px'
-                  }}
-                  value={filters.endDate ? format(filters.endDate, 'yyyy-MM-dd') : ''}
-                  onChange={(e) => {
-                    const date = e.target.value ? new Date(e.target.value) : null;
-                    setFilters(prev => ({ ...prev, endDate: date }));
-                  }}
-                  placeholder="Date fin"
-                />
-                {filters.endDate && (
-                  <TouchableOpacity onPress={() => handleResetDate('end')}>
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
+      <View style={styles.mainContent}>
+        <View style={styles.filterSection}>
+          <FilterBar
+            value={filters.search}
+            onChangeText={(text) => setFilters(prev => ({ ...prev, search: text }))}
+            placeholder="Rechercher..."
+            onCategoryChange={(categoryId) => 
+              setFilters(prev => ({ ...prev, categoryId: categoryId || null }))}
+            onContainerChange={(containerId) => 
+              setFilters(prev => ({ ...prev, containerId: containerId === 'none' ? null : containerId || null }))}
+            onStatusChange={(status) => 
+              setFilters(prev => ({ ...prev, status }))}
+            onPriceChange={(min, max) => 
+              setFilters(prev => ({ 
+                ...prev, 
+                minPrice: min?.toString() || '', 
+                maxPrice: max?.toString() || '' 
+              }))}
+          />
+
+          <View style={styles.dateFilters}>
+            {Platform.OS === 'web' ? (
+              <>
+                <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
+                  <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
+                  <input
+                    type="date"
+                    className="web-date-input"
+                    style={{
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      color: '#333',
+                      fontSize: '14px',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      width: '100%',
+                      outline: 'none',
+                      borderRadius: '8px'
+                    }}
+                    value={filters.startDate ? format(filters.startDate, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setFilters(prev => ({ ...prev, startDate: date }));
+                    }}
+                    placeholder="Date début"
+                  />
+                  {filters.startDate && (
+                    <TouchableOpacity onPress={() => handleResetDate('start')}>
+                      <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
+                  <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
+                  <input
+                    type="date"
+                    className="web-date-input"
+                    style={{
+                      border: 'none',
+                      backgroundColor: 'transparent',
+                      color: '#333',
+                      fontSize: '14px',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      width: '100%',
+                      outline: 'none',
+                      borderRadius: '8px'
+                    }}
+                    value={filters.endDate ? format(filters.endDate, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setFilters(prev => ({ ...prev, endDate: date }));
+                    }}
+                    placeholder="Date fin"
+                  />
+                  {filters.endDate && (
+                    <TouchableOpacity onPress={() => handleResetDate('end')}>
+                      <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker('start')}
+                >
+                  <MaterialIcons name="calendar-today" size={20} color="#666" />
+                  <Text style={styles.dateButtonText}>
+                    {filters.startDate
+                      ? format(filters.startDate, 'dd/MM/yyyy', { locale: fr })
+                      : 'Date début'}
+                  </Text>
+                  {filters.startDate && (
+                    <TouchableOpacity 
+                      onPress={() => handleResetDate('start')}
+                      style={{ padding: 4 }}
+                    >
+                      <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker('end')}
+                >
+                  <MaterialIcons name="calendar-today" size={20} color="#666" />
+                  <Text style={styles.dateButtonText}>
+                    {filters.endDate
+                      ? format(filters.endDate, 'dd/MM/yyyy', { locale: fr })
+                      : 'Date fin'}
+                  </Text>
+                  {filters.endDate && (
+                    <TouchableOpacity 
+                      onPress={() => handleResetDate('end')}
+                      style={{ padding: 4 }}
+                    >
+                      <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          {showDatePicker && Platform.OS !== 'web' && (Platform.OS === 'ios' ? (
+            <BlurView intensity={80} tint="light" style={styles.datePickerContainer}>
+              <Text style={styles.datePickerLabel}>
+                {showDatePicker === 'start' ? 'Date de début' : 'Date de fin'}
+              </Text>
+              <Text style={styles.datePickerSubLabel}>
+                {showDatePicker === 'start' 
+                  ? 'Sélectionnez la date à partir de laquelle filtrer'
+                  : 'Sélectionnez la date jusqu\'à laquelle filtrer'
+                }
+              </Text>
+              <DateTimePicker
+                value={filters[showDatePicker === 'start' ? 'startDate' : 'endDate'] || new Date()}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+                textColor="#000"
+              />
+              <TouchableOpacity
+                style={styles.closeDatePickerButton}
+                onPress={() => setShowDatePicker(null)}
+              >
+                <Text style={styles.closeDatePickerButtonText}>Fermer</Text>
+              </TouchableOpacity>
+            </BlurView>
           ) : (
-            <>
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker('start')}
-              >
-                <MaterialIcons name="calendar-today" size={20} color="#666" />
-                <Text style={styles.dateButtonText}>
-                  {filters.startDate
-                    ? format(filters.startDate, 'dd/MM/yyyy', { locale: fr })
-                    : 'Date début'}
-                </Text>
-                {filters.startDate && (
-                  <TouchableOpacity 
-                    onPress={() => handleResetDate('start')}
-                    style={{ padding: 4 }}
-                  >
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker('end')}
-              >
-                <MaterialIcons name="calendar-today" size={20} color="#666" />
-                <Text style={styles.dateButtonText}>
-                  {filters.endDate
-                    ? format(filters.endDate, 'dd/MM/yyyy', { locale: fr })
-                    : 'Date fin'}
-                </Text>
-                {filters.endDate && (
-                  <TouchableOpacity 
-                    onPress={() => handleResetDate('end')}
-                    style={{ padding: 4 }}
-                  >
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-
-        {showDatePicker && Platform.OS !== 'web' && (Platform.OS === 'ios' ? (
-          <BlurView intensity={80} tint="light" style={styles.datePickerContainer}>
             <DateTimePicker
               value={filters[showDatePicker === 'start' ? 'startDate' : 'endDate'] || new Date()}
               mode="date"
-              display="spinner"
+              display="default"
               onChange={handleDateChange}
             />
-            <TouchableOpacity
-              style={styles.closeDatePickerButton}
-              onPress={() => setShowDatePicker(null)}
-            >
-              <Text style={styles.closeDatePickerButtonText}>Fermer</Text>
-            </TouchableOpacity>
-          </BlurView>
-        ) : (
-          <DateTimePicker
-            value={filters[showDatePicker === 'start' ? 'startDate' : 'endDate'] || new Date()}
-            mode="date"
-            display="default"
-            onChange={handleDateChange}
-          />
-        ))}
+          ))}
+        </View>
 
         <View style={styles.selectionSection}>
           <View style={styles.selectionHeader}>
@@ -380,14 +404,15 @@ export default function LabelScreen() {
                 style={styles.selectionButton}
                 onPress={handleSelectAll}
               >
-                <MaterialIcons name="select-all" size={20} color="#007AFF" />
+                <MaterialIcons name="check-box" size={18} color="#007AFF" />
                 <Text style={styles.selectionButtonText}>Tout sélectionner</Text>
               </TouchableOpacity>
+              <Text style={styles.selectionSeparator}>•</Text>
               <TouchableOpacity
                 style={styles.selectionButton}
                 onPress={handleDeselectAll}
               >
-                <MaterialIcons name="clear-all" size={20} color="#FF3B30" />
+                <MaterialIcons name="check-box-outline-blank" size={18} color="#FF3B30" />
                 <Text style={[styles.selectionButtonText, styles.deselectButtonText]}>
                   Tout désélectionner
                 </Text>
@@ -395,7 +420,11 @@ export default function LabelScreen() {
             </View>
           </View>
 
-          <ScrollView style={styles.itemList}>
+          <ScrollView 
+            style={styles.itemList}
+            contentContainerStyle={styles.itemListContent}
+            showsVerticalScrollIndicator={false}
+          >
             {(showContainers ? containers : filteredItems).map((item) => (
               <TouchableOpacity
                 key={item.id}
@@ -424,41 +453,42 @@ export default function LabelScreen() {
                   name={(showContainers ? selectedContainers : selectedItems).has(item.id!) 
                     ? "check-circle" 
                     : "radio-button-unchecked"}
-                  size={24}
+                  size={22}
                   color={(showContainers ? selectedContainers : selectedItems).has(item.id!) 
                     ? "#007AFF" 
-                    : "#666"}
+                    : "#CCC"}
                 />
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
-
-        {(showContainers ? selectedContainers.size : selectedItems.size) > 0 && (
-          <View style={styles.generatorContainer}>
-            <LabelGenerator
-              items={getItemsToGenerate()}
-              onComplete={() => {
-                if (showContainers) {
-                  setSelectedContainers(new Set());
-                } else {
-                  setSelectedItems(new Set());
-                }
-              }}
-              onError={(error) => {
-                console.error(error);
-                Alert.alert(
-                  'Erreur',
-                  'Une erreur est survenue lors de la génération des étiquettes'
-                );
-              }}
-              mode={showContainers ? 'containers' : 'items'}
-              compact={true}
-            />
-          </View>
-        )}
       </View>
-    </SafeAreaView>
+
+      {(showContainers ? selectedContainers.size : selectedItems.size) > 0 && (
+        <View style={styles.generatorContainer}>
+          <LabelGenerator
+            items={getItemsToGenerate()}
+            onComplete={() => {
+              if (showContainers) {
+                setSelectedContainers(new Set());
+              } else {
+                setSelectedItems(new Set());
+              }
+              router.replace('/(stack)/settings');
+            }}
+            onError={(error) => {
+              console.error(error);
+              Alert.alert(
+                'Erreur',
+                'Une erreur est survenue lors de la génération des étiquettes'
+              );
+            }}
+            mode={showContainers ? 'containers' : 'items'}
+            compact={true}
+          />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -467,51 +497,146 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  header: {
-    padding: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  modeSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#f1f3f5',
-    borderRadius: 12,
-    padding: 4,
-  },
-  modeButton: {
-    flex: 1,
+  topBar: {
+    height: Platform.OS === 'ios' ? 44 : 56,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    gap: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    marginTop: Platform.OS === 'ios' ? 47 : 0,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginLeft: -8,
+  },
+  backButtonText: {
+    fontSize: 17,
+    color: '#007AFF',
+    marginLeft: -4,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    margin: 16,
+    marginTop: 8,
+    backgroundColor: '#f1f3f5',
     borderRadius: 8,
+    padding: 4,
   },
-  modeButtonActive: {
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  filterSection: {
+    padding: 16,
+    paddingTop: 0,
+  },
+  selectionSection: {
+    flex: 1,
     backgroundColor: '#fff',
+    margin: 16,
+    marginTop: 0,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    overflow: 'hidden',
   },
-  modeButtonText: {
+  selectionHeader: {
+    flexDirection: 'column',
+    padding: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  selectionSeparator: {
+    marginHorizontal: 8,
+    color: '#CCC',
+    fontSize: 12,
+  },
+  selectionButtonText: {
+    fontSize: 15,
+    color: '#007AFF',
+    fontWeight: '500',
+  },
+  deselectButtonText: {
+    color: '#FF3B30',
+  },
+  itemList: {
+    flex: 1,
+  },
+  itemListContent: {
+    padding: 8,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  itemRowSelected: {
+    backgroundColor: '#f0f9ff',
+    borderColor: '#007AFF',
+  },
+  generatorContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'transparent',
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 12,
     fontSize: 16,
     color: '#666',
   },
-  modeButtonTextActive: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  content: {
+  errorContainer: {
     flex: 1,
-    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginTop: 12,
   },
   dateFilters: {
     flexDirection: 'row',
@@ -552,60 +677,6 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontWeight: '600',
   },
-  selectionSection: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 60,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  selectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  selectionActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  selectionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  selectionButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-  },
-  deselectButtonText: {
-    color: '#FF3B30',
-  },
-  itemList: {
-    flex: 1,
-    minHeight: 200,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 6,
-    backgroundColor: '#f8f9fa',
-  },
-  itemRowSelected: {
-    backgroundColor: '#e8f2ff',
-  },
   itemInfo: {
     flex: 1,
     marginRight: 12,
@@ -614,45 +685,53 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 4,
     color: '#212529',
+    fontWeight: '500',
   },
   itemNameSelected: {
     color: '#007AFF',
-    fontWeight: '500',
   },
   itemContainer: {
     fontSize: 14,
     color: '#666',
   },
-  generatorContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'transparent',
-    padding: 8,
-    zIndex: 1000,
+  segmentIcon: {
+    marginRight: 6,
   },
-  loadingContainer: {
+  segmentButton: {
     flex: 1,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    padding: 8,
+    borderRadius: 6,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
+  segmentButtonActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentButtonText: {
+    fontSize: 15,
     color: '#666',
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  segmentButtonTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
   },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
+  datePickerLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000',
     textAlign: 'center',
-    marginTop: 12,
+    marginBottom: 4,
+  },
+  datePickerSubLabel: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 12,
   },
 }); 
