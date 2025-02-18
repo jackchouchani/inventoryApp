@@ -9,6 +9,7 @@ import { useRefreshStore } from '../../src/store/refreshStore';
 import { generateQRValue } from 'utils/qrCodeManager';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
+import { useQueryClient } from '@tanstack/react-query';
 
 const SettingsScreen = () => {
   const router = useRouter();
@@ -16,6 +17,7 @@ const SettingsScreen = () => {
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
+  const queryClient = useQueryClient();
 
   const handleLogout = async () => {
     try {
@@ -23,6 +25,37 @@ const SettingsScreen = () => {
       router.replace('/(auth)/login');
     } catch (error) {
       console.error('Erreur de déconnexion:', error);
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    try {
+      Alert.alert(
+        'Réinitialiser la base de données',
+        'Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible.',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          {
+            text: 'Réinitialiser',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await database.resetDatabase();
+                // Invalider tous les caches
+                await queryClient.invalidateQueries();
+                triggerRefresh();
+                Alert.alert('Succès', 'Base de données réinitialisée avec succès');
+              } catch (error) {
+                console.error('Erreur lors de la réinitialisation:', error);
+                Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation:', error);
+      Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
     }
   };
 
@@ -143,6 +176,15 @@ const SettingsScreen = () => {
 
       <TouchableOpacity 
         style={[styles.menuItem, styles.dangerItem]}
+        onPress={handleResetDatabase}
+      >
+        <MaterialIcons name="delete-forever" size={24} color="#FF3B30" />
+        <Text style={[styles.menuText, styles.dangerText]}>Réinitialiser la base de données</Text>
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.menuItem, styles.dangerItem, { borderTopWidth: 0 }]}
         onPress={generateTestData}
       >
         <MaterialIcons name="science" size={24} color="#FF3B30" />
