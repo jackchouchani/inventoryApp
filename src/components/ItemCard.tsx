@@ -71,9 +71,9 @@ const ItemCard: React.FC<ItemCardProps> = ({
         style={styles.touchable}
       >
         <View style={styles.content}>
-          {item.photoUri && (
+          {item.photo_storage_url && (
             <Image 
-              source={{ uri: item.photoUri }} 
+              source={{ uri: item.photo_storage_url }} 
               style={styles.image}
               resizeMode="cover"
             />

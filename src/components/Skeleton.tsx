@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ViewStyle, Animated } from 'react-native';
+import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
 
 interface SkeletonProps {
   style?: ViewStyle;
@@ -9,7 +9,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({ style }) => {
   const animatedValue = new Animated.Value(0);
 
   useEffect(() => {
-    const animation = Animated.loop(
+    const animate = () => {
       Animated.sequence([
         Animated.timing(animatedValue, {
           toValue: 1,
@@ -21,13 +21,13 @@ export const Skeleton: React.FC<SkeletonProps> = ({ style }) => {
           duration: 1000,
           useNativeDriver: true,
         }),
-      ])
-    );
+      ]).start(() => animate());
+    };
 
-    animation.start();
+    animate();
 
     return () => {
-      animation.stop();
+      animatedValue.stopAnimation();
     };
   }, []);
 
@@ -39,12 +39,17 @@ export const Skeleton: React.FC<SkeletonProps> = ({ style }) => {
   return (
     <Animated.View
       style={[
-        {
-          backgroundColor: '#e1e1e1',
-          opacity,
-        },
+        styles.skeleton,
         style,
+        { opacity }
       ]}
     />
   );
-}; 
+};
+
+const styles = StyleSheet.create({
+  skeleton: {
+    backgroundColor: '#E1E9EE',
+    borderRadius: 4,
+  },
+}); 

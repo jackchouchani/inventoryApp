@@ -77,28 +77,57 @@ const ContainerScreen = () => {
 
   const handleContainerSubmit = useCallback(async (containerData: Partial<Container>) => {
     try {
+      // Récupérer l'utilisateur actuel
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Utilisateur non connecté');
+
+      const formattedData = {
+        name: containerData.name,
+        description: containerData.description || '',
+        number: containerData.number || null,
+        qr_code: containerData.qrCode || null,
+        user_id: user.id,
+        deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Données du container à créer:', formattedData);
+
       if (editingContainer?.id) {
         const { error } = await supabase
           .from('containers')
-          .update(containerData)
+          .update(formattedData)
           .eq('id', editingContainer.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erreur lors de la mise à jour:', error);
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from('containers')
-          .insert(containerData);
+          .insert(formattedData);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erreur lors de la création:', error);
+          throw error;
+        }
       }
 
       setShowContainerForm(false);
       setEditingContainer(null);
       triggerRefresh();
     } catch (error) {
+      console.error('Erreur complète:', error);
       if (error instanceof Error || error instanceof PostgrestError) {
         handleDatabaseError(error, 'ContainerScreen.handleContainerSubmit');
       }
+      Alert.alert(
+        'Erreur',
+        'Une erreur est survenue lors de la création du container. Veuillez réessayer.'
+      );
     }
   }, [editingContainer, triggerRefresh]);
 
@@ -231,6 +260,16 @@ const ContainerScreen = () => {
   if (!containers || containers.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.topBar}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.push('/(stack)/settings')}
+          >
+            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.emptyStateContainer}>
           <MaterialIcons name="inbox" size={64} color="#ccc" />
           <Text style={styles.emptyStateText}>Aucun container disponible</Text>

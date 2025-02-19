@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../config/supabase';
@@ -53,11 +53,11 @@ export const DataLoader: React.FC<DataLoaderProps> = ({
   });
 
   useEffect(() => {
-    if (!hasCalledComplete && categories && containers && !isCategoriesLoading && !isContainersLoading) {
+    if (!hasCalledComplete && !isCategoriesLoading && !isContainersLoading) {
       setHasCalledComplete(true);
       onLoadComplete?.();
     }
-  }, [categories, containers, isCategoriesLoading, isContainersLoading, hasCalledComplete, onLoadComplete]);
+  }, [isCategoriesLoading, isContainersLoading, hasCalledComplete, onLoadComplete]);
 
   if (categoriesError || containersError) {
     return (
@@ -77,15 +77,6 @@ export const DataLoader: React.FC<DataLoaderProps> = ({
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Chargement des données...</Text>
-      </View>
-    );
-  }
-
-  if (!categories?.length || !containers?.length) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Initialisation des données...</Text>
       </View>
     );
   }

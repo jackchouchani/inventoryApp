@@ -11,13 +11,33 @@ Sentry.init({
   attachStacktrace: true,
   debug: __DEV__,
   environment: __DEV__ ? 'development' : 'production',
-  tracesSampleRate: 1.0,
+  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
   enableNative: Platform.OS !== 'web',
-  beforeSend(event) {
-    if (event.exception) {
-      Sentry.setTag('platform', Platform.OS);
-      Sentry.setTag('appVersion', Application.nativeApplicationVersion || 'unknown');
+  maxBreadcrumbs: 50,
+  maxValueLength: 1000,
+  normalizeDepth: 3,
+  beforeSend(event, hint) {
+    // Ne pas envoyer les événements en mode développement
+    if (__DEV__) {
+      return null;
     }
+
+    // Vérifier si l'événement est valide
+    if (!event || !event.exception) {
+      return null;
+    }
+
+    // Ajouter des informations supplémentaires
+    Sentry.setTag('platform', Platform.OS);
+    Sentry.setTag('appVersion', Application.nativeApplicationVersion || 'unknown');
+    Sentry.setTag('buildNumber', Application.nativeBuildVersion || 'unknown');
+
+    // Nettoyer les données sensibles si nécessaire
+    if (event.request && event.request.headers) {
+      delete event.request.headers.Authorization;
+      delete event.request.headers.authorization;
+    }
+
     return event;
   }
 });

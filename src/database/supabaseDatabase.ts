@@ -15,7 +15,7 @@ const ITEM_LIST_FIELDS = `
   selling_price,
   category_id,
   container_id,
-  photo_uri,
+  photo_storage_url,
   qr_code,
   created_at,
   updated_at,
@@ -29,7 +29,7 @@ const ITEM_DETAIL_FIELDS = `
   purchase_price,
   selling_price,
   status,
-  photo_uri,
+  photo_storage_url,
   container_id,
   category_id,
   qr_code,
@@ -67,9 +67,13 @@ export class SupabaseDatabase implements DatabaseInterface {
         .select('*')
         .is('deleted', false);
       
-      if (error) throw error;
+      // Si erreur ou pas de données, retourner un tableau vide
+      if (error || !data) {
+        console.log('Aucun container trouvé ou erreur:', error);
+        return [];
+      }
       
-      return (data || []).map(container => ({
+      return data.map(container => ({
         id: container.id,
         name: container.name,
         description: container.description,
@@ -81,7 +85,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         userId: container.user_id
       }));
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'getContainers');
+      console.log('Erreur dans getContainers:', error);
       return [];
     }
   }
@@ -93,9 +97,13 @@ export class SupabaseDatabase implements DatabaseInterface {
         .select('*')
         .is('deleted', false);
 
-      if (error) throw error;
+      // Si erreur ou pas de données, retourner un tableau vide
+      if (error || !data) {
+        console.log('Aucune catégorie trouvée ou erreur:', error);
+        return [];
+      }
       
-      return (data || []).map(category => ({
+      return data.map(category => ({
         id: category.id,
         name: category.name,
         description: category.description,
@@ -104,36 +112,75 @@ export class SupabaseDatabase implements DatabaseInterface {
         updatedAt: category.updated_at
       }));
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'getCategories');
+      console.log('Erreur dans getCategories:', error);
       return [];
     }
   }
 
   async getItems(): Promise<Item[]> {
     try {
+      console.log('Champs demandés:', ITEM_LIST_FIELDS);
+      
       const { data, error } = await supabase
-        .from('mv_items_list')
+        .from('items')
         .select(ITEM_LIST_FIELDS)
+        .is('deleted', false)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.log('Erreur lors de la récupération des items:', error);
+        return [];
+      }
       
-      return (data || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        description: '', // Champ non nécessaire dans la liste
-        purchasePrice: item.purchase_price,
-        sellingPrice: item.selling_price,
-        status: item.status,
-        photoUri: item.photo_uri,
-        containerId: item.container_id,
-        categoryId: item.category_id,
-        qrCode: item.qr_code,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at
+      if (!data) {
+        return [];
+      }
+
+      console.log('Structure d\'un item brut:', data[0] ? Object.keys(data[0]) : 'Aucun item');
+      console.log('Données brutes des items:', JSON.stringify(data, null, 2));
+      
+      const mappedItems = await Promise.all(data.map(async item => {
+        let photo_storage_url = item.photo_storage_url;
+        
+        // Si l'URL commence par "data:", c'est une image base64
+        if (photo_storage_url?.startsWith('data:image')) {
+          try {
+            console.log(`Migration de la photo base64 pour l'item ${item.id}...`);
+            photo_storage_url = await photoService.migrateBase64ToStorage(photo_storage_url);
+            
+            // Mettre à jour l'URL dans la base de données
+            await supabase
+              .from('items')
+              .update({ photo_storage_url })
+              .eq('id', item.id);
+            
+            console.log(`Photo migrée avec succès pour l'item ${item.id}`);
+          } catch (error) {
+            console.error(`Erreur lors de la migration de la photo pour l'item ${item.id}:`, error);
+          }
+        }
+        
+        const mappedItem = {
+          id: item.id,
+          name: item.name,
+          description: '', // Champ non nécessaire dans la liste
+          purchasePrice: item.purchase_price,
+          sellingPrice: item.selling_price,
+          status: item.status,
+          photo_storage_url,
+          containerId: item.container_id,
+          categoryId: item.category_id,
+          qrCode: item.qr_code,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at
+        };
+        console.log(`Item ${item.id} - photo_storage_url:`, photo_storage_url);
+        return mappedItem;
       }));
+      
+      return mappedItems;
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'getItems');
+      console.log('Erreur dans getItems:', error);
       return [];
     }
   }
@@ -145,7 +192,7 @@ export class SupabaseDatabase implements DatabaseInterface {
     if (item.purchasePrice !== undefined) updateData.purchase_price = item.purchasePrice;
     if (item.sellingPrice !== undefined) updateData.selling_price = item.sellingPrice;
     if (item.status !== undefined) updateData.status = item.status;
-    if (item.photoUri !== undefined) updateData.photo_uri = item.photoUri;
+    if (item.photo_storage_url !== undefined) updateData.photo_storage_url = item.photo_storage_url;
     if (item.containerId !== undefined) updateData.container_id = item.containerId;
     if (item.categoryId !== undefined) updateData.category_id = item.categoryId;
     if (item.qrCode !== undefined) updateData.qr_code = item.qrCode;
@@ -173,26 +220,64 @@ export class SupabaseDatabase implements DatabaseInterface {
   }
 
   async addItem(item: ItemInput): Promise<number> {
-    const { data, error } = await supabase
-      .from('items')
-      .insert({
+    try {
+      // Récupérer l'utilisateur actuel
+      const { data: authData, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Erreur lors de la récupération de l\'utilisateur:', userError);
+        throw new Error('Erreur d\'authentification');
+      }
+      
+      if (!authData?.user?.id) {
+        console.error('Aucun utilisateur connecté');
+        throw new Error('Utilisateur non connecté');
+      }
+
+      const userId = authData.user.id;
+      console.log('ID de l\'utilisateur récupéré:', userId);
+
+      // Préparer les données de l'item
+      const itemData = {
         name: item.name,
-        description: item.description,
+        description: item.description || '',
         purchase_price: item.purchasePrice,
         selling_price: item.sellingPrice,
         status: item.status,
-        photo_uri: item.photoUri,
-        container_id: item.containerId,
-        category_id: item.categoryId,
-        qr_code: item.qrCode,
+        photo_storage_url: item.photo_storage_url || null,
+        container_id: item.containerId || null,
+        category_id: item.categoryId || null,
+        qr_code: item.qrCode || null,
+        user_id: userId,
+        deleted: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
+      };
 
-    if (error) throw error;
-    return data.id;
+      console.log('Données de l\'item à créer:', itemData);
+      console.log('URL de la photo à sauvegarder:', item.photo_storage_url);
+
+      // Insérer l'item dans la table items
+      const { data, error } = await supabase
+        .from('items')
+        .insert(itemData)
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Erreur lors de la création de l\'item:', error);
+        throw error;
+      }
+      
+      if (!data) {
+        throw new Error('Aucune donnée retournée après la création de l\'item');
+      }
+
+      console.log('Item créé avec succès, ID:', data.id);
+      return data.id;
+    } catch (error) {
+      console.error('Erreur complète dans addItem:', error);
+      throw error;
+    }
   }
 
   async addContainer(container: ContainerInput): Promise<number> {
@@ -201,70 +286,88 @@ export class SupabaseDatabase implements DatabaseInterface {
         throw handleValidationError('Le nom du container est requis', 'addContainer');
       }
 
+      // Récupérer l'utilisateur actuel
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Utilisateur non connecté');
+
       const supabaseContainer = {
         name: container.name,
-        description: container.description,
-        number: container.number,
-        qr_code: container.qrCode,
-        user_id: container.userId,
-        deleted: false
+        description: container.description || '',
+        number: container.number || null,
+        qr_code: container.qrCode || null,
+        user_id: user.id,
+        deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
+
+      console.log('Données du container à créer:', supabaseContainer);
 
       const { data, error } = await supabase
         .from('containers')
-        .insert([supabaseContainer])
+        .insert(supabaseContainer)
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur lors de la création du container:', error);
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('Aucune donnée retournée après la création du container');
+      }
+
       return data.id;
     } catch (error) {
+      console.error('Erreur complète dans addContainer:', error);
       handleDatabaseError(error as PostgrestError, 'addContainer');
       throw error;
     }
   }
 
   async addCategory(category: CategoryInput): Promise<number> {
-    const { data, error } = await supabase
-      .from('categories')
-      .insert({
-        ...category,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
-    
-    if (error) {
+    try {
+      // Récupérer l'utilisateur actuel
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Utilisateur non connecté');
+
+      const { data, error } = await supabase
+        .from('categories')
+        .insert({
+          ...category,
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          deleted: false
+        })
+        .select('id')
+        .single();
+      
+      if (error) {
+        console.error('Erreur Supabase:', error);
+        throw error;
+      }
+      return data.id;
+    } catch (error) {
       console.error('Erreur Supabase:', error);
       throw error;
     }
-    return data.id;
   }
 
   async resetDatabase(): Promise<void> {
     try {
-      // Marquer tous les items comme supprimés
-      const { error: itemsError } = await supabase
-        .from('items')
-        .update({ deleted: true })
-        .is('deleted', false);
-      if (itemsError) throw itemsError;
-
-      // Marquer tous les containers comme supprimés
-      const { error: containersError } = await supabase
-        .from('containers')
-        .update({ deleted: true })
-        .is('deleted', false);
-      if (containersError) throw containersError;
-
-      // Marquer toutes les catégories comme supprimées
-      const { error: categoriesError } = await supabase
-        .from('categories')
-        .update({ deleted: true })
-        .is('deleted', false);
-      if (categoriesError) throw categoriesError;
-
+      console.log('Début de la réinitialisation de la base de données...');
+      const { error } = await supabase.rpc('reset_database');
+      
+      if (error) {
+        console.error('Erreur lors de la réinitialisation Supabase:', error);
+        throw error;
+      }
+      
+      console.log('Base de données réinitialisée avec succès');
     } catch (error) {
       console.error('Erreur lors de la réinitialisation Supabase:', error);
       throw error;
@@ -309,7 +412,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         purchasePrice: data.purchase_price,
         sellingPrice: data.selling_price,
         status: data.status,
-        photoUri: data.photo_uri,
+        photo_storage_url: data.photo_storage_url,
         containerId: data.container_id,
         categoryId: data.category_id,
         qrCode: data.qr_code,
@@ -527,7 +630,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         purchasePrice: data.purchase_price,
         sellingPrice: data.selling_price,
         status: data.status,
-        photoUri: data.photo_uri,
+        photo_storage_url: data.photo_storage_url,
         containerId: data.container_id,
         categoryId: data.category_id,
         qrCode: data.qr_code,
@@ -559,7 +662,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         purchasePrice: item.purchase_price,
         sellingPrice: item.selling_price,
         status: item.status,
-        photoUri: item.photo_uri,
+        photo_storage_url: item.photo_storage_url,
         containerId: item.container_id,
         categoryId: item.category_id,
         qrCode: item.qr_code,

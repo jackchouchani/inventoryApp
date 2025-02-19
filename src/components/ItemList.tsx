@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, memo, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { Item } from '../types/item';
 import { Container } from '../types/container';
 import { Category } from '../types/category';
@@ -13,14 +13,20 @@ import ItemCard from './ItemCard';
 import { Skeleton } from './Skeleton';
 import { withPerformanceMonitoring } from '../hoc/withPerformanceMonitoring';
 import { monitoring } from '../services/monitoring';
+import { photoService } from '../services/photoService';
 
 interface ItemListProps {
   items: Item[];
-  onMarkAsSold: (itemId: number) => void;
-  onMarkAsAvailable: (itemId: number) => void;
-  onMoveItem?: (itemId: number, newContainerId: number) => void;
   onItemPress?: (item: Item) => void;
+  onMarkAsSold?: (item: Item) => void;
+  onMarkAsAvailable?: (item: Item) => void;
+  categories: Category[];
+  containers: Container[];
   isLoading?: boolean;
+  error?: string;
+  selectedItem: Item | null;
+  onEditSuccess: () => void;
+  onEditCancel: () => void;
 }
 
 interface Filters {
@@ -123,7 +129,7 @@ const ItemRow = memo(({
   );
 });
 
-const LoadingSkeleton = memo(() => (
+const ItemLoadingSkeleton = memo(() => (
   <View style={styles.skeletonContainer}>
     {Array.from({ length: 5 }).map((_, index) => (
       <View key={index} style={styles.skeletonRow}>
@@ -136,18 +142,119 @@ const LoadingSkeleton = memo(() => (
   </View>
 ));
 
-const ItemList = memo<ItemListProps>(({
+const getStatusStyle = (status: 'available' | 'sold') => {
+  switch (status) {
+    case 'available':
+      return styles.statusAvailable;
+    case 'sold':
+      return styles.statusSold;
+    default:
+      return styles.statusAvailable;
+  }
+};
+
+const getStatusText = (status: 'available' | 'sold') => {
+  switch (status) {
+    case 'available':
+      return 'Disponible';
+    case 'sold':
+      return 'Vendu';
+    default:
+      return 'Disponible';
+  }
+};
+
+const ItemListItem = memo(({ item, onPress, categories, containers }: {
+  item: Item;
+  onPress?: (item: Item) => void;
+  categories: Category[];
+  containers: Container[];
+}) => {
+  const [imageUrl, setImageUrl] = useState<string | undefined>(item.photo_storage_url);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    if (item.photo_storage_url && item.photo_storage_url.includes('/images/')) {
+      const filename = item.photo_storage_url.split('/images/').pop();
+      if (filename) {
+        setImageError(false);
+        photoService.getImageUrlWithCache(filename) 
+          .then(url => {
+            console.log(`URL signée générée pour l'item ${item.id}:`, url);
+            setImageUrl(url);
+          })
+          .catch(error => {
+            console.error(`Erreur lors de la génération de l'URL signée pour l'item ${item.id}:`, error);
+            setImageError(true);
+          });
+      }
+    }
+  }, [item.photo_storage_url, item.id]);
+
+  return (
+    <TouchableOpacity 
+      style={styles.itemCard}
+      onPress={() => onPress?.(item)}
+    >
+      <View style={styles.itemContent}>
+        {imageUrl && !imageError ? (
+          <Image 
+            source={{ uri: imageUrl }} 
+            style={styles.itemImage}
+            resizeMode="cover"
+            onError={(error) => {
+              console.error(`Erreur de chargement de l'image pour l'item ${item.id}:`, error.nativeEvent.error);
+              setImageError(true);
+            }}
+            onLoad={() => {
+              console.log(`Image chargée avec succès pour l'item ${item.id}`);
+              setImageError(false);
+            }}
+          />
+        ) : (
+          <View style={styles.noImagePlaceholder}>
+            <MaterialIcons 
+              name={imageError ? "broken-image" : "image-not-supported"} 
+              size={24} 
+              color="#ccc" 
+            />
+          </View>
+        )}
+        <View style={styles.itemDetailsContainer}>
+          <Text style={styles.itemNameText}>{item.name}</Text>
+          <Text style={styles.itemPriceText}>{item.sellingPrice}€</Text>
+          <View style={styles.itemMetadata}>
+            <Text style={styles.itemCategory}>
+              {categories.find((c: Category) => c.id === item.categoryId)?.name || 'Sans catégorie'}
+            </Text>
+            {item.containerId && (
+              <Text style={styles.itemContainer}>
+                📦 {containers.find((c: Container) => c.id === item.containerId)?.name || 'Container inconnu'}
+              </Text>
+            )}
+          </View>
+          <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
+            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+const ItemList: React.FC<ItemListProps> = memo(({
   items,
+  onItemPress,
   onMarkAsSold,
   onMarkAsAvailable,
-  onMoveItem,
-  onItemPress,
-  isLoading
+  categories,
+  containers,
+  isLoading,
+  error,
+  selectedItem,
+  onEditSuccess,
+  onEditCancel
 }) => {
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const categories = useSelector(selectAllCategories);
-  const containers = useSelector(selectAllContainers);
-
   const {
     opacity,
     fadeIn,
@@ -176,23 +283,25 @@ const ItemList = memo<ItemListProps>(({
     };
   });
 
-  const handleModalSuccess = useCallback(() => {
-    setSelectedItem(null);
-  }, []);
-
-  const handleModalCancel = useCallback(() => {
-    setSelectedItem(null);
-  }, []);
-
-  const handleItemPress = useCallback((item: Item) => {
-    setSelectedItem(item);
-    if (onItemPress) {
-      onItemPress(item);
-    }
-  }, [onItemPress]);
+  const renderItem = ({ item }: { item: Item }) => {
+    console.log('Rendu de l\'item:', {
+      id: item.id,
+      name: item.name,
+      photo_storage_url: item.photo_storage_url
+    });
+    
+    return (
+      <ItemListItem
+        item={item}
+        onPress={onItemPress}
+        categories={categories}
+        containers={containers}
+      />
+    );
+  };
 
   if (isLoading) {
-    return <LoadingSkeleton />;
+    return <ItemLoadingSkeleton />;
   }
 
   if (!items.length) {
@@ -207,33 +316,14 @@ const ItemList = memo<ItemListProps>(({
     <View style={styles.container}>
       <FlatList
         data={items}
-        renderItem={({ item }) => (
-          <ItemCard
-            item={item}
-            onPress={() => handleItemPress(item)}
-            onMarkAsSold={onMarkAsSold}
-            onMarkAsAvailable={onMarkAsAvailable}
-            fadeAnimation={{
-              opacity,
-              fadeIn,
-              fadeOut,
-              fadeStyle
-            }}
-            scaleAnimation={{
-              scale,
-              scaleUp,
-              scaleDown,
-              scaleStyle
-            }}
-          />
-        )}
+        renderItem={renderItem}
         keyExtractor={(item) => item.id?.toString() || ''}
       />
 
       <ItemListModal
         selectedItem={selectedItem}
-        onSuccess={handleModalSuccess}
-        onCancel={handleModalCancel}
+        onSuccess={onEditSuccess}
+        onCancel={onEditCancel}
       />
     </View>
   );
@@ -242,7 +332,7 @@ const ItemList = memo<ItemListProps>(({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   searchBar: {
     flexDirection: 'row',
@@ -336,12 +426,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   emptyText: {
     fontSize: 16,
     color: '#666',
-    textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
@@ -481,10 +569,89 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderRadius: 20,
   },
+  itemCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginVertical: 6,
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  itemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  itemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  noImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  itemDetailsContainer: {
+    flex: 1,
+  },
+  itemMetadata: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  itemCategory: {
+    fontSize: 12,
+    color: '#666',
+  },
+  itemContainer: {
+    fontSize: 12,
+    color: '#666',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusAvailable: {
+    backgroundColor: '#e6f4ea',
+  },
+  statusSold: {
+    backgroundColor: '#fce8e6',
+  },
+  itemNameText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  itemPriceText: {
+    fontSize: 14,
+    color: '#2196f3',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
 });
 
 ItemList.displayName = 'ItemList';
 ItemRow.displayName = 'ItemRow';
-LoadingSkeleton.displayName = 'LoadingSkeleton';
+ItemLoadingSkeleton.displayName = 'ItemLoadingSkeleton';
 
 export default withPerformanceMonitoring(ItemList, 'ItemList');

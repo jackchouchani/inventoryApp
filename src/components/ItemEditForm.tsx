@@ -9,6 +9,7 @@ import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
+import { photoService } from '../services/photoService';
 
 interface ItemEditFormProps {
     item: Item;
@@ -24,7 +25,7 @@ interface EditedItemForm {
     purchasePrice: string;
     sellingPrice: string;
     status: 'available' | 'sold';
-    photoUri?: string;
+    photo_storage_url?: string;
     containerId?: number | null;
     categoryId?: number;
     qrCode: string;
@@ -92,7 +93,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         purchasePrice: item.purchasePrice.toString(),
         sellingPrice: item.sellingPrice.toString(),
         status: item.status,
-        photoUri: item.photoUri,
+        photo_storage_url: item.photo_storage_url,
         containerId: item.containerId,
         categoryId: item.categoryId,
         qrCode: item.qrCode
@@ -113,13 +114,34 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 return;
             }
 
+            // Gérer la photo
+            let photoUrl = editedItem.photo_storage_url;
+            if (editedItem.photo_storage_url && !editedItem.photo_storage_url.includes('supabase.co')) {
+                try {
+                    photoUrl = await photoService.uploadPhoto(editedItem.photo_storage_url);
+                } catch (error) {
+                    console.error('Erreur lors de l\'upload de la photo:', error);
+                    Alert.alert('Erreur', 'Impossible d\'uploader la photo. Voulez-vous continuer sans photo ?');
+                    return;
+                }
+            }
+
+            // Si la photo a été supprimée
+            if (item.photo_storage_url && !editedItem.photo_storage_url) {
+                try {
+                    await photoService.deletePhoto(item.photo_storage_url);
+                } catch (error) {
+                    console.error('Erreur lors de la suppression de la photo:', error);
+                }
+            }
+
             const itemToUpdate: ItemUpdate = {
                 name: editedItem.name,
                 description: editedItem.description,
                 purchasePrice,
                 sellingPrice,
                 status: editedItem.status,
-                photoUri: editedItem.photoUri,
+                photo_storage_url: photoUrl,
                 containerId: editedItem.containerId,
                 categoryId: editedItem.categoryId,
                 qrCode: editedItem.qrCode
@@ -138,6 +160,10 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 
                 dispatch(updateItem(updatedItem));
                 
+                // Invalider les requêtes
+                queryClient.invalidateQueries({ queryKey: ['items'] });
+                queryClient.invalidateQueries({ queryKey: ['inventory'] });
+
                 if (onSuccess) onSuccess();
             } catch (error) {
                 console.error('Erreur lors de la mise à jour:', error);
@@ -147,7 +173,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
             console.error('Erreur lors de la mise à jour:', error);
             Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
         }
-    }, [editedItem, item, dispatch, onSuccess]);
+    }, [editedItem, item, dispatch, onSuccess, queryClient]);
 
     const handleDelete = useCallback(async () => {
         if (!item.id) return;
@@ -202,7 +228,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         });
 
         if (!result.canceled && result.assets[0]) {
-            setEditedItem(prev => ({ ...prev, photoUri: result.assets[0].uri }));
+            setEditedItem(prev => ({ ...prev, photo_storage_url: result.assets[0].uri }));
         }
     }, []);
 
@@ -258,13 +284,35 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                     </View>
                 </View>
 
-                <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                    {editedItem.photoUri ? (
-                        <Image source={{ uri: editedItem.photoUri }} style={styles.image} />
-                    ) : (
-                        <Text>Sélectionner une image</Text>
-                    )}
-                </TouchableOpacity>
+                <View style={styles.formSection}>
+                    <Text style={styles.sectionTitle}>Photo</Text>
+                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                        {editedItem.photo_storage_url ? (
+                            <>
+                                <Image 
+                                    source={{ uri: editedItem.photo_storage_url }} 
+                                    style={styles.image}
+                                    resizeMode="cover"
+                                    onError={(error) => {
+                                        console.error('Erreur de chargement de l\'image:', error.nativeEvent.error);
+                                        console.log('URL de l\'image:', editedItem.photo_storage_url);
+                                    }}
+                                    onLoad={() => console.log('Image chargée avec succès:', editedItem.photo_storage_url)}
+                                />
+                                <TouchableOpacity 
+                                    style={styles.deletePhotoButton}
+                                    onPress={() => setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }))}
+                                >
+                                    <MaterialIcons name="delete" size={24} color="#FF3B30" />
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <View style={styles.imagePlaceholder}>
+                                <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
 
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Container</Text>
@@ -516,6 +564,28 @@ const styles = StyleSheet.create({
     noDataText: {
         color: '#666',
         fontStyle: 'italic',
+        padding: 8,
+    },
+    formSection: {
+        marginBottom: 16,
+    },
+    imagePlaceholder: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        height: 200,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imagePlaceholderText: {
+        color: '#666',
+        fontStyle: 'italic',
+    },
+    deletePhotoButton: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        borderRadius: 20,
         padding: 8,
     },
 });

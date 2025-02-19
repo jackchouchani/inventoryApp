@@ -8,6 +8,7 @@ import { updateItem as updateItemAction } from '../../src/store/itemsActions';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { selectAllContainers } from '../../src/store/containersSlice';
+import type { Item } from '../../src/types/item';
 
 export default function StockScreen() {
   const [filter, setFilter] = useState('');
@@ -15,6 +16,7 @@ export default function StockScreen() {
   const [selectedContainer, setSelectedContainer] = useState<number | 'none' | undefined>(undefined);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'available' | 'sold'>('all');
   const [priceRange, setPriceRange] = useState<{ min?: number; max?: number }>({});
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   
   const dispatch = useDispatch();
   const categories = useSelector(selectAllCategories);
@@ -34,9 +36,8 @@ export default function StockScreen() {
     refetch();
   }, []);
 
-  const handleMarkAsSold = useCallback(async (itemId: number) => {
+  const handleMarkAsSold = useCallback(async (item: Item) => {
     try {
-      const item = items.find((i) => i.id === itemId);
       if (!item) return;
 
       const now = new Date().toISOString();
@@ -51,7 +52,7 @@ export default function StockScreen() {
       dispatch(updateItemAction(updateData));
 
       try {
-        await database.updateItem(itemId, updateData);
+        await database.updateItem(item.id, updateData);
         refetch();
       } catch (error) {
         // Rollback en cas d'erreur
@@ -63,11 +64,10 @@ export default function StockScreen() {
       console.error('Erreur:', error);
       Alert.alert('Erreur', 'Une erreur est survenue');
     }
-  }, [items, dispatch, refetch]);
+  }, [dispatch, refetch]);
 
-  const handleMarkAsAvailable = useCallback(async (itemId: number) => {
+  const handleMarkAsAvailable = useCallback(async (item: Item) => {
     try {
-      const item = items.find((i) => i.id === itemId);
       if (!item) return;
 
       const now = new Date().toISOString();
@@ -82,7 +82,7 @@ export default function StockScreen() {
       dispatch(updateItemAction(updateData));
 
       try {
-        await database.updateItem(itemId, updateData);
+        await database.updateItem(item.id, updateData);
         refetch();
       } catch (error) {
         // Rollback en cas d'erreur
@@ -94,7 +94,20 @@ export default function StockScreen() {
       console.error('Erreur:', error);
       Alert.alert('Erreur', 'Une erreur est survenue');
     }
-  }, [items, dispatch, refetch]);
+  }, [dispatch, refetch]);
+
+  const handleItemPress = useCallback((item: Item) => {
+    setSelectedItem(item);
+  }, []);
+
+  const handleEditSuccess = useCallback(() => {
+    setSelectedItem(null);
+    refetch();
+  }, [refetch]);
+
+  const handleEditCancel = useCallback(() => {
+    setSelectedItem(null);
+  }, []);
 
   if (error) {
     return (
@@ -118,9 +131,15 @@ export default function StockScreen() {
       
       <ItemList
         items={items}
+        onItemPress={handleItemPress}
         onMarkAsSold={handleMarkAsSold}
         onMarkAsAvailable={handleMarkAsAvailable}
         isLoading={isLoading}
+        categories={categories}
+        containers={containers}
+        selectedItem={selectedItem}
+        onEditSuccess={handleEditSuccess}
+        onEditCancel={handleEditCancel}
       />
     </View>
   );

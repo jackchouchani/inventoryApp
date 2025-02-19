@@ -5,7 +5,7 @@ export interface Item {
     purchasePrice: number;
     sellingPrice: number;
     status: 'available' | 'sold';
-    photoUri?: string;
+    photo_storage_url?: string;
     containerId?: number | null;
     categoryId?: number;
     qrCode: string;

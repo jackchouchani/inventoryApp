@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform, Modal, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
@@ -11,6 +11,38 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { useQueryClient } from '@tanstack/react-query';
 
+interface ConfirmationModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ visible, title, message, onConfirm, onCancel }) => (
+  <Modal
+    animationType="fade"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onCancel}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <Text style={styles.modalMessage}>{message}</Text>
+        <View style={styles.modalButtons}>
+          <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={onCancel}>
+            <Text style={styles.cancelButtonText}>Annuler</Text>
+          </Pressable>
+          <Pressable style={[styles.modalButton, styles.confirmButton]} onPress={onConfirm}>
+            <Text style={styles.confirmButtonText}>Confirmer</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
+
 const SettingsScreen = () => {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -18,6 +50,7 @@ const SettingsScreen = () => {
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
+  const [isResetModalVisible, setIsResetModalVisible] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -29,33 +62,49 @@ const SettingsScreen = () => {
   };
 
   const handleResetDatabase = async () => {
-    try {
+    if (Platform.OS === 'web') {
+      setIsResetModalVisible(true);
+    } else {
       Alert.alert(
         'Réinitialiser la base de données',
         'Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible.',
         [
-          { text: 'Annuler', style: 'cancel' },
+          {
+            text: 'Annuler',
+            style: 'cancel',
+          },
           {
             text: 'Réinitialiser',
             style: 'destructive',
-            onPress: async () => {
-              try {
-                await database.resetDatabase();
-                // Invalider tous les caches
-                await queryClient.invalidateQueries();
-                triggerRefresh();
-                Alert.alert('Succès', 'Base de données réinitialisée avec succès');
-              } catch (error) {
-                console.error('Erreur lors de la réinitialisation:', error);
-                Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
-              }
-            }
+            onPress: performReset
           }
-        ]
+        ],
+        { cancelable: false }
       );
+    }
+  };
+
+  const performReset = async () => {
+    console.log('Début de la réinitialisation');
+    try {
+      await database.resetDatabase();
+      console.log('Base de données réinitialisée avec succès');
+      await queryClient.invalidateQueries();
+      triggerRefresh();
+      if (Platform.OS === 'web') {
+        alert('Base de données réinitialisée avec succès');
+      } else {
+        Alert.alert('Succès', 'Base de données réinitialisée avec succès');
+      }
     } catch (error) {
       console.error('Erreur lors de la réinitialisation:', error);
-      Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
+      if (Platform.OS === 'web') {
+        alert('Impossible de réinitialiser la base de données');
+      } else {
+        Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
+      }
+    } finally {
+      setIsResetModalVisible(false);
     }
   };
 
@@ -200,6 +249,14 @@ const SettingsScreen = () => {
         <Text style={[styles.menuText, { color: '#FF3B30' }]}>Se déconnecter</Text>
         <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
+
+      <ConfirmationModal
+        visible={isResetModalVisible}
+        title="Réinitialiser la base de données"
+        message="Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible."
+        onConfirm={performReset}
+        onCancel={() => setIsResetModalVisible(false)}
+      />
     </View>
   );
 };
@@ -261,6 +318,50 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: '#666',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 20,
+    width: Platform.OS === 'web' ? '80%' : '90%',
+    maxWidth: 500,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  modalMessage: {
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+  },
+  confirmButton: {
+    backgroundColor: '#FF3B30',
+  },
+  cancelButtonText: {
+    color: '#666',
+  },
+  confirmButtonText: {
+    color: 'white',
   },
 });
 

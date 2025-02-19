@@ -9,6 +9,7 @@ import { addItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { MaterialIconName } from '../types/icons';
+import { photoService } from '../services/photoService';
 
 interface ItemFormProps {
     containers: Container[];
@@ -23,9 +24,9 @@ interface ItemFormState {
     purchasePrice: string;
     sellingPrice: string;
     status: 'available' | 'sold';
-    photoUri: string;
-    containerId?: number;
-    categoryId?: number;
+    photo_storage_url?: string;
+    containerId?: number | null;
+    categoryId?: number | null;
 }
 
 const INITIAL_STATE: ItemFormState = {
@@ -34,9 +35,9 @@ const INITIAL_STATE: ItemFormState = {
     purchasePrice: '',
     sellingPrice: '',
     status: 'available',
-    photoUri: '',
-    containerId: undefined,
-    categoryId: undefined,
+    photo_storage_url: undefined,
+    containerId: null,
+    categoryId: null,
 };
 
 const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, onCancel }) => {
@@ -81,6 +82,30 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 return;
             }
 
+            // Upload de la photo si présente
+            let photoUrl: string | undefined = undefined;
+            if (item.photo_storage_url) {
+                try {
+                    photoUrl = await photoService.uploadPhoto(item.photo_storage_url);
+                } catch (error) {
+                    console.error('Erreur lors de l\'upload de la photo:', error);
+                    const continueWithoutPhoto = await new Promise((resolve) => {
+                        Alert.alert(
+                            'Erreur',
+                            'Impossible d\'uploader la photo. Voulez-vous continuer sans photo ?',
+                            [
+                                { text: 'Non', onPress: () => resolve(false) },
+                                { text: 'Oui', onPress: () => resolve(true) }
+                            ]
+                        );
+                    });
+                    
+                    if (!continueWithoutPhoto) {
+                        return;
+                    }
+                }
+            }
+
             // Génération du QR code uniquement à la sauvegarde
             const qrCode = generateQRValue('ITEM');
 
@@ -91,8 +116,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 purchasePrice,
                 sellingPrice,
                 status: 'available',
-                photoUri: item.photoUri,
-                containerId: item.containerId,
+                photo_storage_url: photoUrl,
+                containerId: item.containerId || null,
                 categoryId: item.categoryId,
                 qrCode
             });
@@ -105,18 +130,18 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 purchasePrice,
                 sellingPrice,
                 status: 'available' as const,
-                photoUri: item.photoUri,
-                containerId: item.containerId,
+                photo_storage_url: photoUrl,
+                containerId: item.containerId || null,
                 categoryId: item.categoryId,
                 qrCode,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
-            // Mise à jour du store Redux avec l'action creator appropriée
+            // Mise à jour du store Redux
             dispatch(addItem(newItem));
 
-            // Invalider les requêtes pour forcer le rechargement
+            // Invalider les requêtes
             queryClient.invalidateQueries({ queryKey: ['items'] });
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
@@ -132,14 +157,14 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
     const pickImage = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: 'images',
                 allowsEditing: true,
                 aspect: [4, 3],
                 quality: 0.8,
             });
 
             if (!result.canceled && result.assets[0]) {
-                setItem(prev => ({ ...prev, photoUri: result.assets[0].uri }));
+                setItem(prev => ({ ...prev, photo_storage_url: result.assets[0].uri }));
             }
         } catch (error) {
             console.error('Erreur lors de la sélection de l\'image:', error);
@@ -221,8 +246,16 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
                     <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                        {item.photoUri ? (
-                            <Image source={{ uri: item.photoUri }} style={styles.image} />
+                        {item.photo_storage_url ? (
+                            <>
+                                <Image source={{ uri: item.photo_storage_url }} style={styles.image} />
+                                <TouchableOpacity 
+                                    style={styles.deletePhotoButton}
+                                    onPress={() => setItem(prev => ({ ...prev, photo_storage_url: undefined }))}
+                                >
+                                    <MaterialIcons name="delete" size={24} color="#FF3B30" />
+                                </TouchableOpacity>
+                            </>
                         ) : (
                             <View style={styles.imagePlaceholder}>
                                 <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
@@ -439,6 +472,23 @@ const styles = StyleSheet.create({
     },
     containerIcon: {
         marginRight: 8,
+    },
+    deletePhotoButton: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderRadius: 20,
+        padding: 8,
+        zIndex: 1,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
 });
 
