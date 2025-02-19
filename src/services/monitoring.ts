@@ -47,7 +47,11 @@ interface PerformanceMetric {
   name: string;
   duration: number;
   timestamp: number;
-  metadata?: Record<string, any>;
+  table_name?: string;
+  record_id?: number;
+  operation?: string;
+  old_data?: any;
+  new_data?: any;
 }
 
 interface ErrorEvent {
@@ -55,7 +59,11 @@ interface ErrorEvent {
   message: string;
   stack?: string;
   timestamp: number;
-  metadata?: Record<string, any>;
+  table_name?: string;
+  record_id?: number;
+  operation?: string;
+  old_data?: any;
+  new_data?: any;
 }
 
 interface PerformanceThresholds {
@@ -136,7 +144,11 @@ class MonitoringService {
       message: `${metric.type}: ${metric.name}`,
       data: {
         duration: metric.duration,
-        ...metric.metadata,
+        table_name: metric.table_name,
+        record_id: metric.record_id,
+        operation: metric.operation,
+        old_data: metric.old_data,
+        new_data: metric.new_data
       },
       level: 'info',
     });
@@ -176,7 +188,11 @@ class MonitoringService {
               name: metric.name,
               duration: metric.duration,
               threshold,
-              metadata: metric.metadata,
+              table_name: metric.table_name,
+              record_id: metric.record_id,
+              operation: metric.operation,
+              old_data: metric.old_data,
+              new_data: metric.new_data
             },
           },
         }
@@ -197,11 +213,19 @@ class MonitoringService {
       contexts: {
         error: {
           type: error.type,
-          metadata: error.metadata,
+          table_name: error.table_name,
+          record_id: error.record_id,
+          operation: error.operation,
+          old_data: error.old_data,
+          new_data: error.new_data
         },
       },
       extra: {
-        ...error.metadata,
+        table_name: error.table_name,
+        record_id: error.record_id,
+        operation: error.operation,
+        old_data: error.old_data,
+        new_data: error.new_data
       },
     });
 
@@ -438,11 +462,130 @@ export function usePerformanceMonitoring(componentName: string) {
       monitoring.recordMetric({
         type: 'RENDER',
         name: componentName,
-        duration,
-        metadata: {
-          timestamp: Date.now()
-        }
+        duration
       });
     }
   };
-} 
+}
+
+export const logPerformanceMetric = (metric: Omit<PerformanceMetric, "timestamp">) => {
+  const timestamp = Date.now();
+  const fullMetric = {
+    ...metric,
+    timestamp,
+  };
+  
+  // Log to console in development
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Performance Metric:', fullMetric);
+  }
+  
+  // Send to monitoring service
+  monitoring.recordMetric(fullMetric);
+};
+
+export const logError = (error: Omit<ErrorEvent, "timestamp">) => {
+  const timestamp = Date.now();
+  const fullError = {
+    ...error,
+    timestamp,
+  };
+
+  // Log to console in development
+  if (process.env.NODE_ENV === 'development') {
+    console.error('Error Event:', fullError);
+  }
+
+  // Send to monitoring service
+  monitoring.recordError(fullError);
+};
+
+const recordMetric = (metric: PerformanceMetric) => {
+  try {
+    const metricData = {
+      type: metric.type,
+      name: metric.name,
+      duration: metric.duration,
+      timestamp: metric.timestamp,
+      table_name: metric.table_name,
+      record_id: metric.record_id,
+      operation: metric.operation,
+      old_data: metric.old_data,
+      new_data: metric.new_data
+    };
+
+    // Send to monitoring service
+    monitoring.recordMetric(metricData);
+  } catch (error) {
+    console.error('Failed to record metric:', error);
+  }
+};
+
+const recordError = (error: ErrorEvent) => {
+  try {
+    const errorData = {
+      type: error.type,
+      message: error.message,
+      stack: error.stack,
+      timestamp: error.timestamp,
+      table_name: error.table_name,
+      record_id: error.record_id,
+      operation: error.operation,
+      old_data: error.old_data,
+      new_data: error.new_data
+    };
+
+    // Send to monitoring service
+    monitoring.recordError(errorData);
+  } catch (err) {
+    console.error('Failed to record error:', err);
+  }
+};
+
+export const measurePerformance = async <T>(
+  type: PerformanceMetric['type'],
+  name: string,
+  operation: () => Promise<T>,
+  context?: {
+    table_name?: string;
+    record_id?: number;
+    operation?: string;
+    old_data?: any;
+    new_data?: any;
+  }
+): Promise<T> => {
+  const start = performance.now();
+  try {
+    const result = await operation();
+    const duration = performance.now() - start;
+    
+    logPerformanceMetric({
+      type,
+      name,
+      duration,
+      table_name: context?.table_name,
+      record_id: context?.record_id,
+      operation: context?.operation,
+      old_data: context?.old_data,
+      new_data: context?.new_data
+    });
+    
+    return result;
+  } catch (err) {
+    const duration = performance.now() - start;
+    const error = err as Error;
+    
+    logError({
+      type: 'API_ERROR',
+      message: error.message || 'Unknown error occurred',
+      stack: error.stack,
+      table_name: context?.table_name,
+      record_id: context?.record_id,
+      operation: context?.operation,
+      old_data: context?.old_data,
+      new_data: context?.new_data
+    });
+    
+    throw error;
+  }
+}; 

@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { create } from 'zustand';
 
 const {
   S3_URL,
@@ -14,6 +15,23 @@ const {
   }
 } = SUPABASE_CONFIG;
 
+const MAX_SIZE_BYTES = 500 * 1024; // 500KB en bytes
+
+// Store pour gérer l'état de compression
+interface CompressionState {
+  isCompressing: boolean;
+  progress: number;
+  setCompressing: (isCompressing: boolean) => void;
+  setProgress: (progress: number) => void;
+}
+
+export const useCompressionStore = create<CompressionState>((set) => ({
+  isCompressing: false,
+  progress: 0,
+  setCompressing: (isCompressing) => set({ isCompressing }),
+  setProgress: (progress) => set({ progress })
+}));
+
 /**
  * Compresse une image de manière optimale avec une approche progressive :
  * 1. Commence avec une haute qualité et grande taille
@@ -21,41 +39,61 @@ const {
  * 3. Utilise JPEG pour une meilleure compression
  */
 const compressImage = async (uri: string): Promise<string> => {
-  const qualitySteps = [0.8, 0.6, 0.4];
-  const resizeSteps = [1024, 800, 600];
+  const { setCompressing, setProgress } = useCompressionStore.getState();
+  setCompressing(true);
+  setProgress(0);
   
-  let resultUri = uri;
-
-  for (let i = 0; i < qualitySteps.length; i++) {
-    try {
+  // On définit une largeur cible fixe pour la redimension, par exemple 1024 pixels
+  const targetWidth = 1024;
+  
+  // On utilise une recherche binaire sur le paramètre de compression (entre 0.1 et 1.0)
+  let low = 0.1;
+  let high = 1.0;
+  let candidateUri = uri;
+  const maxIterations = 6;
+  
+  try {
+    for (let i = 0; i < maxIterations; i++) {
+      const mid = (low + high) / 2;
+      setProgress((i / maxIterations) * 100);
+      console.log(`Tentative de compression - itération ${i + 1}/${maxIterations} avec qualité = ${mid}`);
+      
       const result = await manipulateAsync(
-        resultUri,
-        [{ resize: { width: resizeSteps[i] } }],
-        {
-          compress: qualitySteps[i],
-          format: SaveFormat.JPEG
-        }
+        uri,
+        [{ resize: { width: targetWidth } }],
+        { compress: mid, format: SaveFormat.JPEG }
       );
-
+      
       if (Platform.OS !== 'web') {
         const fileInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
-        if ('size' in fileInfo && fileInfo.size <= MAX_FILE_SIZE) {
-          return result.uri;
+        if (fileInfo.exists && fileInfo.size !== undefined) {
+          console.log(`Taille après compression: ${fileInfo.size / 1024} KB`);
+          if (fileInfo.size > MAX_SIZE_BYTES) {
+            // Le fichier est trop volumineux, il faut réduire la qualité
+            high = mid;
+          } else {
+            // Le fichier est sous la limite, on garde ce candidat et on tente d'améliorer la qualité
+            candidateUri = result.uri;
+            low = mid;
+          }
+        } else {
+          candidateUri = result.uri;
+          break;
         }
-      } else if (i > 0) { // Sur le web, on s'arrête après la deuxième tentative
-        return result.uri;
-      }
-      
-      resultUri = result.uri;
-    } catch (error) {
-      console.error(`Échec de la compression étape ${i+1}:`, error);
-      if (i > 0) { // Si on a au moins une version compressée, on la retourne
-        return resultUri;
+      } else {
+        // Pour le web, on ne peut pas vérifier la taille, on utilise le résultat actuel
+        candidateUri = result.uri;
+        break;
       }
     }
+    setProgress(100);
+    return candidateUri;
+  } catch (error) {
+    console.error('Erreur lors de la compression avec recherche binaire:', error);
+    throw error;
+  } finally {
+    setCompressing(false);
   }
-
-  return resultUri;
 };
 
 class PhotoService {
@@ -92,6 +130,7 @@ class PhotoService {
 
   // Ajouter un cache local pour les URLs signées
   private static urlCache: Map<string, { url: string; expiry: number }> = new Map();
+  private static pendingRequests: Map<string, Promise<string>> = new Map();
 
   static async getImageUrlWithCache(filename: string): Promise<string> {
     const now = Date.now();
@@ -102,16 +141,34 @@ class PhotoService {
       return cached.url;
     }
 
-    // Générer une nouvelle URL signée
-    const signedUrl = await this.getImageUrl(filename);
-    
-    // Mettre en cache avec une expiration de 1 heure
-    this.urlCache.set(filename, {
-      url: signedUrl,
-      expiry: now + 3600000
-    });
+    // Si une requête est déjà en cours pour cette image, retourner la promesse existante
+    const pendingRequest = this.pendingRequests.get(filename);
+    if (pendingRequest) {
+      return pendingRequest;
+    }
 
-    return signedUrl;
+    // Créer une nouvelle requête
+    const requestPromise = (async () => {
+      try {
+        const signedUrl = await this.getImageUrl(filename);
+        
+        // Mettre en cache avec une expiration de 1 heure
+        this.urlCache.set(filename, {
+          url: signedUrl,
+          expiry: now + 3600000
+        });
+
+        return signedUrl;
+      } finally {
+        // Nettoyer la requête en cours une fois terminée
+        this.pendingRequests.delete(filename);
+      }
+    })();
+
+    // Stocker la requête en cours
+    this.pendingRequests.set(filename, requestPromise);
+
+    return requestPromise;
   }
 
   static async uploadPhoto(uri: string): Promise<string> {
@@ -257,3 +314,4 @@ class PhotoService {
 }
 
 export const photoService = PhotoService;
+

@@ -1,48 +1,51 @@
 import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
-import { Buffer } from 'buffer';
 
 export const ID_TYPES = {
   ITEM: 'ART',
   CONTAINER: 'CONT'
 } as const;
 
-export type IdType = keyof typeof ID_TYPES;
+type IdType = keyof typeof ID_TYPES;
 
-// Génère un UUID en Base64 URL-safe
-const generateBase64UUID = (): string => {
-  const uuid = uuidv4();
-  const cleanUuid = uuid.replace(/-/g, '');
-  const buffer = Buffer.from(cleanUuid, 'hex');
-  return buffer.toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+// Fonction pour générer un code aléatoire court
+const generateShortCode = (): string => {
+  // Utilise une combinaison de lettres et chiffres (base36) pour avoir des codes courts
+  // Exclut les caractères ambigus (0/O, 1/I/l)
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let result = '';
+  // 4 caractères donnent 32^4 = 1,048,576 possibilités, largement suffisant pour 1000 articles
+  for (let i = 0; i < 4; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 };
 
-// Génère un identifiant pour un article ou un container
+// Génère un identifiant court pour un article ou un container
 export const generateId = (type: IdType): string => {
   const prefix = ID_TYPES[type];
-  const base64Id = generateBase64UUID();
-  return `${prefix}_${base64Id}`;
+  const shortCode = generateShortCode();
+  return `${prefix}_${shortCode}`;
 };
 
 // Parse un identifiant
-export const parseId = (id: string): { type: IdType | null, value: string | null } => {
-  const regex = /^(ART|CONT)_([A-Za-z0-9\-_]{22,24})$/;
+export const parseId = (id: string): { type: IdType | null; value: string | null } => {
+  const regex = /^(ART|CONT)_([23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4})$/;
   const match = id.match(regex);
 
   if (!match) {
     return { type: null, value: null };
   }
 
-  const type = Object.entries(ID_TYPES)
-    .find(([_, prefix]) => prefix === match[1])?.[0] as IdType;
+  try {
+    const prefix = match[1];
+    const value = match[2];
 
-  return {
-    type,
-    value: match[2]
-  };
+    const type = Object.entries(ID_TYPES).find(([_, p]) => p === prefix)?.[0] as IdType;
+    return { type, value };
+  } catch (error) {
+    console.error('Erreur lors du parsing de l\'identifiant:', error);
+    return { type: null, value: null };
+  }
 };
 
 // Vérifie si un identifiant est valide

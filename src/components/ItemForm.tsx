@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
 import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
-import { generateQRValue } from '../utils/qrCodeManager';
+import { generateId } from '../utils/identifierManager';
 import { addItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -107,7 +107,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
             }
 
             // Génération du QR code uniquement à la sauvegarde
-            const qrCode = generateQRValue('ITEM');
+            const qrCode = generateId('ITEM');
 
             // Ajout dans la base de données
             const newItemId = await database.addItem({

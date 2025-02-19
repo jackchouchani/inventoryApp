@@ -2,17 +2,14 @@ import { supabase } from '../config/supabase';
 
 export interface AuditLog {
   id?: number;
-  user_id: string;
-  action: string;
-  metadata: {
-    table?: string;
-    schema?: string;
-    operation: string;
-    record_id?: number;
+  table_name: string;
+  operation: string;
+  record_id: number;
+  changes: {
     old_data?: any;
     new_data?: any;
-    arguments?: any[];
   };
+  user_id: string;
   created_at: string;
 }
 
@@ -26,15 +23,14 @@ export const logService = {
     const { error } = await supabase
       .from('audit_logs')
       .insert({
-        user_id: user.data.user.id,
-        action,
-        metadata: {
-          operation: action,
-          record_id: data.result?.id,
+        table_name: 'items',
+        operation: action,
+        record_id: data.result?.id,
+        changes: {
           old_data: data.arguments[1], // Pour les updates, le deuxième argument est souvent les anciennes données
-          new_data: data.result,
-          arguments: data.arguments
+          new_data: data.result
         },
+        user_id: user.data.user.id,
         created_at: new Date().toISOString()
       });
 

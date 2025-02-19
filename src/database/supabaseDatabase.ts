@@ -256,7 +256,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       console.log('Données de l\'item à créer:', itemData);
       console.log('URL de la photo à sauvegarder:', item.photo_storage_url);
 
-      // Insérer l'item dans la table items
+      // Insérer l'item dans la base de données
       const { data, error } = await supabase
         .from('items')
         .insert(itemData)
@@ -267,14 +267,14 @@ export class SupabaseDatabase implements DatabaseInterface {
         console.error('Erreur lors de la création de l\'item:', error);
         throw error;
       }
-      
+
       if (!data) {
-        throw new Error('Aucune donnée retournée après la création de l\'item');
+        throw new Error('Aucun ID retourné après la création de l\'item');
       }
 
-      console.log('Item créé avec succès, ID:', data.id);
       return data.id;
     } catch (error) {
+      console.error('Erreur lors de la création de l\'item:', error);
       console.error('Erreur complète dans addItem:', error);
       throw error;
     }

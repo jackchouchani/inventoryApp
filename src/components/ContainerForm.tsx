@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator,
 import { Container } from '../database/database';
 import { theme } from '../utils/theme';
 import { QRCodeGenerator } from './QRCodeGenerator';
-import { generateQRValue } from '../utils/qrCodeManager';
+import { generateId } from '../utils/identifierManager';
 
 interface ContainerFormProps {
   initialData?: Container | null;
@@ -16,7 +16,7 @@ export const ContainerForm: React.FC<ContainerFormProps> = ({ initialData, onSub
     number: initialData?.number?.toString() || '',
     name: initialData?.name || '',
     description: initialData?.description || '',
-    qrCode: initialData?.qrCode || generateQRValue('CONTAINER')
+    qrCode: initialData?.qrCode || generateId('CONTAINER')
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);

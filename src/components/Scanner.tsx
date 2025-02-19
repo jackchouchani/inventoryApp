@@ -381,7 +381,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 style={StyleSheet.absoluteFill}
                 onBarcodeScanned={scanState.isScanning ? handleScan : undefined}
                 barcodeScannerSettings={{
-                    barcodeTypes: ['qr'],
+                    barcodeTypes: scanState.mode === 'container' ? ['qr'] : ['qr', 'datamatrix'],
                 }}
             >
                 <View style={styles.overlay}>

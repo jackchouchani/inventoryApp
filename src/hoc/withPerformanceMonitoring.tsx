@@ -16,9 +16,10 @@ export function withPerformanceMonitoring<P extends object>(
             type: 'RENDER',
             name: componentName,
             duration: renderDuration,
-            metadata: {
-              props: Object.keys(props)
-            }
+            table_name: 'components',
+            record_id: 0,
+            operation: 'RENDER',
+            new_data: { props: Object.keys(props) }
           });
         }
       };
@@ -35,10 +36,10 @@ export function withPerformanceMonitoring<P extends object>(
         type: 'RENDER_ERROR',
         message: error instanceof Error ? error.message : 'Unknown render error',
         stack: error instanceof Error ? error.stack : undefined,
-        metadata: {
-          componentName,
-          props: Object.keys(props)
-        }
+        table_name: 'components',
+        record_id: 0,
+        operation: 'RENDER_ERROR',
+        new_data: { props: Object.keys(props) }
       });
       throw error;
     }
@@ -65,9 +66,10 @@ export function MonitorPerformance(componentName?: string) {
           type: 'RENDER',
           name: displayName,
           duration: renderDuration,
-          metadata: {
-            props: Object.keys(this.props)
-          }
+          table_name: 'components',
+          record_id: 0,
+          operation: 'MOUNT',
+          new_data: { props: Object.keys(this.props) }
         });
       }
 
@@ -80,10 +82,11 @@ export function MonitorPerformance(componentName?: string) {
           type: 'RENDER',
           name: displayName,
           duration: renderDuration,
-          metadata: {
-            props: Object.keys(this.props),
-            prevProps: Object.keys(prevProps)
-          }
+          table_name: 'components',
+          record_id: 0,
+          operation: 'UPDATE',
+          old_data: { props: Object.keys(prevProps) },
+          new_data: { props: Object.keys(this.props) }
         });
       }
 
@@ -96,10 +99,10 @@ export function MonitorPerformance(componentName?: string) {
             type: 'RENDER_ERROR',
             message: error instanceof Error ? error.message : 'Unknown render error',
             stack: error instanceof Error ? error.stack : undefined,
-            metadata: {
-              componentName: displayName,
-              props: Object.keys(this.props)
-            }
+            table_name: 'components',
+            record_id: 0,
+            operation: 'RENDER_ERROR',
+            new_data: { props: Object.keys(this.props) }
           });
           throw error;
         }

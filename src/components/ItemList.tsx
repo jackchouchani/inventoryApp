@@ -164,32 +164,34 @@ const getStatusText = (status: 'available' | 'sold') => {
   }
 };
 
-const ItemListItem = memo(({ item, onPress, categories, containers }: {
-  item: Item;
-  onPress?: (item: Item) => void;
-  categories: Category[];
-  containers: Container[];
-}) => {
-  const [imageUrl, setImageUrl] = useState<string | undefined>(item.photo_storage_url);
+const ItemListItemComponent: React.FC<{ item: Item; onPress?: (item: Item) => void; categories: Category[]; containers: Container[]; }> = ({ item, onPress, categories, containers }) => {
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
-    if (item.photo_storage_url && item.photo_storage_url.includes('/images/')) {
-      const filename = item.photo_storage_url.split('/images/').pop();
-      if (filename) {
-        setImageError(false);
-        photoService.getImageUrlWithCache(filename) 
-          .then(url => {
-            console.log(`URL signée générée pour l'item ${item.id}:`, url);
-            setImageUrl(url);
-          })
-          .catch(error => {
-            console.error(`Erreur lors de la génération de l'URL signée pour l'item ${item.id}:`, error);
-            setImageError(true);
-          });
+    if (item.photo_storage_url) {
+      if (item.photo_storage_url.includes('supabase.co')) {
+        setImageUrl(item.photo_storage_url);
+      } else if (item.photo_storage_url.includes('/images/')) {
+        const filename = item.photo_storage_url.split('/images/').pop();
+        if (filename) {
+          setImageError(false);
+          photoService.getImageUrlWithCache(filename)
+            .then(url => {
+              setImageUrl(url);
+            })
+            .catch(error => {
+              console.error(`Erreur lors de la génération de l'URL signée pour l'item ${item.id}:`, error);
+              setImageError(true);
+            });
+        }
       }
+    } else {
+      setImageUrl(undefined);
     }
   }, [item.photo_storage_url, item.id]);
+
+  const imageSource = useMemo(() => imageUrl ? { uri: imageUrl } : undefined, [imageUrl]);
 
   return (
     <TouchableOpacity 
@@ -197,19 +199,12 @@ const ItemListItem = memo(({ item, onPress, categories, containers }: {
       onPress={() => onPress?.(item)}
     >
       <View style={styles.itemContent}>
-        {imageUrl && !imageError ? (
+        {imageSource && !imageError ? (
           <Image 
-            source={{ uri: imageUrl }} 
+            source={imageSource}
             style={styles.itemImage}
             resizeMode="cover"
-            onError={(error) => {
-              console.error(`Erreur de chargement de l'image pour l'item ${item.id}:`, error.nativeEvent.error);
-              setImageError(true);
-            }}
-            onLoad={() => {
-              console.log(`Image chargée avec succès pour l'item ${item.id}`);
-              setImageError(false);
-            }}
+            onError={() => { setImageError(true); }}
           />
         ) : (
           <View style={styles.noImagePlaceholder}>
@@ -225,20 +220,27 @@ const ItemListItem = memo(({ item, onPress, categories, containers }: {
           <Text style={styles.itemPriceText}>{item.sellingPrice}€</Text>
           <View style={styles.itemMetadata}>
             <Text style={styles.itemCategory}>
-              {categories.find((c: Category) => c.id === item.categoryId)?.name || 'Sans catégorie'}
+              {categories.find((c: any) => c.id === item.categoryId)?.name || 'Sans catégorie'}
             </Text>
             {item.containerId && (
               <Text style={styles.itemContainer}>
-                📦 {containers.find((c: Container) => c.id === item.containerId)?.name || 'Container inconnu'}
+                📦 {containers.find((c: any) => c.id === item.containerId)?.name || 'Container inconnu'}
               </Text>
             )}
           </View>
-          <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
-            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
+          <View style={[styles.statusBadge, item.status === 'sold' ? styles.statusSold : styles.statusAvailable]}>
+            <Text style={styles.statusText}>{item.status === 'sold' ? 'Vendu' : 'Disponible'}</Text>
           </View>
         </View>
       </View>
     </TouchableOpacity>
+  );
+};
+
+const ItemListItem = memo(ItemListItemComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.item.photo_storage_url === nextProps.item.photo_storage_url &&
+    prevProps.item.updatedAt === nextProps.item.updatedAt
   );
 });
 
@@ -275,7 +277,10 @@ const ItemList: React.FC<ItemListProps> = memo(({
         type: 'RENDER',
         name: 'ItemList',
         duration: renderDuration,
-        metadata: {
+        table_name: 'items',
+        record_id: 0,
+        operation: 'LIST_RENDER',
+        new_data: {
           itemCount: items.length,
           isLoading
         }
@@ -317,7 +322,7 @@ const ItemList: React.FC<ItemListProps> = memo(({
       <FlatList
         data={items}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id?.toString() || ''}
+        keyExtractor={(item) => `${item.id}-${item.updatedAt}`}
       />
 
       <ItemListModal

@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { handleLabelGenerationError, handleLabelPrintingError, handleQRCodeError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/errorHandler';
 import { useRouter } from 'expo-router';
-import QRCode from 'qrcode';
+import { QRCodeGenerator } from './QRCodeGenerator';
+import { DataMatrixGenerator } from './DataMatrixGenerator';
+import { parseId } from '../utils/identifierManager';
+import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 interface LabelGeneratorProps {
@@ -24,27 +27,79 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const router = useRouter();
+  const codeContainerRef = useRef<HTMLDivElement>(null);
+  const [currentCode, setCurrentCode] = useState<{ data: string; size: number } | null>(null);
 
   const handleComplete = () => {
     if (Platform.OS === 'web') {
-      // Sur le web, on laisse le comportement par défaut
       onComplete();
     } else {
-      // Sur mobile, on redirige vers l'écran d'accueil
       router.replace('/(tabs)');
     }
   };
 
-  const generateQRCode = async (data: string): Promise<string> => {
+  const generateCode = async (data: string): Promise<string> => {
     try {
       if (!data) {
-        throw new Error('QR code data is required');
+        throw new Error('Code data is required');
       }
-      return await QRCode.toDataURL(data);
+
+      const size = compact ? 150 : 200;
+      
+      return new Promise<string>((resolve, reject) => {
+        setCurrentCode({ data, size });
+
+        // Attendre que le composant soit rendu
+        setTimeout(async () => {
+          try {
+            if (!codeContainerRef.current) {
+              throw new Error('Code container reference not available');
+            }
+
+            const canvas = await html2canvas(codeContainerRef.current, {
+              backgroundColor: '#ffffff',
+              scale: 2,
+              logging: false,
+              useCORS: true,
+              allowTaint: true
+            });
+
+            resolve(canvas.toDataURL('image/png'));
+          } catch (error) {
+            console.error('Erreur lors de la capture du code:', error);
+            reject(error);
+          } finally {
+            setCurrentCode(null);
+          }
+        }, 200); // Augmenter le délai pour s'assurer que le rendu est complet
+      });
     } catch (error) {
-      throw handleQRCodeError(error as Error, 'LabelGenerator.generateQRCode');
+      throw handleQRCodeError(error as Error, 'LabelGenerator.generateCode');
     }
   };
+
+  const CodeRenderer = useCallback(() => {
+    if (!currentCode) return null;
+
+    const { type } = parseId(currentCode.data);
+    const CodeComponent = type === 'ITEM' ? DataMatrixGenerator : QRCodeGenerator;
+
+    return (
+      <div style={{ 
+        width: currentCode.size, 
+        height: currentCode.size, 
+        backgroundColor: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <CodeComponent
+          value={currentCode.data}
+          size={currentCode.size}
+        />
+      </div>
+    );
+  }, [currentCode]);
 
   const generateContainerPDF = async () => {
     try {
@@ -84,7 +139,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         doc.text(`#${item.number}`, labelWidth/2, margin + 40, { align: 'center' });
 
         // QR Code (grand format)
-        const qrCodeBase64 = await generateQRCode(item.qrCode);
+        const qrCodeBase64 = await generateCode(item.qrCode);
         const qrSize = 70; // 7cm
         doc.addImage(qrCodeBase64, 'PNG',
           (labelWidth - qrSize) / 2,
@@ -174,22 +229,22 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         // Description
         if (item.description) {
           doc.setFontSize(8);
-          const description = doc.splitTextToSize(item.description, labelWidth - 15);
+          const description = doc.splitTextToSize(item.description, labelWidth - 20);
           doc.text(description, posX + 2, posY + 11);
         }
         
         // Prix
         if (item.sellingPrice !== undefined) {
           doc.setFontSize(13);
-          doc.text(`${item.sellingPrice}€`, posX + labelWidth/2, posY + labelHeight - 5, { align: 'center' });
+          doc.text(`${item.sellingPrice}€`, posX + 15, posY + labelHeight - 5, { align: 'center' });
         }
         
-        // QR Code
-        const qrCodeBase64 = await generateQRCode(item.qrCode);
-        doc.addImage(qrCodeBase64, 'PNG', 
-          posX + labelWidth - 13,
-          posY + labelHeight - 14,
-          12, 12);
+        // DataMatrix pour les articles
+        const codeBase64 = await generateCode(item.qrCode);
+        doc.addImage(codeBase64, 'PNG', 
+          posX + labelWidth - 20,
+          posY + labelHeight - 20,
+          18, 18);
 
         setProgress(((i + 1) / items.length) * 100);
       }
@@ -207,6 +262,19 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
+      <div 
+        ref={codeContainerRef}
+        style={{ 
+          position: 'absolute', 
+          opacity: 1, 
+          zIndex: -1, 
+          backgroundColor: 'white',
+          overflow: 'hidden'
+        }}
+      >
+        <CodeRenderer />
+      </div>
+
       {!compact && <Text style={styles.title}>Génération des étiquettes</Text>}
       
       {loading && (

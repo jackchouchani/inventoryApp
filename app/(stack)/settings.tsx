@@ -6,7 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../src/store/store';
 import { database, createContainer, createItem } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { generateQRValue } from 'utils/qrCodeManager';
+import { generateId } from '../../src/utils/identifierManager';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { useQueryClient } from '@tanstack/react-query';
