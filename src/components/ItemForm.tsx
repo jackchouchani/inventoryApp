@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
-import * as ImagePicker from 'expo-image-picker';
 import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { generateId } from '../utils/identifierManager';
@@ -10,6 +9,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { MaterialIconName } from '../types/icons';
 import { photoService } from '../services/photoService';
+import { ImagePicker } from './ImagePicker';
+import * as Sentry from '@sentry/react-native';
+import AdaptiveImage from './AdaptiveImage';
 
 interface ItemFormProps {
     containers: Container[];
@@ -154,22 +156,15 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
         }
     };
 
-    const pickImage = async () => {
-        try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'images',
-                allowsEditing: true,
-                aspect: [4, 3],
-                quality: 0.8,
-            });
+    const handleImageSelected = (uri: string) => {
+        setItem(prev => ({ ...prev, photo_storage_url: uri }));
+    };
 
-            if (!result.canceled && result.assets[0]) {
-                setItem(prev => ({ ...prev, photo_storage_url: result.assets[0].uri }));
-            }
-        } catch (error) {
-            console.error('Erreur lors de la sélection de l\'image:', error);
-            Alert.alert('Erreur', 'Impossible de charger l\'image');
-        }
+    const handleImageError = (error: string) => {
+        Sentry.captureException(new Error(error), {
+            tags: { context: 'item_form_image_picker' }
+        });
+        Alert.alert('Erreur', error);
     };
 
     const handleContainerSelect = useCallback((containerId: number | undefined) => {
@@ -245,23 +240,33 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
-                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                    <View style={styles.imageContainer}>
                         {item.photo_storage_url ? (
-                            <>
-                                <Image source={{ uri: item.photo_storage_url }} style={styles.image} />
+                            <View style={styles.imageWrapper}>
+                                <AdaptiveImage
+                                    uri={item.photo_storage_url}
+                                    style={styles.image}
+                                    resizeMode="cover"
+                                    placeholder={
+                                        <View style={styles.placeholderContainer}>
+                                            <MaterialIcons name="image" size={24} color="#ccc" />
+                                        </View>
+                                    }
+                                />
                                 <TouchableOpacity 
                                     style={styles.deletePhotoButton}
                                     onPress={() => setItem(prev => ({ ...prev, photo_storage_url: undefined }))}
                                 >
                                     <MaterialIcons name="delete" size={24} color="#FF3B30" />
                                 </TouchableOpacity>
-                            </>
-                        ) : (
-                            <View style={styles.imagePlaceholder}>
-                                <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
                             </View>
+                        ) : (
+                            <ImagePicker
+                                onImageSelected={handleImageSelected}
+                                onError={handleImageError}
+                            />
                         )}
-                    </TouchableOpacity>
+                    </View>
                 </View>
 
                 <View style={styles.formSection}>
@@ -416,26 +421,38 @@ const styles = StyleSheet.create({
     priceInput: {
         marginBottom: 0,
     },
-    imageButton: {
+    imageContainer: {
+        marginTop: 8,
+    },
+    imageWrapper: {
         aspectRatio: 4/3,
         borderRadius: 8,
         overflow: 'hidden',
         backgroundColor: '#f8f9fa',
         borderWidth: 1,
         borderColor: '#e5e5e5',
+        position: 'relative',
     },
     image: {
         width: '100%',
         height: '100%',
     },
-    imagePlaceholder: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    imagePlaceholderText: {
-        color: '#666',
-        fontSize: 16,
+    deletePhotoButton: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderRadius: 20,
+        padding: 8,
+        zIndex: 1,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
     optionsScrollView: {
         marginBottom: 0,
@@ -473,22 +490,10 @@ const styles = StyleSheet.create({
     containerIcon: {
         marginRight: 8,
     },
-    deletePhotoButton: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderRadius: 20,
-        padding: 8,
-        zIndex: 1,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+    placeholderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

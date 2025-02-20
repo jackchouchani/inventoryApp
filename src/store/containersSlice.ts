@@ -73,6 +73,47 @@ export const selectContainerWithItems = createSelector(
   }
 );
 
+// Nouveau sélecteur pour le compte d'items par container
+export const selectContainersWithItemsCount = createSelector(
+  [selectAllContainers, (state: RootState) => state.items],
+  (containers, itemsState) => {
+    const itemsArray = Object.values(itemsState.entities || {});
+    return containers.map(container => ({
+      ...container,
+      itemCount: itemsArray.filter(item => item?.containerId === container.id).length
+    }));
+  }
+);
+
+// Sélecteur pour obtenir les containers avec des statistiques
+export const selectContainersWithStats = createSelector(
+  [selectAllContainers, (state: RootState) => state.items],
+  (containers, itemsState) => {
+    const itemsArray = Object.values(itemsState.entities || {});
+    return containers.map(container => {
+      const containerItems = itemsArray.filter(item => item?.containerId === container.id);
+      const totalValue = containerItems.reduce((sum, item) => sum + (item?.sellingPrice || 0), 0);
+      const availableItems = containerItems.filter(item => item?.status === 'available').length;
+      const soldItems = containerItems.filter(item => item?.status === 'sold').length;
+
+      return {
+        ...container,
+        itemCount: containerItems.length,
+        totalValue,
+        availableItems,
+        soldItems
+      };
+    });
+  }
+);
+
+// Sélecteur pour obtenir un container spécifique avec ses statistiques
+export const selectContainerWithStats = createSelector(
+  [selectContainersWithStats, (state: RootState, containerId: number) => containerId],
+  (containersWithStats, containerId) => 
+    containersWithStats.find(container => container.id === containerId)
+);
+
 export const selectContainerByNumber = createSelector(
   [selectAllContainers, (state, number: number) => number],
   (containers, number) => containers.find(

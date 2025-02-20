@@ -104,6 +104,9 @@ interface UseInventoryDataParams {
   status?: 'available' | 'sold';
   minPrice?: number;
   maxPrice?: number;
+  staleTime?: number;
+  gcTime?: number;
+  enabled?: boolean;
 }
 
 interface UseInventoryDataResult {
@@ -188,9 +191,9 @@ export const useInventoryData = (params: UseInventoryDataParams = {}): UseInvent
         throw error;
       }
     },
-    staleTime: 1000 * 60, // 1 minute
-    gcTime: 1000 * 60 * 5, // 5 minutes
-    enabled: true, // S'assurer que la requête est activée par défaut
+    staleTime: params.staleTime || 1000 * 60, // 1 minute
+    gcTime: params.gcTime || 1000 * 60 * 5, // 5 minutes
+    enabled: params.enabled === undefined || params.enabled, // S'assurer que la requête est activée par défaut
     refetchOnMount: true, // Recharger les données au montage
     refetchOnWindowFocus: true // Recharger les données quand la fenêtre reprend le focus
   });

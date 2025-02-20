@@ -1,5 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import Toast from 'react-native-toast-message';
+import * as Sentry from '@sentry/react-native';
 
 // Types d'erreurs
 export enum ErrorType {
@@ -129,45 +130,55 @@ const genericErrors: Record<ErrorType, ErrorMessage> = {
 };
 
 // Options pour le logging des erreurs
-interface LogOptions {
+interface ErrorOptions {
   context?: string;
   additionalData?: Record<string, any>;
   shouldNotify?: boolean;
   customMessage?: ErrorMessage;
 }
 
+export interface ErrorDetails {
+  message: string;
+  type: ErrorType;
+  code?: string;
+  context?: string;
+}
+
 // Fonction principale de gestion des erreurs
 export const handleError = (
-  error: Error | PostgrestError | unknown,
+  error: unknown,
   type: ErrorType = ErrorType.UNKNOWN,
-  options: LogOptions = { shouldNotify: true }
-) => {
-  const { context, additionalData, shouldNotify = true } = options;
-  
-  // Extraction du message d'erreur
+  options: ErrorOptions = {}
+): ErrorDetails => {
+  const { context, additionalData, shouldNotify = true, customMessage } = options;
+
+  // Log l'erreur dans Sentry
+  Sentry.captureException(error, {
+    extra: {
+      type,
+      context,
+      additionalData
+    },
+  });
+
+  // Log l'erreur en console en développement
+  if (__DEV__) {
+    console.error(`Error in ${context} (${type}):`, error);
+  }
+
+  // Déterminer le message d'erreur
   let errorMessage: ErrorMessage;
   
-  if (error instanceof Error) {
-    // Gestion des erreurs Supabase
-    if ('code' in error && typeof error.code === 'string') {
-      errorMessage = supabaseErrorCodes[error.code] || genericErrors[type];
-    } else {
-      errorMessage = genericErrors[type];
-    }
+  if (customMessage) {
+    errorMessage = customMessage;
+  } else if (error instanceof Error && 'code' in error) {
+    const code = (error as any).code;
+    errorMessage = supabaseErrorCodes[code] || genericErrors[type];
   } else {
     errorMessage = genericErrors[type];
   }
 
-  // Log de l'erreur
-  console.error('Error occurred:', {
-    type,
-    context,
-    error,
-    additionalData,
-    timestamp: new Date().toISOString()
-  });
-
-  // Notification à l'utilisateur si nécessaire
+  // Afficher un toast si nécessaire
   if (shouldNotify) {
     Toast.show({
       type: 'error',
@@ -180,63 +191,31 @@ export const handleError = (
   }
 
   return {
-    message: errorMessage,
+    message: errorMessage.fr,
     type,
-    originalError: error
+    code: error instanceof Error && 'code' in error ? (error as any).code : undefined,
+    context
   };
 };
 
-// Fonction utilitaire pour les erreurs de validation
+// Fonctions utilitaires spécialisées
 export const handleValidationError = (message: string, context?: string) => {
-  return handleError(
-    new Error(message),
-    ErrorType.VALIDATION,
-    {
-      context,
-      shouldNotify: true
-    }
-  );
+  return handleError(new Error(message), ErrorType.VALIDATION, { context });
 };
 
-// Fonction utilitaire pour les erreurs d'authentification
 export const handleAuthError = (error: Error, context?: string) => {
-  return handleError(
-    error,
-    ErrorType.AUTHENTICATION,
-    {
-      context,
-      shouldNotify: true
-    }
-  );
+  return handleError(error, ErrorType.AUTHENTICATION, { context });
 };
 
-// Fonction utilitaire pour les erreurs de base de données
 export const handleDatabaseError = (error: PostgrestError | Error, context?: string) => {
-  return handleError(
-    error,
-    ErrorType.DATABASE,
-    {
-      context,
-      shouldNotify: true
-    }
-  );
+  return handleError(error, ErrorType.DATABASE, { context });
 };
 
-// Fonction utilitaire pour les erreurs de scan
 export const handleScannerError = (error: Error, context?: string) => {
-  return handleError(
-    error,
-    ErrorType.SCANNER,
-    {
-      context,
-      shouldNotify: true
-    }
-  );
+  return handleError(error, ErrorType.SCANNER, { context });
 };
 
-// Fonction utilitaire pour les erreurs de réseau
 export const handleNetworkError = (error: Error, context?: string) => {
-  // Détecter le type d'erreur réseau
   let networkErrorType = 'network/unknown';
   
   if (error.message.includes('timeout')) {

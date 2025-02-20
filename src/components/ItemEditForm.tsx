@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
-import * as ImagePicker from 'expo-image-picker';
 import { database, Category, Container } from '../database/database';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,6 +9,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import { photoService } from '../services/photoService';
+import { ImagePicker } from './ImagePicker';
+import * as Sentry from '@sentry/react-native';
+import AdaptiveImage from './AdaptiveImage';
 
 interface ItemEditFormProps {
     item: Item;
@@ -219,17 +221,15 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         );
     }, [item, dispatch, queryClient, onCancel]);
 
-    const pickImage = useCallback(async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 1,
-        });
+    const handleImageSelected = useCallback((uri: string) => {
+        setEditedItem(prev => ({ ...prev, photo_storage_url: uri }));
+    }, []);
 
-        if (!result.canceled && result.assets[0]) {
-            setEditedItem(prev => ({ ...prev, photo_storage_url: result.assets[0].uri }));
-        }
+    const handleImageError = useCallback((error: string) => {
+        Sentry.captureException(new Error(error), {
+            tags: { context: 'item_edit_form_image_picker' }
+        });
+        Alert.alert('Erreur', error);
     }, []);
 
     return (
@@ -286,18 +286,18 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
-                    <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                    <View style={styles.imageContainer}>
                         {editedItem.photo_storage_url ? (
-                            <>
-                                <Image 
-                                    source={{ uri: editedItem.photo_storage_url }} 
+                            <View style={styles.imageWrapper}>
+                                <AdaptiveImage 
+                                    uri={editedItem.photo_storage_url}
                                     style={styles.image}
                                     resizeMode="cover"
-                                    onError={(error) => {
-                                        console.error('Erreur de chargement de l\'image:', error.nativeEvent.error);
-                                        console.log('URL de l\'image:', editedItem.photo_storage_url);
-                                    }}
-                                    onLoad={() => console.log('Image chargée avec succès:', editedItem.photo_storage_url)}
+                                    placeholder={
+                                        <View style={styles.placeholderContainer}>
+                                            <MaterialIcons name="image" size={24} color="#ccc" />
+                                        </View>
+                                    }
                                 />
                                 <TouchableOpacity 
                                     style={styles.deletePhotoButton}
@@ -305,13 +305,14 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                                 >
                                     <MaterialIcons name="delete" size={24} color="#FF3B30" />
                                 </TouchableOpacity>
-                            </>
-                        ) : (
-                            <View style={styles.imagePlaceholder}>
-                                <Text style={styles.imagePlaceholderText}>Ajouter une photo</Text>
                             </View>
+                        ) : (
+                            <ImagePicker
+                                onImageSelected={handleImageSelected}
+                                onError={handleImageError}
+                            />
                         )}
-                    </TouchableOpacity>
+                    </View>
                 </View>
 
                 <View style={styles.sectionContainer}>
@@ -444,19 +445,17 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginBottom: 0,
     },
-    imageButton: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        height: 200,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+    imageContainer: {
+        marginTop: 8,
+    },
+    imageWrapper: {
+        aspectRatio: 4/3,
+        borderRadius: 8,
         overflow: 'hidden',
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        position: 'relative',
     },
     image: {
         width: '100%',
@@ -569,17 +568,6 @@ const styles = StyleSheet.create({
     formSection: {
         marginBottom: 16,
     },
-    imagePlaceholder: {
-        backgroundColor: '#f8f9fa',
-        borderRadius: 12,
-        height: 200,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    imagePlaceholderText: {
-        color: '#666',
-        fontStyle: 'italic',
-    },
     deletePhotoButton: {
         position: 'absolute',
         top: 8,
@@ -587,5 +575,10 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.8)',
         borderRadius: 20,
         padding: 8,
+    },
+    placeholderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

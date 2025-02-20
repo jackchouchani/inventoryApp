@@ -13,34 +13,51 @@ Sentry.init({
   environment: __DEV__ ? 'development' : 'production',
   tracesSampleRate: __DEV__ ? 1.0 : 0.2,
   enableNative: Platform.OS !== 'web',
-  maxBreadcrumbs: 50,
-  maxValueLength: 1000,
+  maxBreadcrumbs: 25, // Réduire pour limiter la taille (au lieu de 50)
+  maxValueLength: 250, // Réduire encore plus (au lieu de 1000)
   normalizeDepth: 3,
   beforeSend(event, hint) {
-    // Ne pas envoyer les événements en mode développement
-    if (__DEV__) {
-      return null;
+    if (__DEV__) return null; // Ignorer en mode dev
+
+    if (!event || (!event.exception && !event.message)) return null; // Filtrer les événements vides
+
+    // Limiter la taille des contexts/extra
+    if (event.contexts?.performance) {
+      event.contexts.performance = truncateObject(event.contexts.performance, 100); // Limiter à 100 caractères par champ
+    }
+    if (event.extra) {
+      event.extra = truncateObject(event.extra, 100);
     }
 
-    // Vérifier si l'événement est valide
-    if (!event || !event.exception) {
-      return null;
-    }
-
-    // Ajouter des informations supplémentaires
-    Sentry.setTag('platform', Platform.OS);
-    Sentry.setTag('appVersion', Application.nativeApplicationVersion || 'unknown');
-    Sentry.setTag('buildNumber', Application.nativeBuildVersion || 'unknown');
-
-    // Nettoyer les données sensibles si nécessaire
-    if (event.request && event.request.headers) {
+    // Supprimer les headers sensibles
+    if (event.request?.headers) {
       delete event.request.headers.Authorization;
       delete event.request.headers.authorization;
     }
 
+    Sentry.setTag('platform', Platform.OS);
+    Sentry.setTag('appVersion', Application.nativeApplicationVersion || 'unknown');
+    Sentry.setTag('buildNumber', Application.nativeBuildVersion || 'unknown');
+
     return event;
-  }
+  },
 });
+
+// Fonction utilitaire pour tronquer les objets
+function truncateObject(obj: any, maxLength: number): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const result: any = {};
+  for (const key in obj) {
+    if (typeof obj[key] === 'string' && obj[key].length > maxLength) {
+      result[key] = obj[key].substring(0, maxLength) + '...';
+    } else if (typeof obj[key] === 'object') {
+      result[key] = truncateObject(obj[key], maxLength);
+    } else {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
 
 interface PerformanceMetric {
   type: 'RENDER' | 'API_CALL' | 'DB_OPERATION' | 'IMAGE_LOAD';

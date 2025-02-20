@@ -1,34 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   FlatList,
-  Modal,
-  TextInput,
   StyleSheet,
   Alert,
   ActivityIndicator,
   SafeAreaView,
   Platform
 } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../../src/store/store';
-import { deleteCategory, editCategory, setCategories, addNewCategory } from '../../src/store/categorySlice';
-import { database } from '../../src/database/database';
 import type { Category } from '../../src/types/category';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { MaterialIconName } from '../../src/types/icons';
 import { useRouter } from 'expo-router';
-import { selectAllCategories } from '../../src/store/categorySlice';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useCategories } from '../../src/hooks/useCategories';
 
 const CategoryScreen = () => {
-  const dispatch = useDispatch();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const categories = useSelector((state: RootState) => selectAllCategories(state)) as Category[];
   const router = useRouter();
+  const { categories, isLoading, error, handleDeleteCategory } = useCategories();
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -36,24 +27,6 @@ const CategoryScreen = () => {
       opacity: withSpring(1)
     };
   });
-
-  const loadCategories = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const loadedCategories = await database.getCategories();
-      dispatch(setCategories(loadedCategories));
-    } catch (error) {
-      console.error('Erreur lors du chargement des catégories:', error);
-      setError('Erreur lors du chargement des catégories');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [dispatch]);
-
-  useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
 
   const handleAddCategory = () => {
     router.push('/(stack)/add-category');
@@ -66,7 +39,7 @@ const CategoryScreen = () => {
     });
   };
 
-  const handleDeleteCategory = async (category: Category) => {
+  const confirmDeleteCategory = (category: Category) => {
     Alert.alert(
       'Supprimer la catégorie',
       `Êtes-vous sûr de vouloir supprimer "${category.name}" ?`,
@@ -77,19 +50,9 @@ const CategoryScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              if (!category.id) {
-                throw new Error('ID de catégorie manquant');
-              }
-              // Mise à jour optimiste
-              dispatch(deleteCategory(category.id));
-
-              // Suppression dans la base de données
-              await database.deleteCategory(category.id);
+              await handleDeleteCategory(category.id);
             } catch (error) {
-              console.error('Erreur:', error);
               Alert.alert('Erreur', 'Impossible de supprimer la catégorie');
-              // Recharger les catégories en cas d'erreur
-              loadCategories();
             }
           }
         }
@@ -125,7 +88,7 @@ const CategoryScreen = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteCategory(item)}
+          onPress={() => confirmDeleteCategory(item)}
         >
           <MaterialIcons name="delete" size={20} color="#FF3B30" />
         </TouchableOpacity>

@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Item } from '../types/item';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
+import AdaptiveImage from './AdaptiveImage';
 
 export interface ItemCardProps {
   item: Item;
@@ -64,53 +65,40 @@ const ItemCard: React.FC<ItemCardProps> = ({
         fadeAnimation?.fadeStyle
       ]}
     >
-      <TouchableOpacity
+      <TouchableOpacity 
+        style={styles.cardContent}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={styles.touchable}
       >
-        <View style={styles.content}>
-          {item.photo_storage_url && (
-            <Image 
-              source={{ uri: item.photo_storage_url }} 
-              style={styles.image}
+        <View style={styles.imageContainer}>
+          {item.photo_storage_url ? (
+            <AdaptiveImage
+              uri={item.photo_storage_url}
+              style={styles.itemImage}
               resizeMode="cover"
+              defaultWidth={80}
+              defaultHeight={80}
+              placeholder={
+                <View style={styles.placeholderContainer}>
+                  <MaterialIcons name="image" size={24} color="#ccc" />
+                </View>
+              }
             />
-          )}
-          <View style={styles.info}>
-            <Text style={styles.name}>{item.name}</Text>
-            {item.description && (
-              <Text style={styles.description} numberOfLines={2}>
-                {item.description}
-              </Text>
-            )}
-            <View style={styles.footer}>
-              <View style={styles.priceContainer}>
-                <Text style={styles.price}>
-                  {item.sellingPrice !== undefined && item.sellingPrice !== null
-                    ? `${Number(item.sellingPrice).toFixed(2)} €`
-                    : 'Prix non défini'}
-                </Text>
-              </View>
-              {item.status === 'available' ? (
-                <TouchableOpacity 
-                  style={[styles.statusButton, styles.soldButton]}
-                  onPress={handleMarkAsSold}
-                >
-                  <MaterialIcons name="local-offer" size={16} color="#fff" />
-                  <Text style={styles.statusButtonText}>Vendu</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity 
-                  style={[styles.statusButton, styles.availableButton]}
-                  onPress={handleMarkAsAvailable}
-                >
-                  <MaterialIcons name="refresh" size={16} color="#fff" />
-                  <Text style={styles.statusButtonText}>En stock</Text>
-                </TouchableOpacity>
-              )}
+          ) : (
+            <View style={[styles.itemImage, styles.noImageContainer]}>
+              <MaterialIcons name="image-not-supported" size={24} color="#ccc" />
             </View>
+          )}
+        </View>
+
+        <View style={styles.detailsContainer}>
+          <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+          <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+          <View style={[styles.statusBadge, item.status === 'sold' ? styles.soldBadge : styles.availableBadge]}>
+            <Text style={styles.statusText}>
+              {item.status === 'sold' ? 'Vendu' : 'Disponible'}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -120,78 +108,73 @@ const ItemCard: React.FC<ItemCardProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    marginVertical: 8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
     marginHorizontal: 16,
+    marginVertical: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  touchable: {
-    width: '100%',
-  },
-  content: {
+  cardContent: {
     flexDirection: 'row',
     padding: 12,
   },
-  image: {
-    width: 80,
-    height: 80,
-    borderRadius: 4,
+  imageContainer: {
     marginRight: 12,
   },
-  info: {
+  itemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  noImageContainer: {
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  detailsContainer: {
     flex: 1,
     justifyContent: 'space-between',
   },
-  name: {
+  itemName: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 4,
   },
-  description: {
-    fontSize: 14,
-    color: '#666',
+  itemPrice: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#2196f3',
     marginBottom: 8,
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  availableBadge: {
+    backgroundColor: '#e8f5e9',
   },
-  price: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#2196F3',
+  soldBadge: {
+    backgroundColor: '#ffebee',
   },
-  statusButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginTop: 8,
-    gap: 6,
-  },
-  soldButton: {
-    backgroundColor: '#F44336',
-  },
-  availableButton: {
-    backgroundColor: '#4CAF50',
-  },
-  statusButtonText: {
-    color: '#fff',
+  statusText: {
     fontSize: 12,
     fontWeight: '500',
   },
 });
 
-export default ItemCard; 
+ItemCard.displayName = 'ItemCard';
+
+export default React.memo(ItemCard); 

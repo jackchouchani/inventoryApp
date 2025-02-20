@@ -1,12 +1,11 @@
-import { MaterialIconName } from './icons';
 
 export interface Category {
     id: number;
     name: string;
     description?: string;
-    icon?: MaterialIconName;
-    createdAt: string;
-    updatedAt: string;
+    icon?: string;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export type CategoryInput = Omit<Category, 'id' | 'createdAt' | 'updatedAt'>;

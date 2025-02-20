@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Platform, View, Text, ActivityIndicator, StyleSheet } from "react-native";
-import { Slot, useSegments, useRouter } from "expo-router";
+import { Slot, useSegments, useRouter, Stack } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
@@ -8,6 +8,11 @@ import { supabase } from "../src/config/supabase";
 import Toast, { BaseToast, ErrorToast, BaseToastProps } from 'react-native-toast-message';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../src/config/queryClient';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import { NetworkErrorBoundary } from '../src/components/NetworkErrorBoundary';
+import * as Sentry from '@sentry/react-native';
+import { subscribeToNetworkChanges } from '../src/utils/networkCheck';
+import { useTheme } from '@/hooks/useTheme';
 
 // Configuration personnalisée des toasts
 const toastConfig = {
@@ -59,9 +64,17 @@ function AuthenticationGuard() {
   return <Slot />;
 }
 
+// Initialisation de Sentry
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enableAutoSessionTracking: true,
+  sessionTrackingIntervalMillis: 30000,
+});
+
 export default function RootLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     const initApp = async () => {
@@ -79,6 +92,23 @@ export default function RootLayout() {
     initApp();
   }, []);
 
+  useEffect(() => {
+    // Surveillance des changements de connexion réseau
+    const unsubscribe = subscribeToNetworkChanges((isConnected) => {
+      if (!isConnected) {
+        Sentry.addBreadcrumb({
+          category: 'network',
+          message: 'Perte de connexion réseau',
+          level: 'warning',
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   if (isLoading && Platform.OS !== 'web') {
     return (
       <View style={styles.container}>
@@ -90,16 +120,33 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Provider store={store}>
-        <AuthProvider>
-          <View style={styles.rootContainer}>
-            <AuthenticationGuard />
-          </View>
-        </AuthProvider>
-        <Toast config={toastConfig} />
-      </Provider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <NetworkErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <Provider store={store}>
+            <AuthProvider>
+              <Stack
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: theme.colors.card,
+                  },
+                  headerTintColor: theme.colors.text,
+                  headerTitleStyle: {
+                    color: theme.colors.text,
+                  },
+                  contentStyle: {
+                    backgroundColor: theme.colors.background,
+                  },
+                }}
+              >
+                <AuthenticationGuard />
+              </Stack>
+            </AuthProvider>
+            <Toast config={toastConfig} />
+          </Provider>
+        </QueryClientProvider>
+      </NetworkErrorBoundary>
+    </ErrorBoundary>
   );
 }
 

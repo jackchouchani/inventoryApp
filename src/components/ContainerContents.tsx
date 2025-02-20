@@ -1,16 +1,31 @@
-import React, { useState, useCallback } from 'react';
-import { View, FlatList, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Item } from '../database/types';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, FlatList, Text, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { Item } from '../types/item';
 import { useInventoryData } from '../hooks/useInventoryData';
-import { ItemCard } from './ItemCard';
+import ItemCard from './ItemCard';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { useTheme } from '../hooks/useTheme';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { handleError } from '../utils/errorHandler';
+import { ErrorType } from '../utils/errorHandler';
+
+const PAGE_SIZE = 25;
 
 interface ContainerContentsProps {
   containerId: number;
+  onItemPress?: (item: Item) => void;
+  onRefresh?: () => Promise<void>;
 }
 
-export const ContainerContents: React.FC<ContainerContentsProps> = ({ containerId }) => {
+export const ContainerContents: React.FC<ContainerContentsProps> = React.memo(({ 
+  containerId,
+  onItemPress,
+  onRefresh 
+}) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 25;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const theme = useTheme();
+  const { isConnected } = useNetworkStatus();
 
   const {
     items,
@@ -18,47 +33,76 @@ export const ContainerContents: React.FC<ContainerContentsProps> = ({ containerI
     error,
     hasMore,
     totalCount,
-    fetchNextPage
+    fetchNextPage,
+    refetch
   } = useInventoryData({
     containerId,
-    page: currentPage,
-    pageSize: PAGE_SIZE
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 15, // 15 minutes
+    enabled: isConnected
   });
 
   const handleLoadMore = useCallback(async () => {
-    if (hasMore && !isLoading) {
-      setCurrentPage(prev => prev + 1);
-      await fetchNextPage();
+    try {
+      if (hasMore && !isLoading) {
+        setCurrentPage(prev => prev + 1);
+        await fetchNextPage();
+      }
+    } catch (err) {
+      handleError(err, ErrorType.UNKNOWN, {
+        context: 'ContainerContents.handleLoadMore'
+      });
     }
   }, [hasMore, isLoading, fetchNextPage]);
 
-  const renderFooter = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      await refetch();
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (err) {
+      handleError(err, ErrorType.UNKNOWN, {
+        context: 'ContainerContents.handleRefresh'
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch, onRefresh]);
+
+  const renderFooter = useMemo(() => {
     if (!hasMore) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#007AFF" />
+        <ActivityIndicator size="small" color={theme.colors.primary} />
       </View>
     );
-  }, [hasMore]);
+  }, [hasMore, theme.colors.primary]);
 
   const renderItem = useCallback(({ item }: { item: Item }) => (
-    <ItemCard item={item} />
-  ), []);
+    <ItemCard 
+      item={item}
+      onPress={() => onItemPress?.(item)}
+    />
+  ), [onItemPress]);
 
   const keyExtractor = useCallback((item: Item) => 
     item.id?.toString() || '', 
   []);
 
-  const renderEmptyComponent = useCallback(() => (
+  const renderEmptyComponent = useMemo(() => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>Aucun article dans ce container</Text>
+      <Text style={[styles.emptyText, { color: theme.colors.text }]}>
+        Aucun article dans ce container
+      </Text>
     </View>
-  ), []);
+  ), [theme.colors.text]);
 
   if (isLoading && items.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
@@ -66,36 +110,50 @@ export const ContainerContents: React.FC<ContainerContentsProps> = ({ containerI
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error.message}</Text>
+        <Text style={[styles.errorText, { color: theme.colors.error }]}>
+          {error.message}
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={renderFooter}
-        ListEmptyComponent={renderEmptyComponent}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={true}
-      />
-      {totalCount > 0 && (
-        <View style={styles.paginationInfo}>
-          <Text style={styles.paginationText}>
-            {`${items.length} sur ${totalCount} articles`}
-          </Text>
-        </View>
-      )}
-    </View>
+    <ErrorBoundary>
+      <View style={styles.container}>
+        <FlatList
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmptyComponent}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.colors.primary]}
+            />
+          }
+          contentContainerStyle={items.length === 0 && styles.emptyListContent}
+        />
+        {totalCount > 0 && (
+          <View style={[styles.paginationInfo, { backgroundColor: theme.colors.card }]}>
+            <Text style={[styles.paginationText, { color: theme.colors.text }]}>
+              {`${items.length} sur ${totalCount} articles`}
+            </Text>
+          </View>
+        )}
+      </View>
+    </ErrorBoundary>
   );
-};
+});
+
+ContainerContents.displayName = 'ContainerContents';
 
 const styles = StyleSheet.create({
   container: {
@@ -113,7 +171,6 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    color: '#FF3B30',
     textAlign: 'center',
   },
   emptyContainer: {
@@ -123,8 +180,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: {
-    color: '#8E8E93',
     fontSize: 16,
+  },
+  emptyListContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   footerLoader: {
     paddingVertical: 20,
@@ -132,12 +192,10 @@ const styles = StyleSheet.create({
   },
   paginationInfo: {
     padding: 10,
-    backgroundColor: '#f8f9fa',
     borderTopWidth: 1,
     borderTopColor: '#ddd',
   },
   paginationText: {
     textAlign: 'center',
-    color: '#8E8E93',
   },
 }); 

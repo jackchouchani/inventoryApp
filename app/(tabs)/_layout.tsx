@@ -4,13 +4,22 @@ import { TouchableOpacity, View, Platform } from "react-native";
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import { ProtectedRoute } from '../../src/components/ProtectedRoute';
+import { NetworkErrorBoundary } from '../../src/components/NetworkErrorBoundary';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function TabLayout() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const handleRetry = () => {
+    // Invalider tous les caches pour forcer un rechargement des données
+    queryClient.invalidateQueries();
+  };
 
   return (
     <ProtectedRoute>
-      <Tabs
+      <NetworkErrorBoundary onRetry={handleRetry}>
+        <Tabs
           screenOptions={{
             headerShown: true,
             headerTitle: "Comptoir Vintage",
@@ -49,55 +58,56 @@ export default function TabLayout() {
               height: 65,
             },
           }}
-      >
-        <Tabs.Screen
-          name="stock"
-          options={{
-            title: "Stock",
-            headerStyle: {
-              backgroundColor: '#f5f5f5',
-            },
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', marginRight: 15 }}>
-                <TouchableOpacity
-                  onPress={() => router.push('/(stack)/stats')}
-                  style={{ marginRight: 15 }}
-                >
-                  <MaterialIcons name="bar-chart" size={24} color="#007AFF" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => router.push('/(stack)/settings')}
-                >
-                  <MaterialIcons name="settings" size={24} color="#007AFF" />
-                </TouchableOpacity>
-              </View>
-            ),
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="inventory" size={size} color={color} />
-            ),
-          }}
-        />
-        
-        <Tabs.Screen
-          name="scan"
-          options={{
-            title: "Scanner",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="qr-code-scanner" size={size} color={color} />
-            ),
-          }}
-        />
-        
-        <Tabs.Screen
-          name="add"
-          options={{
-            title: "Ajouter",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="add-circle-outline" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tabs>
+        >
+          <Tabs.Screen
+            name="stock"
+            options={{
+              title: "Stock",
+              headerStyle: {
+                backgroundColor: '#f5f5f5',
+              },
+              headerRight: () => (
+                <View style={{ flexDirection: 'row', marginRight: 15 }}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(stack)/stats')}
+                    style={{ marginRight: 15 }}
+                  >
+                    <MaterialIcons name="bar-chart" size={24} color="#007AFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push('/(stack)/settings')}
+                  >
+                    <MaterialIcons name="settings" size={24} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
+              ),
+              tabBarIcon: ({ color, size }) => (
+                <MaterialIcons name="inventory" size={size} color={color} />
+              ),
+            }}
+          />
+          
+          <Tabs.Screen
+            name="scan"
+            options={{
+              title: "Scanner",
+              tabBarIcon: ({ color, size }) => (
+                <MaterialIcons name="qr-code-scanner" size={size} color={color} />
+              ),
+            }}
+          />
+          
+          <Tabs.Screen
+            name="add"
+            options={{
+              title: "Ajouter",
+              tabBarIcon: ({ color, size }) => (
+                <MaterialIcons name="add-circle-outline" size={size} color={color} />
+              ),
+            }}
+          />
+        </Tabs>
+      </NetworkErrorBoundary>
     </ProtectedRoute>
   );
 }

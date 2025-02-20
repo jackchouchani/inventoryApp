@@ -1,52 +1,96 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { Container, Item } from '../database/types';
+import { Container } from '../types/container';
+import { Item } from '../types/item';
+import { GridErrorBoundary } from './GridErrorBoundary';
 
 interface ContainerGridProps {
   containers: Container[];
   items: Item[];
   onContainerPress: (containerId: number) => void;
+  onRetry?: () => void;
 }
+
+const ContainerCard = React.memo(({ 
+  container, 
+  itemCount, 
+  onPress 
+}: { 
+  container: Container; 
+  itemCount: number; 
+  onPress: () => void;
+}) => (
+  <TouchableOpacity
+    style={styles.containerCard}
+    onPress={onPress}
+  >
+    <Text style={styles.containerName} numberOfLines={2}>
+      {container.name}
+    </Text>
+    <Text style={styles.containerNumber}>#{container.number}</Text>
+    <View style={styles.statsContainer}>
+      <Text style={styles.itemCount}>
+        {itemCount} article{itemCount > 1 ? 's' : ''}
+      </Text>
+    </View>
+  </TouchableOpacity>
+));
 
 export const ContainerGrid: React.FC<ContainerGridProps> = ({
   containers,
   items,
   onContainerPress,
+  onRetry,
 }) => {
-  const getItemCount = (containerId: number) => {
-    return items.filter(item => item.containerId === containerId).length;
-  };
+  const itemCountMap = useMemo(() => {
+    return items.reduce((acc, item) => {
+      if (item.containerId) {
+        acc[item.containerId] = (acc[item.containerId] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<number, number>);
+  }, [items]);
 
-  const renderItem = ({ item: container }: { item: Container }) => {
-    const itemCount = getItemCount(container.id!);
-    
+  const getItemCount = useCallback((containerId: number) => {
+    return itemCountMap[containerId] || 0;
+  }, [itemCountMap]);
+
+  const renderItem = useCallback(({ item: container }: { item: Container }) => {
+    const itemCount = getItemCount(container.id);
     return (
-      <TouchableOpacity
-        style={styles.containerCard}
+      <ContainerCard
+        container={container}
+        itemCount={itemCount}
         onPress={() => container.id && onContainerPress(container.id)}
-      >
-        <Text style={styles.containerName} numberOfLines={2}>
-          {container.name}
-        </Text>
-        <Text style={styles.containerNumber}>#{container.number}</Text>
-        <View style={styles.statsContainer}>
-          <Text style={styles.itemCount}>
-            {itemCount} article{itemCount > 1 ? 's' : ''}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      />
     );
-  };
+  }, [getItemCount, onContainerPress]);
 
-  return (
+  const keyExtractor = useCallback((item: Container) => 
+    `container-${item.id}`, []);
+
+  const gridContent = (
     <FlatList
       data={containers}
       renderItem={renderItem}
-      keyExtractor={(item) => `container-${item.id}`}
+      keyExtractor={keyExtractor}
       numColumns={2}
       contentContainerStyle={styles.grid}
       columnWrapperStyle={styles.row}
+      initialNumToRender={8}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      removeClippedSubviews={true}
     />
+  );
+
+  return (
+    <GridErrorBoundary
+      gridName="grille des conteneurs"
+      onRetry={onRetry}
+    >
+      {gridContent}
+    </GridErrorBoundary>
   );
 };
 
@@ -57,6 +101,7 @@ const CARD_WIDTH = (width - (CARD_MARGIN * 6)) / 2;
 const styles = StyleSheet.create({
   grid: {
     padding: CARD_MARGIN,
+    flexGrow: 1,
   },
   row: {
     justifyContent: 'space-between',
@@ -73,11 +118,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    minHeight: 120,
+    justifyContent: 'space-between',
+    borderColor: '#E5E5E5',
+    borderWidth: 1,
   },
   containerName: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
+    color: '#000',
   },
   containerNumber: {
     fontSize: 14,
@@ -88,9 +138,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 'auto',
   },
   itemCount: {
     fontSize: 14,
     color: '#007AFF',
+    fontWeight: '600',
   },
 });

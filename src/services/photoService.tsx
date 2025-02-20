@@ -16,20 +16,26 @@ const {
 } = SUPABASE_CONFIG;
 
 const MAX_SIZE_BYTES = 500 * 1024; // 500KB en bytes
+const TARGET_SIZE_BYTES = 500 * 1024; // 500KB
+const MAX_ALLOWED_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
 
 // Store pour gérer l'état de compression
 interface CompressionState {
   isCompressing: boolean;
   progress: number;
+  error: Error | null;
   setCompressing: (isCompressing: boolean) => void;
   setProgress: (progress: number) => void;
+  setError: (error: Error | null) => void;
 }
 
 export const useCompressionStore = create<CompressionState>((set) => ({
   isCompressing: false,
   progress: 0,
+  error: null,
   setCompressing: (isCompressing) => set({ isCompressing }),
-  setProgress: (progress) => set({ progress })
+  setProgress: (progress) => set({ progress }),
+  setError: (error) => set({ error })
 }));
 
 /**
@@ -42,64 +48,152 @@ const compressImage = async (uri: string): Promise<string> => {
   const { setCompressing, setProgress } = useCompressionStore.getState();
   setCompressing(true);
   setProgress(0);
-  
-  // On définit une largeur cible fixe pour la redimension, par exemple 1024 pixels
-  const targetWidth = 1024;
-  
-  // On utilise une recherche binaire sur le paramètre de compression (entre 0.1 et 1.0)
-  let low = 0.1;
-  let high = 1.0;
+
+  const TARGET_SIZE_BYTES = 500 * 1024; // 500KB cible
+  const MAX_ALLOWED_SIZE_BYTES = 2 * 1024 * 1024; // 2MB max (ajusté pour Supabase)
+  const MIN_QUALITY = 0.1;
+  const MAX_QUALITY = 0.95;
+  const MAX_ITERATIONS = 5;
+
   let candidateUri = uri;
-  const maxIterations = 6;
-  
+  let low = MIN_QUALITY;
+  let high = MAX_QUALITY;
+  let resizeWidth = 1280; // Largeur initiale
+  let bestCandidate = { uri: uri, size: Infinity };
+
   try {
-    for (let i = 0; i < maxIterations; i++) {
-      const mid = (low + high) / 2;
-      setProgress((i / maxIterations) * 100);
-      console.log(`Tentative de compression - itération ${i + 1}/${maxIterations} avec qualité = ${mid}`);
-      
-      const result = await manipulateAsync(
-        uri,
-        [{ resize: { width: targetWidth } }],
-        { compress: mid, format: SaveFormat.JPEG }
-      );
-      
-      if (Platform.OS !== 'web') {
-        const fileInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
-        if (fileInfo.exists && fileInfo.size !== undefined) {
-          console.log(`Taille après compression: ${fileInfo.size / 1024} KB`);
-          if (fileInfo.size > MAX_SIZE_BYTES) {
-            // Le fichier est trop volumineux, il faut réduire la qualité
-            high = mid;
-          } else {
-            // Le fichier est sous la limite, on garde ce candidat et on tente d'améliorer la qualité
-            candidateUri = result.uri;
-            low = mid;
-          }
-        } else {
-          candidateUri = result.uri;
-          break;
-        }
+    // Étape 1 : Vérifier la taille initiale
+    let initialSize: number;
+    if (Platform.OS === 'web') {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      initialSize = blob.size;
+      console.log(`Taille initiale (web): ${(initialSize / 1024).toFixed(2)} KB`);
+    } else {
+      const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
+      if (!fileInfo.exists) throw new Error('File does not exist');
+      initialSize = (fileInfo as any).size || 0;
+      console.log(`Taille initiale (mobile): ${(initialSize / 1024).toFixed(2)} KB`);
+    }
+
+    // Ajuster la largeur initiale en fonction de la taille
+    if (initialSize > 5 * 1024 * 1024) { // > 5MB
+      resizeWidth = 800; // Plus agressif pour les grandes images
+      console.log(`Image très grande, réduction initiale à ${resizeWidth}px`);
+    } else if (initialSize > 2 * 1024 * 1024) { // > 2MB
+      resizeWidth = 1024;
+      console.log(`Image grande, réduction initiale à ${resizeWidth}px`);
+    }
+
+    // Étape 2 : Compression avec recherche binaire
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const quality = (low + high) / 2;
+      setProgress((i / MAX_ITERATIONS) * 100);
+
+      console.log(`Compression - itération ${i + 1}/${MAX_ITERATIONS}, qualité = ${quality.toFixed(2)}, largeur = ${resizeWidth}px`);
+
+      let result;
+      if (Platform.OS === 'web') {
+        // Workaround pour le web : utiliser canvas si manipulateAsync échoue
+        result = await webCompressImage(candidateUri, resizeWidth, quality);
       } else {
-        // Pour le web, on ne peut pas vérifier la taille, on utilise le résultat actuel
+        result = await manipulateAsync(
+          candidateUri,
+          [{ resize: { width: resizeWidth } }],
+          { compress: quality, format: SaveFormat.JPEG }
+        );
+      }
+
+      let fileSize: number;
+      if (Platform.OS === 'web') {
+        const response = await fetch(result.uri);
+        const blob = await response.blob();
+        fileSize = blob.size;
+      } else {
+        const fileInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
+        if (!fileInfo.exists || fileInfo.size === undefined) {
+          throw new Error('Impossible de déterminer la taille du fichier');
+        }
+        fileSize = fileInfo.size;
+      }
+
+      console.log(`Taille obtenue: ${(fileSize / 1024).toFixed(2)} KB`);
+
+      // Vérifier si la compression est efficace
+      if (fileSize >= initialSize && i > 0) {
+        console.warn('Compression inefficace, réduction supplémentaire de la résolution');
+        resizeWidth = Math.max(400, resizeWidth * 0.7); // Réduction plus forte (30%)
+        low = MIN_QUALITY;
+        high = MAX_QUALITY;
+        continue;
+      }
+
+      // Mettre à jour le meilleur candidat
+      if (fileSize <= MAX_ALLOWED_SIZE_BYTES && Math.abs(fileSize - TARGET_SIZE_BYTES) < Math.abs(bestCandidate.size - TARGET_SIZE_BYTES)) {
+        bestCandidate = { uri: result.uri, size: fileSize };
+      }
+
+      // Ajuster les bornes
+      if (fileSize > MAX_ALLOWED_SIZE_BYTES) {
+        high = quality;
+      } else if (fileSize < TARGET_SIZE_BYTES && quality < MAX_QUALITY) {
+        low = quality;
+      } else {
         candidateUri = result.uri;
         break;
       }
+
+      initialSize = fileSize; // Mettre à jour pour la prochaine vérification
     }
+
+    // Sélectionner le meilleur candidat
+    if (bestCandidate.size <= MAX_ALLOWED_SIZE_BYTES && bestCandidate.size !== Infinity) {
+      candidateUri = bestCandidate.uri;
+      console.log(`Meilleur candidat sélectionné: ${(bestCandidate.size / 1024).toFixed(2)} KB`);
+    } else {
+      throw new Error(`Impossible de compresser l'image sous ${MAX_ALLOWED_SIZE_BYTES / 1024 / 1024}MB`);
+    }
+
     setProgress(100);
     return candidateUri;
   } catch (error) {
-    console.error('Erreur lors de la compression avec recherche binaire:', error);
+    console.error('Erreur lors de la compression:', error);
     throw error;
   } finally {
     setCompressing(false);
   }
 };
 
+// Fonction de compression alternative pour le web
+const webCompressImage = async (uri: string, width: number, quality: number): Promise<{ uri: string }> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error("Impossible de créer le contexte canvas"));
+        return;
+      }
+
+      // Maintenir le ratio d'aspect
+      const aspectRatio = img.height / img.width;
+      canvas.width = width;
+      canvas.height = width * aspectRatio;
+
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve({ uri: dataUrl });
+    };
+    img.onerror = () => reject(new Error("Erreur de chargement de l'image"));
+    img.src = uri;
+  });
+};
+
 class PhotoService {
   static async getImageUrl(filename: string): Promise<string> {
     try {
-      console.log('Génération de l\'URL signée pour:', filename);
+      console.log("Génération de l'URL signée pour:", filename);
       
       // Générer une URL signée qui expire après 1 heure
       const { data, error: signedUrlError } = await supabase.storage
@@ -107,22 +201,22 @@ class PhotoService {
         .createSignedUrl(filename, 3600);
       
       if (signedUrlError) {
-        console.error('Erreur lors de la génération de l\'URL signée:', signedUrlError);
+        console.error("Erreur lors de la génération de l'URL signée:", signedUrlError);
         throw signedUrlError;
       }
       
       if (!data?.signedUrl) {
-        console.error('URL signée non générée');
-        throw new Error('URL signée non générée');
+        console.error("URL signée non générée");
+        throw new Error("URL signée non générée");
       }
 
-      console.log('URL signée générée avec succès');
+      console.log("URL signée générée avec succès");
       return data.signedUrl;
     } catch (error) {
-      console.error('Erreur détaillée lors de la génération de l\'URL:', error);
+      console.error("Erreur détaillée lors de la génération de l'URL:", error);
       if (error instanceof Error) {
-        console.error('Message:', error.message);
-        console.error('Stack:', error.stack);
+        console.error("Message:", error.message);
+        console.error("Stack:", error.stack);
       }
       throw error;
     }
@@ -173,75 +267,62 @@ class PhotoService {
 
   static async uploadPhoto(uri: string): Promise<string> {
     try {
-      console.log('Début du processus d\'upload avec URI:', uri);
-      console.log('Bucket utilisé:', PHOTOS);
-      
-      // Vérifier si l'URI est déjà une URL Supabase Storage
+      console.log("Début de l'upload avec URI:", uri);
+  
       if (uri.includes(S3_URL)) {
-        console.log('URL déjà dans Supabase:', uri);
         const filename = uri.split('/').pop();
-        if (filename) {
-          return this.getImageUrlWithCache(filename);
-        }
+        if (filename) return this.getImageUrlWithCache(filename);
         return uri;
       }
-
-      // Compresser l'image
-      console.log('Compression de l\'image...');
+  
       const compressedUri = await compressImage(uri);
-      console.log('Image compressée avec succès');
-      
       const filename = `photo_${Date.now()}.jpg`;
-      console.log('Nom du fichier généré:', filename);
-      
+  
+      let blob: Blob;
       if (Platform.OS === 'web') {
-        console.log('Upload depuis le web...');
         const response = await fetch(compressedUri);
-        const blob = await response.blob();
-        
-        console.log('Upload vers le bucket', PHOTOS);
-        const { data, error } = await supabase.storage
+        blob = await response.blob();
+        console.log(`Taille avant upload (web): ${(blob.size / 1024).toFixed(2)} KB`);
+  
+        // Vérification explicite de la taille
+        if (blob.size > 2 * 1024 * 1024) {
+          throw new Error(`Fichier trop volumineux après compression: ${(blob.size / 1024).toFixed(2)} KB`);
+        }
+  
+        const { error } = await supabase.storage
           .from(PHOTOS)
           .upload(filename, blob, {
             cacheControl: CACHE_CONTROL,
             upsert: true,
-            contentType: JPEG
-          });
-          
-        if (error) {
-          console.error('Erreur Supabase lors de l\'upload:', error);
-          throw error;
-        }
-        
-        return this.getImageUrl(filename);
-      } else {
-        console.log('Upload depuis mobile...');
-        const base64 = await FileSystem.readAsStringAsync(compressedUri, {
-          encoding: FileSystem.EncodingType.Base64
-        });
-        
-        console.log('Upload vers le bucket', PHOTOS);
-        const { data, error } = await supabase.storage
-          .from(PHOTOS)
-          .upload(filename, Buffer.from(base64, 'base64'), {
             contentType: JPEG,
-            cacheControl: CACHE_CONTROL,
-            upsert: true
           });
-          
-        if (error) {
-          console.error('Erreur Supabase lors de l\'upload:', error);
-          throw error;
+  
+        if (error) throw error;
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(compressedUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const buffer = Buffer.from(base64, 'base64');
+        console.log(`Taille avant upload (mobile): ${(buffer.length / 1024).toFixed(2)} KB`);
+  
+        if (buffer.length > 2 * 1024 * 1024) {
+          throw new Error(`Fichier trop volumineux après compression: ${(buffer.length / 1024).toFixed(2)} KB`);
         }
-        
-        return this.getImageUrl(filename);
+  
+        const { error } = await supabase.storage
+          .from(PHOTOS)
+          .upload(filename, buffer, {
+            cacheControl: CACHE_CONTROL,
+            upsert: true,
+            contentType: JPEG,
+          });
+  
+        if (error) throw error;
       }
+  
+      return this.getImageUrlWithCache(filename);
     } catch (error) {
-      console.error('Erreur détaillée lors de l\'upload:', error);
-      if (error instanceof Error) {
-        console.error('Message:', error.message);
-        console.error('Stack:', error.stack);
-      }
+      console.error("Erreur lors de l'upload:", error);
       throw error;
     }
   }
@@ -279,16 +360,16 @@ class PhotoService {
 
   static async migrateBase64ToStorage(base64Uri: string): Promise<string> {
     try {
-      console.log('Début de la migration de la photo base64...');
+      console.log("Début de la migration de la photo base64...");
       
       // Générer un nom de fichier unique
       const fileName = `photo_${Date.now()}.jpg`;
-      console.log('Nom de fichier généré:', fileName);
+      console.log("Nom de fichier généré:", fileName);
       
       // Convertir le base64 en Blob
       const response = await fetch(base64Uri);
       const blob = await response.blob();
-      console.log('Image base64 convertie en Blob');
+      console.log("Image base64 convertie en Blob");
       
       // Upload vers Supabase Storage
       const { data, error } = await supabase.storage
@@ -299,15 +380,15 @@ class PhotoService {
         });
         
       if (error) {
-        console.error('Erreur lors de l\'upload vers Supabase:', error);
+        console.error("Erreur lors de l'upload vers Supabase:", error);
         throw error;
       }
       
-      console.log('Photo uploadée avec succès');
+      console.log("Photo uploadée avec succès");
       
       return this.getImageUrl(fileName);
     } catch (error) {
-      console.error('Erreur lors de la migration de la photo:', error);
+      console.error("Erreur lors de la migration de la photo:", error);
       throw error;
     }
   }

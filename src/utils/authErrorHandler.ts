@@ -1,5 +1,6 @@
 import { AuthError } from '@supabase/supabase-js';
 import { handleError, ErrorType } from './errorHandler';
+import * as Sentry from '@sentry/react-native';
 
 // Messages d'erreur spécifiques à l'authentification
 const authErrorMessages: Record<string, { fr: string; en: string }> = {
@@ -96,4 +97,27 @@ export const handleAuthValidationError = (field: string, context?: string) => {
       customMessage: message
     }
   );
+};
+
+export const handleAuthError = (error: AuthError): string => {
+  Sentry.captureException(error, {
+    tags: {
+      context: 'authentication',
+    },
+  });
+
+  switch (error.message) {
+    case 'Invalid login credentials':
+      return 'Identifiants invalides. Veuillez vérifier votre email et mot de passe.';
+    case 'User already registered':
+      return 'Un compte existe déjà avec cet email.';
+    case 'Email not confirmed':
+      return 'Veuillez confirmer votre email avant de vous connecter.';
+    case 'Password is too short':
+      return 'Le mot de passe doit contenir au moins 6 caractères.';
+    case 'Invalid email':
+      return 'L\'adresse email n\'est pas valide.';
+    default:
+      return `Erreur d'authentification: ${error.message}`;
+  }
 }; 

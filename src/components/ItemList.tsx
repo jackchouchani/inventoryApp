@@ -8,7 +8,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
 import { selectAllCategories } from '../store/categorySlice';
 import { selectAllContainers } from '../store/containersSlice';
-import { useAnimatedComponents } from '../hooks/useAnimatedComponents';
 import ItemCard from './ItemCard';
 import { Skeleton } from './Skeleton';
 import { withPerformanceMonitoring } from '../hoc/withPerformanceMonitoring';
@@ -257,17 +256,6 @@ const ItemList: React.FC<ItemListProps> = memo(({
   onEditSuccess,
   onEditCancel
 }) => {
-  const {
-    opacity,
-    fadeIn,
-    fadeOut,
-    fadeStyle,
-    scale,
-    scaleUp,
-    scaleDown,
-    scaleStyle
-  } = useAnimatedComponents();
-
   const renderStartTime = useRef(Date.now());
   
   useEffect(() => {

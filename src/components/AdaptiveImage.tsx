@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useMemo } from 'react';
 import {
   Image,
   ImageStyle,
@@ -6,88 +6,71 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
+  ViewStyle,
+  ImageResizeMode,
+  StyleProp,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import { useImageCache } from '../hooks/useImageCache';
+import * as Sentry from '@sentry/react-native';
 
 interface AdaptiveImageProps {
   uri?: string;
-  style?: ImageStyle;
+  style?: StyleProp<ImageStyle>;
   placeholder?: any;
   cacheKey?: string;
+  resizeMode?: ImageResizeMode;
+  defaultWidth?: number;
+  defaultHeight?: number;
+  onError?: () => void;
 }
 
-const IMAGE_CACHE_FOLDER = `${FileSystem.cacheDirectory}image_cache/`;
+const DEFAULT_SIZE = 200;
 
-const AdaptiveImage: React.FC<AdaptiveImageProps> = memo(({
+const AdaptiveImage: React.FC<AdaptiveImageProps> = React.memo(({
   uri,
   style,
   placeholder,
   cacheKey,
+  resizeMode = 'cover',
+  defaultWidth = DEFAULT_SIZE,
+  defaultHeight = DEFAULT_SIZE,
+  onError,
 }) => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [imagePath, setImagePath] = useState<string | null>(null);
+  const { imagePath, loading, error } = useImageCache(uri, cacheKey);
 
-  useEffect(() => {
-    const setupCache = async () => {
-      try {
-        const folder = await FileSystem.getInfoAsync(IMAGE_CACHE_FOLDER);
-        if (!folder.exists) {
-          await FileSystem.makeDirectoryAsync(IMAGE_CACHE_FOLDER);
-        }
-      } catch (e) {
-        console.warn('Erreur lors de la création du dossier de cache:', e);
+  const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
+    const flatStyle = StyleSheet.flatten(style) || {};
+    return [
+      styles.container,
+      style,
+      {
+        width: flatStyle.width || defaultWidth,
+        height: flatStyle.height || defaultHeight,
       }
-    };
+    ];
+  }, [style, defaultWidth, defaultHeight]);
 
-    setupCache();
-  }, []);
+  const placeholderImage = useMemo(() => {
+    if (!placeholder) return null;
+    return typeof placeholder === 'string' ? { uri: placeholder } : placeholder;
+  }, [placeholder]);
 
-  useEffect(() => {
-    const loadImage = async () => {
-      if (!uri) {
-        setLoading(false);
-        setError(true);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(false);
-
-        const filename = cacheKey || uri.split('/').pop();
-        const cacheFilePath = `${IMAGE_CACHE_FOLDER}${filename}`;
-
-        // Vérifier si l'image est déjà en cache
-        const cacheInfo = await FileSystem.getInfoAsync(cacheFilePath);
-        
-        if (cacheInfo.exists) {
-          setImagePath(cacheFilePath);
-          setLoading(false);
-          return;
-        }
-
-        // Télécharger et mettre en cache
-        await FileSystem.downloadAsync(uri, cacheFilePath);
-        setImagePath(cacheFilePath);
-      } catch (e) {
-        console.error('Erreur lors du chargement de l\'image:', e);
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadImage();
-  }, [uri, cacheKey]);
+  if (error) {
+    Sentry.addBreadcrumb({
+      category: 'image_error',
+      message: 'Erreur de chargement d\'image',
+      data: { uri, cacheKey },
+    });
+    onError?.();
+  }
 
   if (loading) {
     return (
-      <View style={[styles.container, style]}>
+      <View style={containerStyle}>
         <ActivityIndicator size="small" color="#999" />
-        {placeholder && (
+        {placeholderImage && (
           <Image
-            source={typeof placeholder === 'string' ? { uri: placeholder } : placeholder}
+            source={placeholderImage}
             style={[StyleSheet.absoluteFill, { opacity: 0.5 }]}
             blurRadius={Platform.OS === 'ios' ? 10 : 5}
           />
@@ -98,10 +81,10 @@ const AdaptiveImage: React.FC<AdaptiveImageProps> = memo(({
 
   if (error || !imagePath) {
     return (
-      <View style={[styles.container, style, styles.errorContainer]}>
-        {placeholder ? (
+      <View style={[containerStyle, styles.errorContainer]}>
+        {placeholderImage ? (
           <Image
-            source={typeof placeholder === 'string' ? { uri: placeholder } : placeholder}
+            source={placeholderImage}
             style={StyleSheet.absoluteFill}
             blurRadius={Platform.OS === 'ios' ? 10 : 5}
           />
@@ -113,17 +96,24 @@ const AdaptiveImage: React.FC<AdaptiveImageProps> = memo(({
   }
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={containerStyle}>
       <Image
         source={{ uri: imagePath }}
         style={StyleSheet.absoluteFill}
-        onError={() => setError(true)}
+        resizeMode={resizeMode}
+        onError={() => {
+          Sentry.captureMessage('Erreur de rendu d\'image', {
+            level: 'warning',
+            extra: { uri: imagePath }
+          });
+          onError?.();
+        }}
       />
       {Platform.OS === 'ios' && loading && (
         <View 
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: 'rgba(255, 255, 255, 0.7)' }
+            styles.iosLoadingOverlay
           ]}
         />
       )}
@@ -147,6 +137,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef5350',
     borderRadius: 12,
   },
+  iosLoadingOverlay: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)'
+  }
 });
 
 AdaptiveImage.displayName = 'AdaptiveImage';
