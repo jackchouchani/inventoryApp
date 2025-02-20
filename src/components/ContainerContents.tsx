@@ -6,8 +6,7 @@ import ItemCard from './ItemCard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useTheme } from '../hooks/useTheme';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { handleError } from '../utils/errorHandler';
-import { ErrorType } from '../utils/errorHandler';
+import { handleError, ErrorType } from '../utils/errorHandler';
 
 const PAGE_SIZE = 25;
 
@@ -49,9 +48,7 @@ export const ContainerContents: React.FC<ContainerContentsProps> = React.memo(({
         await fetchNextPage();
       }
     } catch (err) {
-      handleError(err, ErrorType.UNKNOWN, {
-        context: 'ContainerContents.handleLoadMore'
-      });
+      handleError(err, ErrorType.CONTAINER_CONTENTS_LOAD_MORE);
     }
   }, [hasMore, isLoading, fetchNextPage]);
 
@@ -63,9 +60,7 @@ export const ContainerContents: React.FC<ContainerContentsProps> = React.memo(({
         await onRefresh();
       }
     } catch (err) {
-      handleError(err, ErrorType.UNKNOWN, {
-        context: 'ContainerContents.handleRefresh'
-      });
+      handleError(err, ErrorType.CONTAINER_CONTENTS_REFRESH);
     } finally {
       setIsRefreshing(false);
     }

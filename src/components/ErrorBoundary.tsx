@@ -2,26 +2,32 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 
-interface Props {
-  children: React.ReactNode;
-}
-
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
+interface ErrorBoundaryProps {
+  children?: React.ReactNode;
+}
+
+export class ErrorBoundary<P extends ErrorBoundaryProps = ErrorBoundaryProps, S extends ErrorBoundaryState = ErrorBoundaryState> extends React.Component<P, S> {
+  constructor(props: P) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = {
+      hasError: false,
+      error: null,
+    } as S;
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return {
+      hasError: true,
+      error,
+    };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     Sentry.captureException(error);
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
@@ -30,7 +36,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     this.setState({ hasError: false, error: null });
   };
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <View style={styles.container}>

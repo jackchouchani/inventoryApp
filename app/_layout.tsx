@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Platform, View, Text, ActivityIndicator, StyleSheet } from "react-native";
-import { Slot, useSegments, useRouter, Stack } from "expo-router";
+import { Slot, useSegments, useRouter } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
@@ -12,7 +12,6 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { NetworkErrorBoundary } from '../src/components/NetworkErrorBoundary';
 import * as Sentry from '@sentry/react-native';
 import { subscribeToNetworkChanges } from '../src/utils/networkCheck';
-import { useTheme } from '@/hooks/useTheme';
 
 // Configuration personnalisée des toasts
 const toastConfig = {
@@ -74,7 +73,6 @@ Sentry.init({
 export default function RootLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const theme = useTheme();
 
   useEffect(() => {
     const initApp = async () => {
@@ -125,22 +123,9 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <Provider store={store}>
             <AuthProvider>
-              <Stack
-                screenOptions={{
-                  headerStyle: {
-                    backgroundColor: theme.colors.card,
-                  },
-                  headerTintColor: theme.colors.text,
-                  headerTitleStyle: {
-                    color: theme.colors.text,
-                  },
-                  contentStyle: {
-                    backgroundColor: theme.colors.background,
-                  },
-                }}
-              >
+              <View style={styles.rootContainer}>
                 <AuthenticationGuard />
-              </Stack>
+              </View>
             </AuthProvider>
             <Toast config={toastConfig} />
           </Provider>
