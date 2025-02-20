@@ -1,34 +1,48 @@
 {
-  "extends": "@tsconfig/react-native/tsconfig.json",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
     "noImplicitAny": true,
-    "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "jsx": "react-native",
-    "lib": ["dom", "esnext"],
+    "lib": ["esnext", "dom"],
     "moduleResolution": "node",
     "noEmit": true,
     "resolveJsonModule": true,
     "target": "esnext",
     "module": "esnext",
-    "baseUrl": "src",
+    "baseUrl": ".",
     "paths": {
-      "*": ["*"]
+      "~/*": ["./*"],
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@utils/*": ["src/utils/*"],
+      "@services/*": ["src/services/*"],
+      "@types/*": ["src/types/*"],
+      "@theme/*": ["src/theme/*"],
+      "@config/*": ["src/config/*"]
     },
-    "types": ["jest", "node"]
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
-    "src/**/*",
-    "index.ts",
-    "src/types/*.d.ts",
-    "app/**/*"
+    "**/*.ts",
+    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "index.ts"
   ],
   "exclude": [
     "node_modules",
     "babel.config.js",
     "metro.config.js",
-    "jest.config.js"
+    "jest.config.js",
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }
