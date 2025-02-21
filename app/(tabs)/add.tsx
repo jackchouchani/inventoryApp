@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import React, { useEffect, useCallback } from 'react';
+import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'expo-router';
@@ -9,41 +9,106 @@ import ItemForm from '../../src/components/ItemForm';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { Container } from '../../src/types/container';
 import { Category } from '../../src/types/category';
+import { Item } from '../../src/types/item';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ErrorBoundary } from '../../src/components/ErrorBoundary';
+import * as Sentry from '@sentry/react-native';
+import { handleNetworkError } from '../../src/utils/errorHandler';
 
-export default function AddScreen() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
-  const dispatch = useDispatch();
+const QUERY_KEYS = {
+  containers: 'containers',
+  categories: 'categories',
+  items: 'items'
+} as const;
+
+const CACHE_CONFIG = {
+  staleTime: 5 * 60 * 1000, // 5 minutes
+  gcTime: 30 * 60 * 1000, // 30 minutes
+  retry: 3,
+  networkMode: Platform.OS === 'web' ? 'online' : 'always',
+} as const;
+
+type QueryError = Error;
+
+const AddScreenContent: React.FC = () => {
   const router = useRouter();
+  const dispatch = useDispatch();
+  const queryClient = useQueryClient();
+  const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [loadedContainers, loadedCategories] = await Promise.all([
-        database.getContainers(),
-        database.getCategories()
-      ]);
-      setContainers(loadedContainers || []);
-      setCategories(loadedCategories || []);
-      const items = await database.getItems();
-      dispatch(setItems(items || []));
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setError('Erreur lors du chargement des données');
-    } finally {
-      setLoading(false);
-    }
-  }, [dispatch]);
+  const { data: containers = [], isLoading: containersLoading, error: containersError } = useQuery<Container[], QueryError>({
+    queryKey: [QUERY_KEYS.containers, refreshTimestamp],
+    queryFn: async () => {
+      try {
+        const data = await database.getContainers();
+        return data || [];
+      } catch (error) {
+        if (error instanceof Error) {
+          Sentry.captureException(error, {
+            tags: { type: 'containers_fetch_error' }
+          });
+          throw error;
+        }
+        throw new Error('Erreur lors de la récupération des conteneurs');
+      }
+    },
+    ...CACHE_CONFIG
+  });
 
+  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery<Category[], QueryError>({
+    queryKey: [QUERY_KEYS.categories, refreshTimestamp],
+    queryFn: async () => {
+      try {
+        const data = await database.getCategories();
+        return data || [];
+      } catch (error) {
+        if (error instanceof Error) {
+          Sentry.captureException(error, {
+            tags: { type: 'categories_fetch_error' }
+          });
+          throw error;
+        }
+        throw new Error('Erreur lors de la récupération des catégories');
+      }
+    },
+    ...CACHE_CONFIG
+  });
+
+  const { data: items = [], isLoading: itemsLoading, error: itemsError } = useQuery<Item[], QueryError>({
+    queryKey: [QUERY_KEYS.items, refreshTimestamp],
+    queryFn: async () => {
+      try {
+        const data = await database.getItems();
+        return data || [];
+      } catch (error) {
+        if (error instanceof Error) {
+          Sentry.captureException(error, {
+            tags: { type: 'items_fetch_error' }
+          });
+          throw error;
+        }
+        throw new Error('Erreur lors de la récupération des items');
+      }
+    },
+    ...CACHE_CONFIG
+  });
+
+  // Effet pour mettre à jour le store Redux quand les items changent
   useEffect(() => {
-    loadData();
-  }, [refreshTimestamp, loadData]);
+    if (items) {
+      dispatch(setItems(items));
+    }
+  }, [items, dispatch]);
 
-  if (loading) {
+  const isLoading = containersLoading || categoriesLoading || itemsLoading;
+  const error = containersError || categoriesError || itemsError;
+
+  const handleSuccess = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.items] });
+    router.push('/(tabs)/stock');
+  }, [queryClient, router]);
+
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -54,13 +119,8 @@ export default function AddScreen() {
   }
 
   if (error) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      </SafeAreaView>
-    );
+    handleNetworkError(error);
+    throw error;
   }
 
   return (
@@ -69,10 +129,25 @@ export default function AddScreen() {
         <ItemForm 
           containers={containers} 
           categories={categories}
-          onSuccess={() => router.push('/(tabs)/stock')}
+          onSuccess={handleSuccess}
         />
       </View>
     </SafeAreaView>
+  );
+};
+
+export default function AddScreen() {
+  const handleReset = useCallback(() => {
+    const queryClient = useQueryClient();
+    queryClient.invalidateQueries();
+  }, []);
+
+  return (
+    <ErrorBoundary
+      onReset={handleReset}
+    >
+      <AddScreenContent />
+    </ErrorBoundary>
   );
 }
 
@@ -100,5 +175,17 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     textAlign: 'center',
     fontSize: 16,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

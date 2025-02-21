@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { FlashList } from '@shopify/flash-list';
 import { Container } from '../../src/types/container';
 import { Item } from '../../src/types/item';
+import { Category } from '../../src/types/category';
 import { ContainerGrid } from '../../src/components/ContainerGrid';
 import { ContainerForm } from '../../src/components/ContainerForm';
-import ItemList from '../../src/components/ItemList';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { handleDatabaseError } from '../../src/utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
@@ -16,18 +17,48 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateItem, setItems } from '../../src/store/itemsActions';
 import { selectAllItems } from '../../src/store/itemsAdapter';
 import { RootState } from '../../src/store/store';
+import { theme } from '../../src/utils/theme';
+import { ErrorBoundary } from '../../src/components/ErrorBoundary';
+import { useContainerManagement } from '../../src/hooks/useContainerManagement';
+import { useSearchDebounce } from '../../src/hooks/useSearchDebounce';
+
+interface ItemListProps {
+  item: Item;
+  onPress: (id: number) => void;
+  categories: Array<{ id: number; name: string }>;
+}
+
+const ItemListItem: React.FC<ItemListProps> = React.memo(({ item, onPress, categories }) => (
+  <TouchableOpacity
+    style={styles.itemCard}
+    onPress={() => item.id && onPress(item.id)}
+  >
+    <View style={styles.itemInfo}>
+      <Text style={styles.itemName}>{item.name}</Text>
+      <Text style={styles.itemCategory}>
+        {categories.find(c => c.id === item.categoryId)?.name}
+      </Text>
+      <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+    </View>
+    <MaterialIcons name="add-circle-outline" size={24} color={theme.colors.success} />
+  </TouchableOpacity>
+));
 
 const ContainerScreen = () => {
   const dispatch = useDispatch();
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const { items: initialItems, containers, categories, isLoading: isLoadingInventory } = useInventoryData();
+  const { searchQuery, setSearchQuery } = useSearchDebounce();
+  const { data: inventoryData, isLoading: isLoadingInventory } = useInventoryData({});
+  const initialItems = inventoryData?.items ?? [];
+  const containers = inventoryData?.containers ?? [];
+  const categories = inventoryData?.categories ?? [];
   const items = useSelector((state: RootState) => selectAllItems(state));
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const router = useRouter();
+  const { handleContainerSubmit } = useContainerManagement();
 
   // Synchroniser les données de useInventoryData avec Redux
   useEffect(() => {
@@ -63,7 +94,7 @@ const ContainerScreen = () => {
   }, [items, selectedContainer, searchQuery, selectedCategory]);
 
   const handleContainerPress = useCallback((containerId: number) => {
-    const container = containers.find(c => c.id === containerId);
+    const container = containers.find((c: Container) => c.id === containerId);
     if (container) {
       setSelectedContainer(container);
     }
@@ -74,62 +105,6 @@ const ContainerScreen = () => {
     setShowContainerForm(true);
     setSelectedContainer(null);
   }, []);
-
-  const handleContainerSubmit = useCallback(async (containerData: Partial<Container>) => {
-    try {
-      // Récupérer l'utilisateur actuel
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('Utilisateur non connecté');
-
-      const formattedData = {
-        name: containerData.name,
-        description: containerData.description || '',
-        number: containerData.number || null,
-        qr_code: containerData.qrCode || null,
-        user_id: user.id,
-        deleted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      console.log('Données du container à créer:', formattedData);
-
-      if (editingContainer?.id) {
-        const { error } = await supabase
-          .from('containers')
-          .update(formattedData)
-          .eq('id', editingContainer.id);
-
-        if (error) {
-          console.error('Erreur lors de la mise à jour:', error);
-          throw error;
-        }
-      } else {
-        const { error } = await supabase
-          .from('containers')
-          .insert(formattedData);
-
-        if (error) {
-          console.error('Erreur lors de la création:', error);
-          throw error;
-        }
-      }
-
-      setShowContainerForm(false);
-      setEditingContainer(null);
-      triggerRefresh();
-    } catch (error) {
-      console.error('Erreur complète:', error);
-      if (error instanceof Error || error instanceof PostgrestError) {
-        handleDatabaseError(error, 'ContainerScreen.handleContainerSubmit');
-      }
-      Alert.alert(
-        'Erreur',
-        'Une erreur est survenue lors de la création du container. Veuillez réessayer.'
-      );
-    }
-  }, [editingContainer, triggerRefresh]);
 
   const handleAddToContainer = useCallback(async (itemId: number) => {
     if (!selectedContainer?.id) return;
@@ -239,7 +214,7 @@ const ContainerScreen = () => {
               triggerRefresh();
             } catch (error) {
               if (error instanceof Error || error instanceof PostgrestError) {
-                handleDatabaseError(error, 'ContainerScreen.handleDeleteContainer');
+                handleDatabaseError(error);
               }
             }
           }
@@ -247,6 +222,15 @@ const ContainerScreen = () => {
       ]
     );
   };
+
+  // Optimiser le rendu des listes avec FlashList
+  const renderItem = useCallback(({ item }: { item: Item }) => (
+    <ItemListItem
+      item={item}
+      onPress={handleAddToContainer}
+      categories={categories}
+    />
+  ), [categories, handleAddToContainer]);
 
   if (isLoadingInventory) {
     return (
@@ -320,230 +304,213 @@ const ContainerScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.topBar}>
+    <ErrorBoundary>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.topBar}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.push('/(stack)/settings')}
+          >
+            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.push('/(stack)/settings')}
+          style={styles.addButton} 
+          onPress={() => setShowContainerForm(true)}
         >
-          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
-          <Text style={styles.backButtonText}>Retour</Text>
+          <MaterialIcons name="add" size={24} color="#fff" style={styles.addIcon} />
+          <Text style={styles.addButtonText}>Ajouter un Container</Text>
         </TouchableOpacity>
-      </View>
 
-      <TouchableOpacity 
-        style={styles.addButton} 
-        onPress={() => setShowContainerForm(true)}
-      >
-        <MaterialIcons name="add" size={24} color="#fff" style={styles.addIcon} />
-        <Text style={styles.addButtonText}>Ajouter un Container</Text>
-      </TouchableOpacity>
+        <ContainerGrid
+          containers={containers}
+          items={items}
+          onContainerPress={handleContainerPress}
+        />
 
-      <ContainerGrid
-        containers={containers}
-        items={items}
-        onContainerPress={handleContainerPress}
-      />
-
-      <Modal
-        visible={showContainerForm}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowContainerForm(false);
-          setEditingContainer(null);
-        }}
-      >
-        <SafeAreaView style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => {
-                setShowContainerForm(false);
-                setEditingContainer(null);
-              }}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {editingContainer ? 'Modifier Container' : 'Nouveau Container'}
-            </Text>
-            <View style={styles.headerSpacer} />
-          </View>
-          
-          <View style={styles.formWrapper}>
-            <ContainerForm
-              initialData={editingContainer}
-              onSubmit={handleContainerSubmit}
-              onCancel={() => {
-                setShowContainerForm(false);
-                setEditingContainer(null);
-              }}
-            />
-          </View>
-        </SafeAreaView>
-      </Modal>
-
-      <Modal
-        visible={!!selectedContainer}
-        animationType="slide"
-        onRequestClose={() => setSelectedContainer(null)}
-      >
-        <SafeAreaView style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => setSelectedContainer(null)}
-            >
-              <Text style={styles.cancelButtonText}>Retour</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {selectedContainer?.name || 'Container'}
-            </Text>
-            <View style={styles.headerActions}>
+        <Modal
+          visible={showContainerForm}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowContainerForm(false);
+            setEditingContainer(null);
+          }}
+        >
+          <SafeAreaView style={styles.modalContent}>
+            <View style={styles.modalHeader}>
               <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => selectedContainer && handleEditContainer(selectedContainer)}
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowContainerForm(false);
+                  setEditingContainer(null);
+                }}
               >
-                <MaterialIcons name="edit" size={24} color="#007AFF" />
+                <Text style={styles.cancelButtonText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={() => selectedContainer?.id && handleDeleteContainer(selectedContainer.id)}
-              >
-                <MaterialIcons name="delete" size={24} color="#FF3B30" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                {editingContainer ? 'Modifier Container' : 'Nouveau Container'}
+              </Text>
+              <View style={styles.headerSpacer} />
             </View>
-          </View>
-          
-          <ScrollView style={styles.containerScrollView}>
-            <View style={styles.containerDetails}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Numéro:</Text>
-                <Text style={styles.detailValue}>#{selectedContainer?.number}</Text>
+            
+            <View style={styles.formWrapper}>
+              <ContainerForm
+                initialData={editingContainer}
+                onSubmit={handleContainerSubmit}
+                onCancel={() => {
+                  setShowContainerForm(false);
+                  setEditingContainer(null);
+                }}
+              />
+            </View>
+          </SafeAreaView>
+        </Modal>
+
+        <Modal
+          visible={!!selectedContainer}
+          animationType="slide"
+          onRequestClose={() => setSelectedContainer(null)}
+        >
+          <SafeAreaView style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setSelectedContainer(null)}
+              >
+                <Text style={styles.cancelButtonText}>Retour</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                {selectedContainer?.name || 'Container'}
+              </Text>
+              <View style={styles.headerActions}>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => selectedContainer && handleEditContainer(selectedContainer)}
+                >
+                  <MaterialIcons name="edit" size={24} color="#007AFF" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => selectedContainer?.id && handleDeleteContainer(selectedContainer.id)}
+                >
+                  <MaterialIcons name="delete" size={24} color="#FF3B30" />
+                </TouchableOpacity>
               </View>
-              {selectedContainer?.description && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Description:</Text>
-                  <Text style={styles.detailValue}>{selectedContainer.description}</Text>
-                </View>
-              )}
             </View>
+            
+            <ScrollView style={styles.containerScrollView}>
+              <View style={styles.containerDetails}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Numéro:</Text>
+                  <Text style={styles.detailValue}>#{selectedContainer?.number}</Text>
+                </View>
+                {selectedContainer?.description && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Description:</Text>
+                    <Text style={styles.detailValue}>{selectedContainer.description}</Text>
+                  </View>
+                )}
+              </View>
 
-            <View style={styles.containerContent}>
-              <Text style={styles.contentTitle}>Articles dans ce container</Text>
-              <View style={styles.itemsContainer}>
-                <View style={styles.filterSection}>
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Rechercher un article..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                  />
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.categoryFilter}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.categoryChip,
-                        !selectedCategory && styles.categoryChipSelected
-                      ]}
-                      onPress={() => setSelectedCategory(null)}
+              <View style={styles.containerContent}>
+                <Text style={styles.contentTitle}>Articles dans ce container</Text>
+                <View style={styles.itemsContainer}>
+                  <View style={styles.filterSection}>
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Rechercher un article..."
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                    />
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.categoryFilter}
                     >
-                      <Text style={[
-                        styles.categoryChipText,
-                        !selectedCategory && styles.categoryChipTextSelected
-                      ]}>Tous</Text>
-                    </TouchableOpacity>
-                    {categories.map(category => (
                       <TouchableOpacity
-                        key={category.id}
                         style={[
                           styles.categoryChip,
-                          selectedCategory === category.id && styles.categoryChipSelected
+                          !selectedCategory && styles.categoryChipSelected
                         ]}
-                        onPress={() => setSelectedCategory(
-                          selectedCategory === category.id ? null : category.id ?? null
-                        )}
+                        onPress={() => setSelectedCategory(null)}
                       >
                         <Text style={[
                           styles.categoryChipText,
-                          selectedCategory === category.id && styles.categoryChipTextSelected
-                        ]}>{category.name}</Text>
+                          !selectedCategory && styles.categoryChipTextSelected
+                        ]}>Tous</Text>
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                <View style={styles.listsContainer}>
-                  <View style={styles.listSection}>
-                    <Text style={styles.sectionTitle}>
-                      Articles assignés ({assignedItems.length})
-                    </Text>
-                    <ScrollView style={styles.itemsList}>
-                      {assignedItems.length > 0 ? (
-                        assignedItems.map(item => (
-                          <TouchableOpacity
-                            key={item.id}
-                            style={styles.itemCard}
-                            onPress={() => handleDeleteFromContainer(item.id!)}
-                          >
-                            <View style={styles.itemInfo}>
-                              <Text style={styles.itemName}>{item.name}</Text>
-                              <Text style={styles.itemCategory}>
-                                {categories.find(c => c.id === item.categoryId)?.name}
-                              </Text>
-                              <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
-                            </View>
-                            <MaterialIcons name="remove-circle-outline" size={24} color="#FF3B30" />
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <Text style={styles.emptyContentText}>Aucun article dans ce container</Text>
-                      )}
+                      {categories.map((category: Category) => (
+                        <TouchableOpacity
+                          key={category.id}
+                          style={[
+                            styles.categoryChip,
+                            selectedCategory === category.id && styles.categoryChipSelected
+                          ]}
+                          onPress={() => setSelectedCategory(
+                            selectedCategory === category.id ? null : category.id ?? null
+                          )}
+                        >
+                          <Text style={[
+                            styles.categoryChipText,
+                            selectedCategory === category.id && styles.categoryChipTextSelected
+                          ]}>{category.name}</Text>
+                        </TouchableOpacity>
+                      ))}
                     </ScrollView>
                   </View>
 
-                  <View style={styles.listSection}>
-                    <Text style={styles.sectionTitle}>
-                      Articles disponibles ({filteredAvailableItems.length})
-                    </Text>
-                    <ScrollView style={styles.itemsList}>
-                      {filteredAvailableItems.length > 0 ? (
-                        filteredAvailableItems.map(item => (
-                          <TouchableOpacity
-                            key={item.id}
-                            style={[styles.itemCard, styles.availableItem]}
-                            onPress={() => handleAddToContainer(item.id!)}
-                          >
-                            <View style={styles.itemInfo}>
-                              <Text style={styles.itemName}>{item.name}</Text>
-                              <Text style={styles.itemCategory}>
-                                {categories.find(c => c.id === item.categoryId)?.name}
-                              </Text>
-                              {item.containerId && (
-                                <Text style={styles.containerInfo}>
-                                  Dans: {containers.find(c => c.id === item.containerId)?.name}
+                  <View style={styles.listsContainer}>
+                    <View style={styles.listSection}>
+                      <Text style={styles.sectionTitle}>
+                        Articles assignés ({assignedItems.length})
+                      </Text>
+                      <ScrollView style={styles.itemsList}>
+                        {assignedItems.length > 0 ? (
+                          assignedItems.map(item => (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={styles.itemCard}
+                              onPress={() => handleDeleteFromContainer(item.id!)}
+                            >
+                              <View style={styles.itemInfo}>
+                                <Text style={styles.itemName}>{item.name}</Text>
+                                <Text style={styles.itemCategory}>
+                                  {categories.find((c: Category) => c.id === item.categoryId)?.name}
                                 </Text>
-                              )}
-                              <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
-                            </View>
-                            <MaterialIcons name="add-circle-outline" size={24} color="#4CAF50" />
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <Text style={styles.emptyContentText}>Aucun article disponible</Text>
-                      )}
-                    </ScrollView>
+                                <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+                              </View>
+                              <MaterialIcons name="remove-circle-outline" size={24} color="#FF3B30" />
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <Text style={styles.emptyContentText}>Aucun article dans ce container</Text>
+                        )}
+                      </ScrollView>
+                    </View>
+
+                    <View style={styles.listSection}>
+                      <Text style={styles.sectionTitle}>
+                        Articles disponibles ({filteredAvailableItems.length})
+                      </Text>
+                      <FlashList
+                        data={filteredAvailableItems}
+                        renderItem={renderItem}
+                        estimatedItemSize={100}
+                        keyExtractor={item => item.id?.toString() ?? ''}
+                        onEndReachedThreshold={0.5}
+                        showsVerticalScrollIndicator={false}
+                      />
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+      </SafeAreaView>
+    </ErrorBoundary>
   );
 };
 
@@ -815,4 +782,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ContainerScreen;
+export default React.memo(ContainerScreen);

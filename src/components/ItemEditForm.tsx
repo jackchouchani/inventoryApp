@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
 import { QRCodeGenerator } from './QRCodeGenerator';
@@ -7,11 +7,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
-import type { Item, ItemInput, ItemUpdate } from '../types/item';
-import { photoService } from '../services/photoService';
+import type { Item, ItemUpdate } from '../types/item';
 import { ImagePicker } from './ImagePicker';
-import * as Sentry from '@sentry/react-native';
 import AdaptiveImage from './AdaptiveImage';
+import { validatePrice, validateItemName } from '../utils/validation';
+import { handleError } from '../utils/errorHandler';
+import { checkPhotoPermissions } from '../utils/permissions';
+import { usePhoto } from '../hooks/usePhoto';
 
 interface ItemEditFormProps {
     item: Item;
@@ -79,9 +81,19 @@ const CategoryOption = memo(({
     </TouchableOpacity>
 ));
 
+const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProps) => {
+    return (
+        prevProps.item.id === nextProps.item.id &&
+        prevProps.item.updatedAt === nextProps.item.updatedAt &&
+        prevProps.categories.length === nextProps.categories.length &&
+        prevProps.containers.length === nextProps.containers.length
+    );
+};
+
 export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
+    const { uploadPhoto, deletePhoto, validatePhoto } = usePhoto();
 
     // Ajout de logs de débogage
     useEffect(() => {
@@ -101,41 +113,92 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         qrCode: item.qrCode
     });
 
-    const handleSave = useCallback(async () => {
+    const initialFormState = useMemo(() => ({
+        name: item.name,
+        description: item.description,
+        purchasePrice: item.purchasePrice.toString(),
+        sellingPrice: item.sellingPrice.toString(),
+        status: item.status,
+        photo_storage_url: item.photo_storage_url,
+        containerId: item.containerId,
+        categoryId: item.categoryId,
+        qrCode: item.qrCode
+    }), [item]);
+
+    useEffect(() => {
+        setEditedItem(initialFormState);
+    }, [initialFormState]);
+
+    const handlePriceChange = useCallback((field: 'purchasePrice' | 'sellingPrice', text: string) => {
+        const cleanText = text.replace(',', '.');
+        if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+            setEditedItem(prev => ({ ...prev, [field]: cleanText }));
+        }
+    }, []);
+
+    const validateForm = useCallback((): boolean => {
         try {
-            if (!item.id) {
-                Alert.alert('Erreur', 'ID de l\'article manquant');
-                return;
+            if (!validateItemName(editedItem.name)) {
+                Alert.alert('Erreur', 'Le nom de l\'article est invalide');
+                return false;
             }
 
             const purchasePrice = parseFloat(editedItem.purchasePrice);
             const sellingPrice = parseFloat(editedItem.sellingPrice);
 
-            if (isNaN(purchasePrice) || isNaN(sellingPrice)) {
+            if (!validatePrice(purchasePrice) || !validatePrice(sellingPrice)) {
                 Alert.alert('Erreur', 'Les prix doivent être des nombres valides');
+                return false;
+            }
+
+            if (sellingPrice < purchasePrice) {
+                Alert.alert('Attention', 'Le prix de vente est inférieur au prix d\'achat');
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            handleError(error, 'Erreur de validation du formulaire', {
+                source: 'item_edit_form_validation',
+                message: `Erreur lors de la validation de l'article ${item.id}`
+            });
+            return false;
+        }
+    }, [editedItem, item.id]);
+
+    const handlePhotoUpload = async (uri: string) => {
+        try {
+            if (!await validatePhoto(uri)) {
+                Alert.alert('Erreur', 'Photo invalide');
+                return;
+            }
+            const photoUrl = await uploadPhoto(uri);
+            setEditedItem(prev => ({ ...prev, photo_storage_url: photoUrl }));
+        } catch (error) {
+            handleError(error, 'Erreur lors de la sauvegarde', {
+                source: 'item_edit_form_save',
+                message: `Erreur lors de la mise à jour de l'article ${item.id}`
+            });
+            Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
+        }
+    };
+
+    const handleSubmit = useCallback(async () => {
+        try {
+            if (!validateForm()) {
                 return;
             }
 
-            // Gérer la photo
-            let photoUrl = editedItem.photo_storage_url;
-            if (editedItem.photo_storage_url && !editedItem.photo_storage_url.includes('supabase.co')) {
-                try {
-                    photoUrl = await photoService.uploadPhoto(editedItem.photo_storage_url);
-                } catch (error) {
-                    console.error('Erreur lors de l\'upload de la photo:', error);
-                    Alert.alert('Erreur', 'Impossible d\'uploader la photo. Voulez-vous continuer sans photo ?');
-                    return;
-                }
+            if (!item.id) {
+                throw new Error('ID de l\'article manquant');
             }
 
-            // Si la photo a été supprimée
-            if (item.photo_storage_url && !editedItem.photo_storage_url) {
-                try {
-                    await photoService.deletePhoto(item.photo_storage_url);
-                } catch (error) {
-                    console.error('Erreur lors de la suppression de la photo:', error);
-                }
+            if (item.photo_storage_url && item.photo_storage_url !== editedItem.photo_storage_url) {
+                await deletePhoto(item.photo_storage_url);
             }
+
+            const purchasePrice = parseFloat(editedItem.purchasePrice);
+            const sellingPrice = parseFloat(editedItem.sellingPrice);
 
             const itemToUpdate: ItemUpdate = {
                 name: editedItem.name,
@@ -143,17 +206,15 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 purchasePrice,
                 sellingPrice,
                 status: editedItem.status,
-                photo_storage_url: photoUrl,
+                photo_storage_url: editedItem.photo_storage_url,
                 containerId: editedItem.containerId,
                 categoryId: editedItem.categoryId,
                 qrCode: editedItem.qrCode
             };
 
-            // Mise à jour dans la base de données
             try {
                 await database.updateItem(item.id, itemToUpdate);
                 
-                // Mise à jour optimiste du store Redux avec les champs temporels
                 const updatedItem: Item = {
                     ...item,
                     ...itemToUpdate,
@@ -161,21 +222,25 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 };
                 
                 dispatch(updateItem(updatedItem));
-                
-                // Invalider les requêtes
                 queryClient.invalidateQueries({ queryKey: ['items'] });
                 queryClient.invalidateQueries({ queryKey: ['inventory'] });
 
                 if (onSuccess) onSuccess();
             } catch (error) {
-                console.error('Erreur lors de la mise à jour:', error);
-                Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
+                handleError(error, 'Erreur lors de la mise à jour', {
+                    source: 'item_edit_form_update',
+                    message: `Échec de la mise à jour de l'article ${item.id}`,
+                    showAlert: true
+                });
             }
         } catch (error) {
-            console.error('Erreur lors de la mise à jour:', error);
-            Alert.alert('Erreur', 'Impossible de mettre à jour l\'article');
+            handleError(error, 'Erreur lors de la mise à jour', {
+                source: 'item_edit_form_update',
+                message: `Erreur générale lors de la mise à jour de l'article ${item.id}`,
+                showAlert: true
+            });
         }
-    }, [editedItem, item, dispatch, onSuccess, queryClient]);
+    }, [editedItem, item.id, validateForm, uploadPhoto, deletePhoto, dispatch, onSuccess, queryClient]);
 
     const handleDelete = useCallback(async () => {
         if (!item.id) return;
@@ -195,12 +260,18 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 } catch (error) {
                     // Rollback en cas d'erreur
                     dispatch(updateItem(item));
-                    console.error('Erreur lors de la suppression:', error);
-                    Alert.alert('Erreur', 'Impossible de supprimer l\'article');
+                    handleError(error, 'Erreur lors de la suppression', {
+                        source: 'item_edit_form_delete',
+                        message: `Échec de la suppression de l'article ${item.id}`,
+                        showAlert: true
+                    });
                 }
             } catch (error) {
-                console.error('Erreur lors de la suppression:', error);
-                Alert.alert('Erreur', 'Impossible de supprimer l\'article');
+                handleError(error, 'Erreur lors de la suppression', {
+                    source: 'item_edit_form_delete',
+                    message: `Erreur générale lors de la suppression de l'article ${item.id}`,
+                    showAlert: true
+                });
             }
         };
 
@@ -221,16 +292,38 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         );
     }, [item, dispatch, queryClient, onCancel]);
 
-    const handleImageSelected = useCallback((uri: string) => {
-        setEditedItem(prev => ({ ...prev, photo_storage_url: uri }));
-    }, []);
+    const handleImageSelected = useCallback(async (uri: string) => {
+        try {
+            const hasPermissions = await checkPhotoPermissions();
+            if (!hasPermissions) {
+                Alert.alert('Erreur', 'Permission d\'accès aux photos refusée');
+                return;
+            }
 
-    const handleImageError = useCallback((error: string) => {
-        Sentry.captureException(new Error(error), {
-            tags: { context: 'item_edit_form_image_picker' }
-        });
-        Alert.alert('Erreur', error);
-    }, []);
+            await handlePhotoUpload(uri);
+        } catch (error) {
+            handleError(error, 'Erreur lors de la sélection de la photo', {
+                source: 'item_edit_form_image',
+                message: `Échec de la sélection de la photo pour l'article ${item.id}`,
+                showAlert: true
+            });
+        }
+    }, [item.id, handlePhotoUpload]);
+
+    const handlePhotoDelete = useCallback(async () => {
+        try {
+            if (item.photo_storage_url) {
+                await deletePhoto(item.photo_storage_url);
+            }
+            setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
+        } catch (error) {
+            handleError(error, 'Erreur lors de la suppression de la photo', {
+                source: 'item_edit_form_image',
+                message: `Échec de la suppression de la photo de l'article ${item.id}`,
+                showAlert: true
+            });
+        }
+    }, [item.id, deletePhoto]);
 
     return (
         <ScrollView style={styles.container}>
@@ -259,12 +352,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                             placeholder="0.00"
                             value={editedItem.purchasePrice}
                             keyboardType="decimal-pad"
-                            onChangeText={(text) => {
-                                const cleanText = text.replace(',', '.');
-                                if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
-                                    setEditedItem(prev => ({ ...prev, purchasePrice: cleanText }));
-                                }
-                            }}
+                            onChangeText={(text) => handlePriceChange('purchasePrice', text)}
                         />
                     </View>
                     <View style={styles.priceInputWrapper}>
@@ -274,12 +362,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                             placeholder="0.00"
                             value={editedItem.sellingPrice}
                             keyboardType="decimal-pad"
-                            onChangeText={(text) => {
-                                const cleanText = text.replace(',', '.');
-                                if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
-                                    setEditedItem(prev => ({ ...prev, sellingPrice: cleanText }));
-                                }
-                            }}
+                            onChangeText={(text) => handlePriceChange('sellingPrice', text)}
                         />
                     </View>
                 </View>
@@ -301,7 +384,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                                 />
                                 <TouchableOpacity 
                                     style={styles.deletePhotoButton}
-                                    onPress={() => setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }))}
+                                    onPress={handlePhotoDelete}
                                 >
                                     <MaterialIcons name="delete" size={24} color="#FF3B30" />
                                 </TouchableOpacity>
@@ -309,7 +392,10 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                         ) : (
                             <ImagePicker
                                 onImageSelected={handleImageSelected}
-                                onError={handleImageError}
+                                onError={(error) => handleError(error, 'Erreur du sélecteur d\'images', {
+                                    source: 'item_edit_form_image_picker',
+                                    message: `Erreur lors de la sélection d'image pour l'article ${item.id}`
+                                })}
                             />
                         )}
                     </View>
@@ -374,14 +460,14 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                     <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
                         <Text style={styles.buttonText}>Annuler</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSubmit}>
                         <Text style={styles.buttonText}>Mettre à jour</Text>
                     </TouchableOpacity>
                 </View>
             </View>
         </ScrollView>
     );
-});
+}, arePropsEqual);
 
 const styles = StyleSheet.create({
     container: {

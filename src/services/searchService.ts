@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { Item } from '../database/types';
+import { Item } from '../types/item';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -92,7 +92,7 @@ export const searchItems = async (filters: SearchFilters): Promise<SearchRespons
     };
   } catch (error) {
     if (error instanceof Error || 'code' in (error as any)) {
-      throw handleDatabaseError(error as Error | PostgrestError, 'searchItems');
+      throw handleDatabaseError(error as Error | PostgrestError);
     }
     throw error;
   }
@@ -131,7 +131,7 @@ export const searchItemsByBarcode = async (barcode: string): Promise<Item | null
     } : null;
   } catch (error) {
     if (error instanceof Error || 'code' in (error as any)) {
-      throw handleDatabaseError(error as Error | PostgrestError, 'searchItemsByBarcode');
+      throw handleDatabaseError(error as Error | PostgrestError);
     }
     throw error;
   }
@@ -165,7 +165,7 @@ export const searchSimilarItems = async (itemName: string, limit: number = 5): P
     }));
   } catch (error) {
     if (error instanceof Error || 'code' in (error as any)) {
-      throw handleDatabaseError(error as Error | PostgrestError, 'searchSimilarItems');
+      throw handleDatabaseError(error as Error | PostgrestError);
     }
     throw error;
   }

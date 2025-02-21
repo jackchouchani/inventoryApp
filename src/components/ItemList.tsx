@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo, memo, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Image } from 'react-native';
+import React, { useCallback, memo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
 import { Item } from '../types/item';
 import { Container } from '../types/container';
 import { Category } from '../types/category';
@@ -8,11 +8,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
 import { selectAllCategories } from '../store/categorySlice';
 import { selectAllContainers } from '../store/containersSlice';
-import ItemCard from './ItemCard';
 import { Skeleton } from './Skeleton';
 import { withPerformanceMonitoring } from '../hoc/withPerformanceMonitoring';
 import { monitoring } from '../services/monitoring';
-import { photoService } from '../services/photoService';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import ItemCard from './ItemCard';
 
 interface ItemListProps {
   items: Item[];
@@ -26,15 +26,6 @@ interface ItemListProps {
   selectedItem: Item | null;
   onEditSuccess: () => void;
   onEditCancel: () => void;
-}
-
-interface Filters {
-  search: string;
-  categoryId: number | null;
-  containerId: 'none' | number | null;
-  status: 'all' | 'available' | 'sold';
-  minPrice: string;
-  maxPrice: string;
 }
 
 const ItemListModal: React.FC<{
@@ -141,98 +132,38 @@ const ItemLoadingSkeleton = memo(() => (
   </View>
 ));
 
-const getStatusStyle = (status: 'available' | 'sold') => {
-  switch (status) {
-    case 'available':
-      return styles.statusAvailable;
-    case 'sold':
-      return styles.statusSold;
-    default:
-      return styles.statusAvailable;
-  }
-};
+const ItemListItemComponent: React.FC<{ 
+  item: Item; 
+  onPress?: (item: Item) => void; 
+  categories: Category[]; 
+  containers: Container[]; 
+  onMarkAsSold?: (item: Item) => void; 
+  onMarkAsAvailable?: (item: Item) => void; 
+}> = ({ 
+  item, 
+  onPress,
+  onMarkAsSold,
+  onMarkAsAvailable 
+}) => {
+  const handlePress = useCallback(() => {
+    onPress?.(item);
+  }, [item, onPress]);
 
-const getStatusText = (status: 'available' | 'sold') => {
-  switch (status) {
-    case 'available':
-      return 'Disponible';
-    case 'sold':
-      return 'Vendu';
-    default:
-      return 'Disponible';
-  }
-};
+  const handleMarkAsSold = useCallback(() => {
+    if (onMarkAsSold) onMarkAsSold(item);
+  }, [item, onMarkAsSold]);
 
-const ItemListItemComponent: React.FC<{ item: Item; onPress?: (item: Item) => void; categories: Category[]; containers: Container[]; }> = ({ item, onPress, categories, containers }) => {
-  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
-  const [imageError, setImageError] = useState(false);
-
-  useEffect(() => {
-    if (item.photo_storage_url) {
-      if (item.photo_storage_url.includes('supabase.co')) {
-        setImageUrl(item.photo_storage_url);
-      } else if (item.photo_storage_url.includes('/images/')) {
-        const filename = item.photo_storage_url.split('/images/').pop();
-        if (filename) {
-          setImageError(false);
-          photoService.getImageUrlWithCache(filename)
-            .then(url => {
-              setImageUrl(url);
-            })
-            .catch(error => {
-              console.error(`Erreur lors de la génération de l'URL signée pour l'item ${item.id}:`, error);
-              setImageError(true);
-            });
-        }
-      }
-    } else {
-      setImageUrl(undefined);
-    }
-  }, [item.photo_storage_url, item.id]);
-
-  const imageSource = useMemo(() => imageUrl ? { uri: imageUrl } : undefined, [imageUrl]);
+  const handleMarkAsAvailable = useCallback(() => {
+    if (onMarkAsAvailable) onMarkAsAvailable(item);
+  }, [item, onMarkAsAvailable]);
 
   return (
-    <TouchableOpacity 
-      style={styles.itemCard}
-      onPress={() => onPress?.(item)}
-    >
-      <View style={styles.itemContent}>
-        {imageSource && !imageError ? (
-          <Image 
-            source={imageSource}
-            style={styles.itemImage}
-            resizeMode="cover"
-            onError={() => { setImageError(true); }}
-          />
-        ) : (
-          <View style={styles.noImagePlaceholder}>
-            <MaterialIcons 
-              name={imageError ? "broken-image" : "image-not-supported"} 
-              size={24} 
-              color="#ccc" 
-            />
-          </View>
-        )}
-        <View style={styles.itemDetailsContainer}>
-          <Text style={styles.itemNameText}>{item.name}</Text>
-          <Text style={styles.itemPriceText}>{item.sellingPrice}€</Text>
-          <View style={styles.itemMetadata}>
-            <Text style={styles.itemCategory}>
-              {categories.find((c: any) => c.id === item.categoryId)?.name || 'Sans catégorie'}
-            </Text>
-            {item.containerId && (
-              <Text style={styles.itemContainer}>
-                📦 {containers.find((c: any) => c.id === item.containerId)?.name || 'Container inconnu'}
-              </Text>
-            )}
-          </View>
-          <View style={[styles.statusBadge, item.status === 'sold' ? styles.statusSold : styles.statusAvailable]}>
-            <Text style={styles.statusText}>{item.status === 'sold' ? 'Vendu' : 'Disponible'}</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
+    <ItemCard
+      item={item}
+      onPress={handlePress}
+      onMarkAsSold={handleMarkAsSold}
+      onMarkAsAvailable={handleMarkAsAvailable}
+    />
   );
 };
 
@@ -251,7 +182,6 @@ const ItemList: React.FC<ItemListProps> = memo(({
   categories,
   containers,
   isLoading,
-  error,
   selectedItem,
   onEditSuccess,
   onEditCancel
@@ -289,6 +219,8 @@ const ItemList: React.FC<ItemListProps> = memo(({
         onPress={onItemPress}
         categories={categories}
         containers={containers}
+        onMarkAsSold={onMarkAsSold}
+        onMarkAsAvailable={onMarkAsAvailable}
       />
     );
   };
@@ -311,6 +243,19 @@ const ItemList: React.FC<ItemListProps> = memo(({
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => `${item.id}-${item.updatedAt}`}
+        initialNumToRender={5}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        removeClippedSubviews={true}
+        getItemLayout={(_data, index) => ({
+          length: 120,
+          offset: 120 * index,
+          index,
+        })}
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+        }}
+        onEndReachedThreshold={0.5}
       />
 
       <ItemListModal
@@ -321,6 +266,19 @@ const ItemList: React.FC<ItemListProps> = memo(({
     </View>
   );
 });
+
+const ItemListWithErrorBoundary = (props: ItemListProps) => (
+  <ErrorBoundary
+    fallbackRender={({ error }) => (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Une erreur est survenue lors du chargement de la liste</Text>
+        <Text style={styles.errorDetails}>{error.message}</Text>
+      </View>
+    )}
+  >
+    <ItemList {...props} />
+  </ErrorBoundary>
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -641,10 +599,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#e53935',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorDetails: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 ItemList.displayName = 'ItemList';
 ItemRow.displayName = 'ItemRow';
 ItemLoadingSkeleton.displayName = 'ItemLoadingSkeleton';
 
-export default withPerformanceMonitoring(ItemList, 'ItemList');
+export default withPerformanceMonitoring(ItemListWithErrorBoundary, 'ItemList');

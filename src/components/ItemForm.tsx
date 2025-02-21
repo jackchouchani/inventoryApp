@@ -1,17 +1,54 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { generateId } from '../utils/identifierManager';
 import { addItem } from '../store/itemsActions';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { MaterialIconName } from '../types/icons';
-import { photoService } from '../services/photoService';
 import { ImagePicker } from './ImagePicker';
 import * as Sentry from '@sentry/react-native';
 import AdaptiveImage from './AdaptiveImage';
+import { handleError } from '../utils/errorHandler';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import type { FallbackProps } from 'react-error-boundary';
+import type { Item, ItemInput } from '../types/item';
+import { usePhoto } from '../hooks/usePhoto';
+
+const FORM_VALIDATION = {
+    NAME_MAX_LENGTH: 100,
+    MIN_PRICE: 0,
+    MAX_PRICE: 1000000,
+    REQUIRED_FIELDS: ['name', 'categoryId'] as const
+} as const;
+
+/**
+ * Type pour les erreurs de validation du formulaire
+ */
+type ValidationError = {
+    field: string;
+    message: string;
+};
+
+/**
+ * Props pour le composant ContainerOption
+ */
+interface ContainerOptionProps {
+    container: Container;
+    isSelected: boolean;
+    onSelect: (id: number) => void;
+}
+
+/**
+ * Props pour le composant CategoryOption
+ */
+interface CategoryOptionProps {
+    category: Category;
+    isSelected: boolean;
+    onSelect: (id: number) => void;
+}
 
 interface ItemFormProps {
     containers: Container[];
@@ -42,11 +79,122 @@ const INITIAL_STATE: ItemFormState = {
     categoryId: null,
 };
 
+/**
+ * Composant d'option de conteneur mémoïsé
+ */
+const ContainerOption = memo(({ container, isSelected, onSelect }: ContainerOptionProps) => (
+    <TouchableOpacity
+        style={[styles.option, isSelected && styles.optionSelected]}
+        onPress={() => onSelect(container.id)}
+    >
+        <MaterialIcons
+            name="inbox"
+            size={20}
+            color={isSelected ? '#fff' : '#666'}
+            style={styles.containerIcon}
+        />
+        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+            {container.name}
+        </Text>
+    </TouchableOpacity>
+));
+
+/**
+ * Composant d'option de catégorie mémoïsé
+ */
+const CategoryOption = memo(({ category, isSelected, onSelect }: CategoryOptionProps) => (
+    <TouchableOpacity
+        style={[styles.option, isSelected && styles.optionSelected]}
+        onPress={() => onSelect(category.id)}
+    >
+        <MaterialIcons
+            name={(category.icon as MaterialIconName) || 'folder'}
+            size={20}
+            color={isSelected ? '#fff' : '#666'}
+            style={styles.categoryIcon}
+        />
+        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+            {category.name}
+        </Text>
+    </TouchableOpacity>
+));
+
+/**
+ * Composant de liste de conteneurs mémoïsé
+ */
+const ContainerList = memo(({ containers, selectedId, onSelect }: {
+    containers: Container[];
+    selectedId?: number | null;
+    onSelect: (id: number) => void;
+}) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+        <View style={styles.optionsContainer}>
+            {containers.map((container) => (
+                <ContainerOption
+                    key={container.id}
+                    container={container}
+                    isSelected={selectedId === container.id}
+                    onSelect={onSelect}
+                />
+            ))}
+        </View>
+    </ScrollView>
+));
+
+/**
+ * Composant de liste de catégories mémoïsé
+ */
+const CategoryList = memo(({ categories, selectedId, onSelect }: {
+    categories: Category[];
+    selectedId?: number | null;
+    onSelect: (id: number) => void;
+}) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+        <View style={styles.optionsContainer}>
+            {categories.map((category) => (
+                <CategoryOption
+                    key={category.id}
+                    category={category}
+                    isSelected={selectedId === category.id}
+                    onSelect={onSelect}
+                />
+            ))}
+        </View>
+    </ScrollView>
+));
+
+/**
+ * Composant de fallback en cas d'erreur
+ */
+const ItemFormErrorFallback: React.FC<FallbackProps> = ({ error, resetErrorBoundary }) => (
+    <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>
+            Une erreur est survenue lors du chargement du formulaire
+        </Text>
+        <Text style={styles.errorDetail}>{error.message}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={resetErrorBoundary}>
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+        </TouchableOpacity>
+    </View>
+);
+
+const ItemFormWithErrorBoundary: React.FC<ItemFormProps> = (props) => (
+    <ErrorBoundary
+        fallbackRender={ItemFormErrorFallback}
+        onReset={() => {
+            // Réinitialisation du formulaire si nécessaire
+        }}
+    >
+        <ItemForm {...props} />
+    </ErrorBoundary>
+);
+
 const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, onCancel }) => {
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
+    const { loading, error, uploadPhoto, validatePhoto } = usePhoto();
 
     const resetForm = useCallback(() => {
         setItem(INITIAL_STATE);
@@ -58,113 +206,176 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
         };
     }, [resetForm]);
 
-    const handleSave = async () => {
-        try {
-            // Validation
-            if (!item.name.trim()) {
-                Alert.alert('Erreur', 'Le nom est requis');
-                return;
-            }
+    /**
+     * Valide le formulaire et retourne les erreurs éventuelles
+     */
+    const validateForm = useCallback((): ValidationError[] => {
+        const errors: ValidationError[] = [];
+        
+        // Validation du nom
+        if (!item.name.trim()) {
+            errors.push({ field: 'name', message: 'Le nom est requis' });
+        } else if (item.name.length > FORM_VALIDATION.NAME_MAX_LENGTH) {
+            errors.push({ 
+                field: 'name', 
+                message: `Le nom ne doit pas dépasser ${FORM_VALIDATION.NAME_MAX_LENGTH} caractères` 
+            });
+        }
+        
+        // Validation des prix
+        const purchasePrice = parseFloat(item.purchasePrice);
+        const sellingPrice = parseFloat(item.sellingPrice);
+        
+        if (isNaN(purchasePrice) || purchasePrice < FORM_VALIDATION.MIN_PRICE) {
+            errors.push({ 
+                field: 'purchasePrice', 
+                message: 'Le prix d\'achat doit être un nombre positif' 
+            });
+        } else if (purchasePrice > FORM_VALIDATION.MAX_PRICE) {
+            errors.push({ 
+                field: 'purchasePrice', 
+                message: `Le prix d'achat ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
+            });
+        }
+        
+        if (isNaN(sellingPrice) || sellingPrice < FORM_VALIDATION.MIN_PRICE) {
+            errors.push({ 
+                field: 'sellingPrice', 
+                message: 'Le prix de vente doit être un nombre positif' 
+            });
+        } else if (sellingPrice > FORM_VALIDATION.MAX_PRICE) {
+            errors.push({ 
+                field: 'sellingPrice', 
+                message: `Le prix de vente ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
+            });
+        }
+        
+        // Validation de la catégorie
+        if (!item.categoryId) {
+            errors.push({ field: 'categoryId', message: 'La catégorie est requise' });
+        }
+        
+        return errors;
+    }, [item]);
 
-            const purchasePrice = parseFloat(item.purchasePrice);
-            const sellingPrice = parseFloat(item.sellingPrice);
-            
-            if (isNaN(purchasePrice) || isNaN(sellingPrice)) {
-                Alert.alert('Erreur', 'Les prix doivent être des nombres valides');
-                return;
-            }
-            
-            if (purchasePrice < 0 || sellingPrice < 0) {
-                Alert.alert('Erreur', 'Les prix ne peuvent pas être négatifs');
-                return;
-            }
-
-            if (!item.categoryId) {
-                Alert.alert('Erreur', 'La catégorie est requise');
-                return;
-            }
-
-            // Upload de la photo si présente
+    /**
+     * Mutation pour l'ajout d'un item avec React Query
+     */
+    const addItemMutation = useMutation({
+        mutationFn: async (newItem: ItemFormState) => {
+            const qrCode = generateId('ITEM');
             let photoUrl: string | undefined = undefined;
-            if (item.photo_storage_url) {
+
+            if (newItem.photo_storage_url) {
                 try {
-                    photoUrl = await photoService.uploadPhoto(item.photo_storage_url);
+                    photoUrl = await uploadPhoto(newItem.photo_storage_url);
                 } catch (error) {
-                    console.error('Erreur lors de l\'upload de la photo:', error);
-                    const continueWithoutPhoto = await new Promise((resolve) => {
-                        Alert.alert(
-                            'Erreur',
-                            'Impossible d\'uploader la photo. Voulez-vous continuer sans photo ?',
-                            [
-                                { text: 'Non', onPress: () => resolve(false) },
-                                { text: 'Oui', onPress: () => resolve(true) }
-                            ]
-                        );
-                    });
-                    
-                    if (!continueWithoutPhoto) {
-                        return;
-                    }
+                    throw new Error('Erreur lors de l\'upload de la photo');
                 }
             }
 
-            // Génération du QR code uniquement à la sauvegarde
-            const qrCode = generateId('ITEM');
+            if (!newItem.categoryId) {
+                throw new Error('La catégorie est requise');
+            }
 
-            // Ajout dans la base de données
-            const newItemId = await database.addItem({
-                name: item.name.trim(),
-                description: item.description.trim(),
-                purchasePrice,
-                sellingPrice,
+            const itemToAdd: ItemInput = {
+                name: newItem.name.trim(),
+                description: newItem.description.trim(),
+                purchasePrice: parseFloat(newItem.purchasePrice),
+                sellingPrice: parseFloat(newItem.sellingPrice),
                 status: 'available',
                 photo_storage_url: photoUrl,
-                containerId: item.containerId || null,
-                categoryId: item.categoryId,
+                containerId: newItem.containerId || null,
+                categoryId: newItem.categoryId,
                 qrCode
-            });
+            };
 
-            // Création de l'objet complet pour Redux
-            const newItem = {
-                id: newItemId,
-                name: item.name.trim(),
-                description: item.description.trim(),
-                purchasePrice,
-                sellingPrice,
-                status: 'available' as const,
-                photo_storage_url: photoUrl,
-                containerId: item.containerId || null,
-                categoryId: item.categoryId,
-                qrCode,
+            // Ajouter l'item et récupérer son ID
+            const itemId = await database.addItem(itemToAdd);
+
+            // Construire l'objet complet pour Redux
+            const completeItem: Item = {
+                id: itemId,
+                ...itemToAdd,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
-            // Mise à jour du store Redux
-            dispatch(addItem(newItem));
-
-            // Invalider les requêtes
+            return completeItem;
+        },
+        onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['items'] });
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
-
-            resetForm();
+            dispatch(addItem(data));
             triggerRefresh();
+            resetForm();
             if (onSuccess) onSuccess();
+        },
+        onError: (error) => {
+            handleError(error, 'Erreur lors de l\'ajout de l\'article', {
+                source: 'item_form',
+                message: 'Impossible d\'ajouter l\'article',
+                showAlert: true
+            });
+        }
+    });
+
+    const handleSave = useCallback(async () => {
+        const errors = validateForm();
+        if (errors.length > 0) {
+            Alert.alert(
+                'Erreurs de validation',
+                errors.map(error => error.message).join('\n')
+            );
+            return;
+        }
+
+        try {
+            await addItemMutation.mutateAsync(item);
         } catch (error) {
-            console.error('Erreur lors de la sauvegarde:', error);
-            Alert.alert('Erreur', 'Impossible de sauvegarder l\'article');
+            handleError(error, 'Erreur lors de la sauvegarde', {
+                source: 'item_form',
+                message: 'Impossible de sauvegarder l\'article',
+                showAlert: true
+            });
+        }
+    }, [item, validateForm, addItemMutation]);
+
+    const handlePhotoUpload = async (uri: string) => {
+        try {
+            if (!await validatePhoto(uri)) {
+                Alert.alert('Erreur', 'Photo invalide');
+                return;
+            }
+            const photoUrl = await uploadPhoto(uri);
+            setItem(prev => ({ ...prev, photo_storage_url: photoUrl }));
+        } catch (error) {
+            handleError(error, 'Erreur lors du téléchargement de la photo', {
+                source: 'item_form',
+                message: 'Impossible de télécharger la photo',
+                showAlert: true
+            });
         }
     };
 
-    const handleImageSelected = (uri: string) => {
-        setItem(prev => ({ ...prev, photo_storage_url: uri }));
-    };
+    const handleSubmit = async () => {
+        try {
+            if (!validateForm()) return;
 
-    const handleImageError = (error: string) => {
-        Sentry.captureException(new Error(error), {
-            tags: { context: 'item_form_image_picker' }
-        });
-        Alert.alert('Erreur', error);
+            let finalFormData = { ...item };
+            if (item.photo_storage_url) {
+                const photoUrl = await uploadPhoto(item.photo_storage_url);
+                finalFormData.photo_storage_url = photoUrl;
+            }
+
+            await handleSave();
+        } catch (error) {
+            handleError(error, 'Erreur lors de la création', {
+                source: 'item_form',
+                message: 'Impossible de créer l\'article',
+                showAlert: true
+            });
+        }
     };
 
     const handleContainerSelect = useCallback((containerId: number | undefined) => {
@@ -183,7 +394,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
         <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Nouvel Article</Text>
-                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSubmit}>
                     <Text style={styles.saveText}>Enregistrer</Text>
                 </TouchableOpacity>
             </View>
@@ -262,8 +473,13 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                             </View>
                         ) : (
                             <ImagePicker
-                                onImageSelected={handleImageSelected}
-                                onError={handleImageError}
+                                onImageSelected={handlePhotoUpload}
+                                onError={(error) => {
+                                    Sentry.captureException(new Error(error), {
+                                        tags: { context: 'item_form_image_picker' }
+                                    });
+                                    Alert.alert('Erreur', error);
+                                }}
                             />
                         )}
                     </View>
@@ -271,60 +487,20 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Emplacement</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-                        <View style={styles.optionsContainer}>
-                            {containers.map((container) => (
-                                <TouchableOpacity
-                                    key={container.id}
-                                    style={[
-                                        styles.option,
-                                        item.containerId === container.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => handleContainerSelect(container.id)}
-                                >
-                                    <MaterialIcons
-                                        name="inbox"
-                                        size={20}
-                                        color={item.containerId === container.id ? '#fff' : '#666'}
-                                        style={styles.containerIcon}
-                                    />
-                                    <Text style={[
-                                        styles.optionText,
-                                        item.containerId === container.id && styles.optionTextSelected
-                                    ]}>{container.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </ScrollView>
+                    <ContainerList
+                        containers={containers}
+                        selectedId={item.containerId}
+                        onSelect={handleContainerSelect}
+                    />
                 </View>
 
                 <View style={[styles.formSection, styles.formSectionLast]}>
                     <Text style={styles.sectionTitle}>Catégorie</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-                        <View style={styles.optionsContainer}>
-                            {categories.map((category) => (
-                                <TouchableOpacity
-                                    key={category.id}
-                                    style={[
-                                        styles.option,
-                                        item.categoryId === category.id && styles.optionSelected
-                                    ]}
-                                    onPress={() => handleCategorySelect(category.id)}
-                                >
-                                    <MaterialIcons
-                                        name={(category.icon as MaterialIconName) || 'folder'}
-                                        size={20}
-                                        color={item.categoryId === category.id ? '#fff' : '#666'}
-                                        style={styles.categoryIcon}
-                                    />
-                                    <Text style={[
-                                        styles.optionText,
-                                        item.categoryId === category.id && styles.optionTextSelected
-                                    ]}>{category.name}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </ScrollView>
+                    <CategoryList
+                        categories={categories}
+                        selectedId={item.categoryId}
+                        onSelect={handleCategorySelect}
+                    />
                 </View>
             </ScrollView>
         </View>
@@ -495,6 +671,36 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#fff',
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#FF3B30',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    errorDetail: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    retryButton: {
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
 });
 
-export default ItemForm;
+export default ItemFormWithErrorBoundary;

@@ -5,7 +5,6 @@ import {
     StyleSheet, 
     TouchableOpacity, 
     Platform, 
-    Animated,
     Dimensions,
     StatusBar,
     FlatList,
@@ -14,8 +13,7 @@ import {
     Linking
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
-import { Audio } from 'expo-av';
-import { parseId, ID_TYPES } from '../utils/identifierManager';
+import { parseId } from '../utils/identifierManager';
 import { database } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -23,10 +21,20 @@ import * as haptics from '../utils/vibrationManager';
 import * as sounds from '../utils/soundManager';
 import type { Container } from '../database/database';
 import type { Item } from '../types/item';
-import { handleScannerError } from '../utils/errorHandler';
+import { handleScannerError, ErrorDetails } from '../utils/errorHandler';
 import { useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ErrorBoundary } from './ErrorBoundary';
+import Reanimated, {
+    useAnimatedStyle,
+    withRepeat,
+    withTiming,
+    withSpring,
+    useSharedValue,
+    withSequence,
+    Easing,
+} from 'react-native-reanimated';
 
 interface ScannerProps {
     onClose: () => void;
@@ -45,6 +53,7 @@ interface ScanState {
     isScanning: boolean;
     pendingItem: Item | null;
     showConfirmation: boolean;
+    error?: ErrorDetails;
 }
 
 const INITIAL_STATE: ScanState = {
@@ -62,15 +71,35 @@ const SCANNER_SIZE = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.7;
 
 const CAMERA_PERMISSION_KEY = '@app:camera_permission';
 
+const AnimatedView = Reanimated.createAnimatedComponent(View);
+
 export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) => {
     const [permission, requestPermission] = useCameraPermissions();
     const [hasCheckedPermission, setHasCheckedPermission] = useState(false);
     const [scanState, setScanState] = useState<ScanState>(INITIAL_STATE);
-    const [fadeAnim] = useState(new Animated.Value(0));
-    const [overlayAnim] = useState(new Animated.Value(0));
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const queryClient = useQueryClient();
     const [lastScanTime, setLastScanTime] = useState(0);
+
+    // Animations
+    const scanLinePosition = useSharedValue(0);
+    const scannerScale = useSharedValue(1);
+    const overlayOpacity = useSharedValue(0);
+
+    // Styles animés
+    const scanLineStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: scanLinePosition.value * SCANNER_SIZE }],
+        opacity: withSpring(isActive ? 1 : 0),
+    }));
+
+    const scannerContainerStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scannerScale.value }],
+    }));
+
+    const overlayStyle = useAnimatedStyle(() => ({
+        opacity: overlayOpacity.value,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+    }));
 
     // Vérifier si l'autorisation a déjà été accordée
     useEffect(() => {
@@ -307,7 +336,11 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             });
         } catch (error) {
             console.error('Erreur lors de la finalisation:', error);
-            handleScannerError(error as Error, 'Scanner.handleFinishItemScanning');
+            const errorDetails = handleScannerError(error instanceof Error ? error : new Error('Erreur inconnue'));
+            setScanState(prev => ({
+                ...prev,
+                error: errorDetails
+            }));
         }
     };
 
@@ -326,6 +359,41 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             setScanState(prev => ({ ...prev, isScanning: true }));
         }
     }, [isActive]);
+
+    // Démarrer les animations
+    useEffect(() => {
+        if (isActive && scanState.isScanning) {
+            // Animation de la ligne de scan
+            scanLinePosition.value = withRepeat(
+                withSequence(
+                    withTiming(0, { duration: 0 }),
+                    withTiming(1, {
+                        duration: 2000,
+                        easing: Easing.linear,
+                    })
+                ),
+                -1
+            );
+
+            // Animation de pulsation du scanner
+            scannerScale.value = withRepeat(
+                withSequence(
+                    withTiming(1.02, {
+                        duration: 1000,
+                        easing: Easing.ease,
+                    }),
+                    withTiming(1, {
+                        duration: 1000,
+                        easing: Easing.ease,
+                    })
+                ),
+                -1
+            );
+        } else {
+            scanLinePosition.value = withTiming(0);
+            scannerScale.value = withTiming(1);
+        }
+    }, [isActive, scanState.isScanning]);
 
     if (!hasCheckedPermission) {
         return (
@@ -374,142 +442,131 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" />
-            
-            <CameraView
-                style={StyleSheet.absoluteFill}
-                onBarcodeScanned={scanState.isScanning ? handleScan : undefined}
-                barcodeScannerSettings={{
-                    barcodeTypes: scanState.mode === 'container' ? ['qr'] : ['qr', 'datamatrix'],
-                }}
-            >
-                <View style={styles.overlay}>
-                    <View style={styles.header}>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={onClose}
-                        >
-                            <MaterialIcons name="close" size={24} color="#fff" />
-                        </TouchableOpacity>
-                        
-                        <View style={styles.modeIndicator}>
-                            <MaterialIcons 
-                                name={scanState.mode === 'container' ? 'inbox' : 'shopping-bag'} 
-                                size={24} 
-                                color="#fff" 
-                            />
-                            <Text style={styles.modeText}>
-                                {scanState.mode === 'container' ? 'Scanner un container' : 'Scanner des articles'}
-                            </Text>
+        <ErrorBoundary onReset={() => setScanState(INITIAL_STATE)}>
+            <View style={styles.container}>
+                <StatusBar barStyle="light-content" />
+                <CameraView
+                    style={StyleSheet.absoluteFill}
+                    onBarcodeScanned={scanState.isScanning ? handleScan : undefined}
+                    barcodeScannerSettings={{
+                        barcodeTypes: scanState.mode === 'container' ? ['qr'] : ['qr', 'datamatrix'],
+                    }}
+                >
+                    <AnimatedView style={[styles.overlay, overlayStyle]}>
+                        <View style={styles.header}>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={onClose}
+                            >
+                                <MaterialIcons name="close" size={24} color="#fff" />
+                            </TouchableOpacity>
+                            
+                            <View style={styles.modeIndicator}>
+                                <MaterialIcons 
+                                    name={scanState.mode === 'container' ? 'inbox' : 'shopping-bag'} 
+                                    size={24} 
+                                    color="#fff" 
+                                />
+                                <Text style={styles.modeText}>
+                                    {scanState.mode === 'container' ? 'Scanner un container' : 'Scanner des articles'}
+                                </Text>
+                            </View>
+
+                            {scanState.mode === 'item' && (
+                                <TouchableOpacity
+                                    style={styles.resetButton}
+                                    onPress={resetScanner}
+                                >
+                                    <MaterialIcons name="refresh" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        <View style={styles.scannerFrame}>
+                            {scanState.isScanning ? (
+                                <AnimatedView style={[styles.scannerContainer, scannerContainerStyle]}>
+                                    <View style={styles.scanner}>
+                                        <View style={styles.scannerCorner} />
+                                        <View style={[styles.scannerCorner, styles.topRight]} />
+                                        <View style={[styles.scannerCorner, styles.bottomLeft]} />
+                                        <View style={[styles.scannerCorner, styles.bottomRight]} />
+                                    </View>
+                                    <AnimatedView style={[styles.scanLine, scanLineStyle]} />
+                                </AnimatedView>
+                            ) : (
+                                <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
+                                    <View style={styles.confirmationContainer}>
+                                        {scanState.mode === 'container' && scanState.currentContainer && (
+                                            <>
+                                                <View style={styles.confirmationHeader}>
+                                                    <MaterialIcons name="check-circle" size={40} color="#4CAF50" />
+                                                    <Text style={styles.confirmationTitle}>
+                                                        Container scanné avec succès
+                                                    </Text>
+                                                </View>
+                                                <Text style={styles.confirmationText}>
+                                                    {scanState.currentContainer.name}
+                                                </Text>
+                                                <View style={styles.buttonGroup}>
+                                                    <TouchableOpacity
+                                                        style={[styles.button, styles.cancelButton]}
+                                                        onPress={cancelContainerScan}
+                                                    >
+                                                        <MaterialIcons name="close" size={20} color="#fff" />
+                                                        <Text style={styles.buttonText}>Annuler</Text>
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        style={[styles.button, styles.confirmButton]}
+                                                        onPress={startScanningItems}
+                                                    >
+                                                        <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
+                                                        <Text style={styles.buttonText}>Scanner des articles</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </>
+                                        )}
+                                    </View>
+                                </BlurView>
+                            )}
                         </View>
 
                         {scanState.mode === 'item' && (
-                            <TouchableOpacity
-                                style={styles.resetButton}
-                                onPress={resetScanner}
-                            >
-                                <MaterialIcons name="refresh" size={24} color="#fff" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-
-                    <View style={styles.scannerFrame}>
-                        {scanState.isScanning ? (
-                            <View style={styles.scannerContainer}>
-                                <View style={styles.scanner}>
-                                    <View style={styles.scannerCorner} />
-                                    <View style={[styles.scannerCorner, styles.topRight]} />
-                                    <View style={[styles.scannerCorner, styles.bottomLeft]} />
-                                    <View style={[styles.scannerCorner, styles.bottomRight]} />
+                            <View style={styles.footer}>
+                                <View style={styles.containerInfo}>
+                                    <Text style={styles.containerTitle}>
+                                        Container : {scanState.currentContainer?.name}
+                                    </Text>
+                                    <Text style={styles.itemCount}>
+                                        {scanState.scannedItems.length} articles scannés
+                                    </Text>
                                 </View>
-                                <Animated.View 
-                                    style={[
-                                        styles.scanLine,
-                                        {
-                                            transform: [{
-                                                translateY: overlayAnim.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [0, SCANNER_SIZE]
-                                                })
-                                            }]
-                                        }
-                                    ]} 
-                                />
-                            </View>
-                        ) : (
-                            <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
-                                <View style={styles.confirmationContainer}>
-                                    {scanState.mode === 'container' && scanState.currentContainer && (
-                                        <>
-                                            <View style={styles.confirmationHeader}>
-                                                <MaterialIcons name="check-circle" size={40} color="#4CAF50" />
-                                                <Text style={styles.confirmationTitle}>
-                                                    Container scanné avec succès
-                                                </Text>
-                                            </View>
-                                            <Text style={styles.confirmationText}>
-                                                {scanState.currentContainer.name}
+
+                                <View style={styles.scannedItemsContainer}>
+                                    <FlatList
+                                        data={scanState.scannedItems}
+                                        renderItem={renderScannedItem}
+                                        keyExtractor={item => item.id!.toString()}
+                                        style={styles.scannedItemsList}
+                                    />
+
+                                    {scanState.scannedItems.length > 0 && (
+                                        <TouchableOpacity
+                                            style={styles.finishButton}
+                                            onPress={handleFinishItemScanning}
+                                        >
+                                            <MaterialIcons name="check" size={24} color="#fff" />
+                                            <Text style={styles.finishButtonText}>
+                                                Terminer et assigner les articles
                                             </Text>
-                                            <View style={styles.buttonGroup}>
-                                                <TouchableOpacity
-                                                    style={[styles.button, styles.cancelButton]}
-                                                    onPress={cancelContainerScan}
-                                                >
-                                                    <MaterialIcons name="close" size={20} color="#fff" />
-                                                    <Text style={styles.buttonText}>Annuler</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={[styles.button, styles.confirmButton]}
-                                                    onPress={startScanningItems}
-                                                >
-                                                    <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
-                                                    <Text style={styles.buttonText}>Scanner des articles</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        </>
+                                        </TouchableOpacity>
                                     )}
                                 </View>
-                            </BlurView>
+                            </View>
                         )}
-                    </View>
-
-                    {scanState.mode === 'item' && (
-                        <View style={styles.footer}>
-                            <View style={styles.containerInfo}>
-                                <Text style={styles.containerTitle}>
-                                    Container : {scanState.currentContainer?.name}
-                                </Text>
-                                <Text style={styles.itemCount}>
-                                    {scanState.scannedItems.length} articles scannés
-                                </Text>
-                            </View>
-
-                            <View style={styles.scannedItemsContainer}>
-                                <FlatList
-                                    data={scanState.scannedItems}
-                                    renderItem={renderScannedItem}
-                                    keyExtractor={item => item.id!.toString()}
-                                    style={styles.scannedItemsList}
-                                />
-
-                                {scanState.scannedItems.length > 0 && (
-                                    <TouchableOpacity
-                                        style={styles.finishButton}
-                                        onPress={handleFinishItemScanning}
-                                    >
-                                        <MaterialIcons name="check" size={24} color="#fff" />
-                                        <Text style={styles.finishButtonText}>
-                                            Terminer et assigner les articles
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        </View>
-                    )}
-                </View>
-            </CameraView>
-        </View>
+                    </AnimatedView>
+                </CameraView>
+            </View>
+        </ErrorBoundary>
     );
 };
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Image,
   ImageStyle,
@@ -9,11 +9,12 @@ import {
   ViewStyle,
   ImageResizeMode,
   StyleProp,
+  ImageProps,
 } from 'react-native';
-import { useImageCache } from '../hooks/useImageCache';
+import { usePhoto } from '../hooks/usePhoto';
 import * as Sentry from '@sentry/react-native';
 
-interface AdaptiveImageProps {
+interface AdaptiveImageProps extends Omit<ImageProps, 'source'> {
   uri?: string;
   style?: StyleProp<ImageStyle>;
   placeholder?: any;
@@ -22,11 +23,12 @@ interface AdaptiveImageProps {
   defaultWidth?: number;
   defaultHeight?: number;
   onError?: () => void;
+  fallbackSource?: ImageProps['source'];
 }
 
 const DEFAULT_SIZE = 200;
 
-const AdaptiveImage: React.FC<AdaptiveImageProps> = React.memo(({
+export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
   uri,
   style,
   placeholder,
@@ -35,8 +37,16 @@ const AdaptiveImage: React.FC<AdaptiveImageProps> = React.memo(({
   defaultWidth = DEFAULT_SIZE,
   defaultHeight = DEFAULT_SIZE,
   onError,
+  fallbackSource,
+  ...props
 }) => {
-  const { imagePath, loading, error } = useImageCache(uri, cacheKey);
+  const { uri: cachedUri, loading, error, loadImage } = usePhoto();
+
+  useEffect(() => {
+    if (uri) {
+      loadImage(uri, cacheKey);
+    }
+  }, [uri, cacheKey, loadImage]);
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const flatStyle = StyleSheet.flatten(style) || {};
@@ -79,32 +89,22 @@ const AdaptiveImage: React.FC<AdaptiveImageProps> = React.memo(({
     );
   }
 
-  if (error || !imagePath) {
-    return (
-      <View style={[containerStyle, styles.errorContainer]}>
-        {placeholderImage ? (
-          <Image
-            source={placeholderImage}
-            style={StyleSheet.absoluteFill}
-            blurRadius={Platform.OS === 'ios' ? 10 : 5}
-          />
-        ) : (
-          <View style={styles.errorIcon} />
-        )}
-      </View>
-    );
+  if (error || !cachedUri) {
+    return fallbackSource ? (
+      <Image source={fallbackSource} style={style} {...props} />
+    ) : null;
   }
 
   return (
     <View style={containerStyle}>
       <Image
-        source={{ uri: imagePath }}
+        source={{ uri: cachedUri }}
         style={StyleSheet.absoluteFill}
         resizeMode={resizeMode}
         onError={() => {
           Sentry.captureMessage('Erreur de rendu d\'image', {
             level: 'warning',
-            extra: { uri: imagePath }
+            extra: { uri: cachedUri }
           });
           onError?.();
         }}
@@ -119,7 +119,7 @@ const AdaptiveImage: React.FC<AdaptiveImageProps> = React.memo(({
       )}
     </View>
   );
-});
+};
 
 const styles = StyleSheet.create({
   container: {

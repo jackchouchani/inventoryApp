@@ -2,11 +2,15 @@
 
 # dependencies
 node_modules/
+package-lock.json
+yarn.lock
 
 # Expo
 .expo/
 dist/
 web-build/
+/ios
+/android
 
 # Native
 *.orig.*

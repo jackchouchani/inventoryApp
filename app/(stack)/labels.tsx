@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
-  TextInput,
-  ScrollView,
+  FlatList,
   Platform,
   Alert
 } from 'react-native';
@@ -21,7 +19,6 @@ import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { handleDatabaseError } from '../../src/utils/errorHandler';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
-import type { Category } from '../../src/types/category';
 import { useRouter } from 'expo-router';
 
 interface Filters {
@@ -34,6 +31,8 @@ interface Filters {
   endDate: Date | null;
   status: 'all' | 'available' | 'sold';
 }
+
+type ListItem = Item | Container;
 
 export default function LabelScreen() {
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
@@ -52,14 +51,28 @@ export default function LabelScreen() {
   });
 
   const {
-    items,
-    containers,
-    categories,
+    data,
     isLoading,
     error
-  } = useInventoryData({});
+  } = useInventoryData({
+    search: filters.search,
+    categoryId: filters.categoryId || undefined,
+    containerId: filters.containerId || undefined,
+    status: filters.status === 'all' ? undefined : filters.status,
+    minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+    maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined
+  });
+
+  const items = data?.items || [];
+  const containers = data?.containers || [];
 
   const router = useRouter();
+
+  const handleSearchChange = useCallback((text: string) => 
+    setFilters(prev => ({ ...prev, search: text })), []);
+
+  const handleStatusChange = useCallback((status: 'all' | 'available' | 'sold') => 
+    setFilters(prev => ({ ...prev, status })), []);
 
   const filteredItems = useMemo(() => {
     if (!items?.length) return [];
@@ -95,26 +108,49 @@ export default function LabelScreen() {
     });
   }, [items, filters]);
 
-  const handleSelectAll = () => {
-    const newSelected = new Set(filteredItems.map(item => item.id!));
-    setSelectedItems(newSelected);
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedItems(new Set());
-  };
-
-  const handleToggleItem = (itemId: number) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
+  const handleToggleItem = useCallback((itemId: number) => {
+    if (showContainers) {
+      setSelectedContainers(prev => {
+        const newSelected = new Set(prev);
+        if (newSelected.has(itemId)) {
+          newSelected.delete(itemId);
+        } else {
+          newSelected.add(itemId);
+        }
+        return newSelected;
+      });
     } else {
-      newSelected.add(itemId);
+      setSelectedItems(prev => {
+        const newSelected = new Set(prev);
+        if (newSelected.has(itemId)) {
+          newSelected.delete(itemId);
+        } else {
+          newSelected.add(itemId);
+        }
+        return newSelected;
+      });
     }
-    setSelectedItems(newSelected);
-  };
+  }, [showContainers]);
 
-  const handleDateChange = (event: any, selectedDate: Date | undefined) => {
+  const handleSelectAll = useCallback(() => {
+    if (showContainers) {
+      const newSelected = new Set(containers?.map(container => container.id!) || []);
+      setSelectedContainers(newSelected);
+    } else {
+      const newSelected = new Set(filteredItems.map(item => item.id!));
+      setSelectedItems(newSelected);
+    }
+  }, [showContainers, containers, filteredItems]);
+
+  const handleDeselectAll = useCallback(() => {
+    if (showContainers) {
+      setSelectedContainers(new Set());
+    } else {
+      setSelectedItems(new Set());
+    }
+  }, [showContainers]);
+
+  const handleDateChange = useCallback((_event: any, selectedDate: Date | undefined) => {
     if (Platform.OS === 'android') {
       setShowDatePicker(null);
     }
@@ -125,14 +161,14 @@ export default function LabelScreen() {
         [showDatePicker === 'start' ? 'startDate' : 'endDate']: selectedDate
       }));
     }
-  };
+  }, [showDatePicker]);
 
-  const handleResetDate = (type: 'start' | 'end') => {
+  const handleResetDate = useCallback((type: 'start' | 'end') => {
     setFilters(prev => ({
       ...prev,
       [type === 'start' ? 'startDate' : 'endDate']: null
     }));
-  };
+  }, []);
 
   const getItemsToGenerate = () => {
     if (showContainers) {
@@ -158,6 +194,22 @@ export default function LabelScreen() {
       }));
   };
 
+  const handleCategoryChange = useCallback((categoryId: number | undefined) => 
+    setFilters(prev => ({ ...prev, categoryId: categoryId || null })), []);
+
+  const handleContainerChange = useCallback((containerId: number | 'none' | undefined) => 
+    setFilters(prev => ({ 
+      ...prev, 
+      containerId: containerId === 'none' ? null : containerId || null 
+    })), []);
+
+  const handlePriceChange = useCallback((min: number | undefined, max: number | undefined) => 
+    setFilters(prev => ({ 
+      ...prev, 
+      minPrice: min?.toString() || '', 
+      maxPrice: max?.toString() || '' 
+    })), []);
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -168,12 +220,12 @@ export default function LabelScreen() {
   }
 
   if (error) {
-    handleDatabaseError(error, 'LabelScreen');
+    const errorDetails = handleDatabaseError(error);
     return (
       <View style={styles.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#FF3B30" />
         <Text style={styles.errorText}>
-          Une erreur est survenue lors du chargement des données
+          {errorDetails.message || 'Une erreur est survenue lors du chargement des données'}
         </Text>
       </View>
     );
@@ -232,20 +284,12 @@ export default function LabelScreen() {
         <View style={styles.filterSection}>
           <FilterBar
             value={filters.search}
-            onChangeText={(text) => setFilters(prev => ({ ...prev, search: text }))}
+            onChangeText={handleSearchChange}
             placeholder="Rechercher..."
-            onCategoryChange={(categoryId) => 
-              setFilters(prev => ({ ...prev, categoryId: categoryId || null }))}
-            onContainerChange={(containerId) => 
-              setFilters(prev => ({ ...prev, containerId: containerId === 'none' ? null : containerId || null }))}
-            onStatusChange={(status) => 
-              setFilters(prev => ({ ...prev, status }))}
-            onPriceChange={(min, max) => 
-              setFilters(prev => ({ 
-                ...prev, 
-                minPrice: min?.toString() || '', 
-                maxPrice: max?.toString() || '' 
-              }))}
+            onCategoryChange={handleCategoryChange}
+            onContainerChange={handleContainerChange}
+            onStatusChange={handleStatusChange}
+            onPriceChange={handlePriceChange}
           />
 
           <View style={styles.dateFilters}>
@@ -420,12 +464,10 @@ export default function LabelScreen() {
             </View>
           </View>
 
-          <ScrollView 
-            style={styles.itemList}
-            contentContainerStyle={styles.itemListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {(showContainers ? containers : filteredItems).map((item) => (
+          <FlatList<ListItem>
+            data={showContainers ? containers : filteredItems}
+            keyExtractor={item => item.id!.toString()}
+            renderItem={({ item }) => (
               <TouchableOpacity
                 key={item.id}
                 style={[
@@ -443,9 +485,9 @@ export default function LabelScreen() {
                   ]}>
                     {item.name}
                   </Text>
-                  {!showContainers && (
+                  {!showContainers && 'containerId' in item && (
                     <Text style={styles.itemContainer}>
-                      {containers?.find(c => ('containerId' in item && item.containerId === c.id))?.name || 'Sans container'}
+                      {containers?.find(c => c.id === item.containerId)?.name || 'Sans container'}
                     </Text>
                   )}
                 </View>
@@ -459,8 +501,13 @@ export default function LabelScreen() {
                     : "#CCC"}
                 />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            )}
+            initialNumToRender={10}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            contentContainerStyle={styles.itemListContent}
+            showsVerticalScrollIndicator={false}
+          />
         </View>
       </View>
 

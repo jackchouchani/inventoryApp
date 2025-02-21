@@ -1,64 +1,121 @@
-import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, ScrollView } from 'react-native';
+import React, { memo, useCallback } from 'react';
+import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useSelector } from 'react-redux';
-import { selectAllCategories } from '../store/categorySlice';
-import { selectAllContainers } from '../store/containersSlice';
+import { useFilterBar, FilterStatus } from '../hooks/useFilterBar';
+import { FilterBarProps } from '../types/props';
+import { searchSchema, priceRangeSchema } from '../utils/validation';
+import { handleError } from '../utils/errorHandler';
+import debounce from 'lodash/debounce';
+import { theme } from '../utils/theme';
 
-interface FilterBarProps {
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  onCategoryChange?: (categoryId: number | undefined) => void;
-  onContainerChange?: (containerId: number | 'none' | undefined) => void;
-  onStatusChange?: (status: 'all' | 'available' | 'sold') => void;
-  onPriceChange?: (min: number | undefined, max: number | undefined) => void;
-}
+const FilterChip: React.FC<{
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}> = memo(({ icon, label, selected, onPress }) => (
+  <TouchableOpacity 
+    style={[styles.filterChip, selected && styles.filterChipSelected]}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityState={{ selected }}
+    accessibilityLabel={`Filtre ${label}`}
+  >
+    <MaterialIcons 
+      name={icon}
+      size={16} 
+      color={selected ? '#fff' : '#666'} 
+    />
+    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+));
 
-export const FilterBar: React.FC<FilterBarProps> = ({
+export const FilterBar = memo(function FilterBar({
   value,
   onChangeText,
-  placeholder,
+  placeholder = "Rechercher...",
   onCategoryChange,
   onContainerChange,
   onStatusChange,
   onPriceChange
-}) => {
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<number | undefined>(undefined);
-  const [selectedContainer, setSelectedContainer] = useState<number | 'none' | undefined>(undefined);
-  const [selectedStatus, setSelectedStatus] = useState<'all' | 'available' | 'sold'>('all');
-  const [minPrice, setMinPrice] = useState<string>('');
-  const [maxPrice, setMaxPrice] = useState<string>('');
-  const categories = useSelector(selectAllCategories);
-  const containers = useSelector(selectAllContainers);
+}: FilterBarProps) {
+  const {
+    showFilters,
+    setShowFilters,
+    selectedCategory,
+    selectedContainer,
+    selectedStatus,
+    minPrice,
+    maxPrice,
+    categories,
+    containers,
+    handleCategorySelect,
+    handleContainerSelect,
+    handleStatusChange,
+    handlePriceChange,
+  } = useFilterBar({
+    onCategoryChange,
+    onContainerChange,
+    onStatusChange,
+    onPriceChange,
+  });
 
-  const handleCategorySelect = (categoryId: number) => {
-    const newValue = selectedCategory === categoryId ? undefined : categoryId;
-    setSelectedCategory(newValue);
-    onCategoryChange?.(newValue);
-  };
+  const handleSearchChange = useCallback(
+    debounce((text: string) => {
+      try {
+        const validatedSearch = searchSchema.parse(text);
+        onChangeText(validatedSearch);
+      } catch (error) {
+        handleError(error, 'Erreur de validation', {
+          source: 'FilterBar',
+          message: 'Erreur lors de la validation de la recherche'
+        });
+      }
+    }, 300),
+    [onChangeText]
+  );
 
-  const handleContainerSelect = (containerId: number) => {
-    const newValue = selectedContainer === containerId ? undefined : containerId;
-    setSelectedContainer(newValue);
-    onContainerChange?.(newValue);
-  };
+  const handlePriceRangeChange = useCallback((min?: string, max?: string) => {
+    try {
+      const validatedRange = priceRangeSchema.parse({
+        min: min ? Number(min) : undefined,
+        max: max ? Number(max) : undefined
+      });
+      onPriceChange?.(validatedRange.min, validatedRange.max);
+    } catch (error) {
+      handleError(error, 'Erreur de validation', {
+        source: 'FilterBar',
+        message: 'Erreur lors de la validation du prix'
+      });
+    }
+  }, [onPriceChange]);
 
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <MaterialIcons name="search" size={24} color="#999" style={styles.searchIcon} />
+        <MaterialIcons 
+          name="search" 
+          size={24} 
+          color="#999" 
+          style={styles.searchIcon} 
+        />
         <TextInput
           style={styles.input}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={handleSearchChange}
           placeholder={placeholder}
           placeholderTextColor="#999"
+          accessibilityLabel="Barre de recherche"
+          accessibilityHint="Entrez votre terme de recherche"
         />
         <TouchableOpacity
           style={styles.filterButton}
           onPress={() => setShowFilters(!showFilters)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showFilters }}
+          accessibilityLabel="Afficher les filtres"
         >
           <MaterialIcons 
             name={showFilters ? "filter-list-off" : "filter-list"} 
@@ -72,26 +129,21 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         <View style={styles.filtersContainer}>
           <View style={styles.filterSection}>
             <Text style={styles.filterTitle}>Catégories</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              accessibilityRole="scrollbar"
+              accessibilityLabel="Liste des catégories"
+            >
               <View style={styles.filterChips}>
                 {categories.map((category) => (
-                  <TouchableOpacity 
-                    key={category.id} 
-                    style={[styles.filterChip, selectedCategory === category.id && styles.filterChipSelected]}
+                  <FilterChip
+                    key={category.id}
+                    icon={category.icon as keyof typeof MaterialIcons.glyphMap || 'folder'}
+                    label={category.name}
+                    selected={selectedCategory === category.id}
                     onPress={() => handleCategorySelect(category.id)}
-                  >
-                    <MaterialIcons 
-                      name={category.icon || 'folder'} 
-                      size={16} 
-                      color={selectedCategory === category.id ? '#fff' : '#666'} 
-                    />
-                    <Text style={[
-                      styles.filterChipText,
-                      selectedCategory === category.id && styles.filterChipTextSelected
-                    ]}>
-                      {category.name}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </ScrollView>
@@ -99,26 +151,21 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
           <View style={styles.filterSection}>
             <Text style={styles.filterTitle}>Containers</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              accessibilityRole="scrollbar"
+              accessibilityLabel="Liste des containers"
+            >
               <View style={styles.filterChips}>
                 {containers.map((container) => (
-                  <TouchableOpacity 
-                    key={container.id} 
-                    style={[styles.filterChip, selectedContainer === container.id && styles.filterChipSelected]}
+                  <FilterChip
+                    key={container.id}
+                    icon="inbox"
+                    label={container.name}
+                    selected={selectedContainer === container.id}
                     onPress={() => handleContainerSelect(container.id)}
-                  >
-                    <MaterialIcons 
-                      name="inbox" 
-                      size={16} 
-                      color={selectedContainer === container.id ? '#fff' : '#666'} 
-                    />
-                    <Text style={[
-                      styles.filterChipText,
-                      selectedContainer === container.id && styles.filterChipTextSelected
-                    ]}>
-                      {container.name}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </ScrollView>
@@ -128,30 +175,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             <Text style={styles.filterTitle}>Statut</Text>
             <View style={styles.filterChips}>
               {[
-                { value: 'all', label: 'Tous' },
-                { value: 'available', label: 'En stock' },
-                { value: 'sold', label: 'Rupture' }
+                { value: 'all' as const, label: 'Tous', icon: 'all-inclusive' },
+                { value: 'available' as const, label: 'En stock', icon: 'check-circle' },
+                { value: 'sold' as const, label: 'Rupture', icon: 'remove-circle' }
               ].map((status) => (
-                <TouchableOpacity
+                <FilterChip
                   key={status.value}
-                  style={[styles.filterChip, selectedStatus === status.value && styles.filterChipSelected]}
-                  onPress={() => {
-                    setSelectedStatus(status.value as 'all' | 'available' | 'sold');
-                    onStatusChange?.(status.value as 'all' | 'available' | 'sold');
-                  }}
-                >
-                  <MaterialIcons
-                    name={status.value === 'available' ? 'check-circle' : status.value === 'sold' ? 'remove-circle' : 'all-inclusive'}
-                    size={16}
-                    color={selectedStatus === status.value ? '#fff' : '#666'}
-                  />
-                  <Text style={[
-                    styles.filterChipText,
-                    selectedStatus === status.value && styles.filterChipTextSelected
-                  ]}>
-                    {status.label}
-                  </Text>
-                </TouchableOpacity>
+                  icon={status.icon as keyof typeof MaterialIcons.glyphMap}
+                  label={status.label}
+                  selected={selectedStatus === status.value}
+                  onPress={() => handleStatusChange(status.value)}
+                />
               ))}
             </View>
           </View>
@@ -163,26 +197,20 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 style={styles.priceInput}
                 placeholder="Min"
                 value={minPrice}
-                onChangeText={(text) => {
-                  setMinPrice(text);
-                  const min = text ? parseFloat(text) : undefined;
-                  const max = maxPrice ? parseFloat(maxPrice) : undefined;
-                  onPriceChange?.(min, max);
-                }}
+                onChangeText={(text) => handlePriceRangeChange(text, maxPrice)}
                 keyboardType="numeric"
+                accessibilityLabel="Prix minimum"
+                accessibilityHint="Entrez le prix minimum"
               />
               <Text style={styles.priceSeparator}>-</Text>
               <TextInput
                 style={styles.priceInput}
                 placeholder="Max"
                 value={maxPrice}
-                onChangeText={(text) => {
-                  setMaxPrice(text);
-                  const min = minPrice ? parseFloat(minPrice) : undefined;
-                  const max = text ? parseFloat(text) : undefined;
-                  onPriceChange?.(min, max);
-                }}
+                onChangeText={(text) => handlePriceRangeChange(minPrice, text)}
                 keyboardType="numeric"
+                accessibilityLabel="Prix maximum"
+                accessibilityHint="Entrez le prix maximum"
               />
             </View>
           </View>
@@ -190,100 +218,93 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       )}
     </View>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.value === nextProps.value &&
+    prevProps.placeholder === nextProps.placeholder
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderBottomColor: theme.colors.border,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#fff',
-  },
-  searchIcon: {
-    marginRight: 8,
+    marginBottom: theme.spacing.sm,
   },
   input: {
     flex: 1,
     height: 40,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingLeft: 40,
-    fontSize: 16,
-    color: '#333',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
+  },
+  searchIcon: {
+    marginRight: theme.spacing.sm,
   },
   filterButton: {
-    marginLeft: 12,
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    padding: theme.spacing.sm,
+    marginLeft: theme.spacing.sm,
   },
   filtersContainer: {
-    padding: 12,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    marginTop: theme.spacing.sm,
   },
   filterSection: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
   },
   filterTitle: {
-    fontSize: 14,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
-    marginLeft: 4,
+    marginBottom: theme.spacing.sm,
+    color: theme.colors.text.primary,
   },
   filterChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.lg,
+    marginRight: theme.spacing.sm,
   },
   filterChipSelected: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.colors.primary,
   },
   filterChipText: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
+    marginLeft: theme.spacing.xs,
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.caption.fontSize,
   },
   filterChipTextSelected: {
-    color: '#fff',
+    color: theme.colors.text.inverse,
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   priceInput: {
-    flex: 1,
+    width: 100,
     height: 40,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
   },
   priceSeparator: {
-    fontSize: 16,
-    color: '#666',
+    marginHorizontal: theme.spacing.sm,
+    color: theme.colors.text.secondary,
   },
 }); 

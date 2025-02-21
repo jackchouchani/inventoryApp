@@ -19,10 +19,10 @@ import {
   resetState
 } from './itemsActions';
 
-interface FetchItemsResponse {
-  items: Item[];
-  total: number;
-  hasMore: boolean;
+interface ThunkError {
+  message: string;
+  code?: string;
+  stack?: string;
 }
 
 // Définition du state initial
@@ -87,7 +87,8 @@ const itemsSlice = createSlice({
       })
       .addCase(fetchItems.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload as string;
+        const error = action.payload as ThunkError | undefined;
+        state.error = error?.message || 'Une erreur est survenue';
       })
       .addCase(fetchItemByBarcode.fulfilled, (state, action) => {
         if (action.payload) {

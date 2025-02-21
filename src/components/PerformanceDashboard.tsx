@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,12 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { monitoring } from '../services/monitoring';
 import { LineChart, BarChart } from 'react-native-chart-kit';
-import { Dimensions } from 'react-native';
-
-const screenWidth = Dimensions.get('window').width;
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { useQuery } from '@tanstack/react-query';
 
 interface PerformanceData {
   summary: {
@@ -33,48 +33,23 @@ interface PerformanceData {
 }
 
 const PerformanceDashboard: React.FC = () => {
-  const [data, setData] = useState<PerformanceData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { width: screenWidth } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = useCallback(async () => {
-    try {
-      const report = await monitoring.getPerformanceReport();
-      setData(report);
-    } catch (error) {
-      console.error('Erreur lors du chargement des données de performance:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading, error, refetch } = useQuery<PerformanceData>({
+    queryKey: ['performanceReport'],
+    queryFn: () => monitoring.getPerformanceReport(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 24 * 60 * 60 * 1000, // 24 heures
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
+    await refetch();
     setRefreshing(false);
-  }, [loadData]);
+  }, [refetch]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196f3" />
-      </View>
-    );
-  }
-
-  if (!data) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text>Erreur lors du chargement des données</Text>
-      </View>
-    );
-  }
-
-  const chartConfig = {
+  const chartConfig = useMemo(() => ({
     backgroundColor: '#ffffff',
     backgroundGradientFrom: '#ffffff',
     backgroundGradientTo: '#ffffff',
@@ -89,110 +64,132 @@ const PerformanceDashboard: React.FC = () => {
       strokeWidth: '2',
       stroke: '#ffa726',
     },
-  };
+  }), []);
 
-  const errorRateData = {
+  const errorRateData = useMemo(() => ({
     labels: ['API', 'Rendu', 'BD'],
-    datasets: [
-      {
-        data: [data.errorRate.api, data.errorRate.render, data.errorRate.db],
-      },
-    ],
-  };
+    datasets: [{
+      data: data ? [data.errorRate.api, data.errorRate.render, data.errorRate.db] : [0, 0, 0],
+    }],
+  }), [data]);
 
-  const performanceData = {
+  const performanceData = useMemo(() => ({
     labels: ['API', 'Rendu', 'BD'],
-    datasets: [
-      {
-        data: [
-          data.summary.apiCalls.averageDuration,
-          data.summary.renders.averageDuration,
-          data.summary.dbOperations.averageDuration,
-        ],
-      },
-    ],
-  };
+    datasets: [{
+      data: data ? [
+        data.summary.apiCalls.averageDuration,
+        data.summary.renders.averageDuration,
+        data.summary.dbOperations.averageDuration,
+      ] : [0, 0, 0],
+    }],
+  }), [data]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196f3" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text>Erreur lors du chargement des données</Text>
+      </View>
+    );
+  }
+
+  if (!data) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text>Aucune donnée disponible</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.scoreContainer}>
-        <Text style={styles.scoreTitle}>Score de Performance</Text>
-        <Text style={styles.scoreValue}>
-          {Math.round(data.performanceScore)}%
-        </Text>
-      </View>
+    <ErrorBoundary>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreTitle}>Score de Performance</Text>
+          <Text style={styles.scoreValue}>
+            {Math.round(data.performanceScore)}%
+          </Text>
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Taux d'Erreur</Text>
-        <BarChart
-          data={errorRateData}
-          width={screenWidth - 32}
-          height={220}
-          yAxisLabel=""
-          yAxisSuffix="%"
-          chartConfig={chartConfig}
-          style={styles.chart}
-          verticalLabelRotation={30}
-          showValuesOnTopOfBars
-        />
-      </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Taux d'Erreur</Text>
+          <BarChart
+            data={errorRateData}
+            width={screenWidth - 32}
+            height={220}
+            yAxisLabel=""
+            yAxisSuffix="%"
+            chartConfig={chartConfig}
+            style={styles.chart}
+            verticalLabelRotation={30}
+            showValuesOnTopOfBars
+          />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Durée Moyenne (ms)</Text>
-        <LineChart
-          data={performanceData}
-          width={screenWidth - 32}
-          height={220}
-          yAxisLabel=""
-          yAxisSuffix=" ms"
-          chartConfig={chartConfig}
-          style={styles.chart}
-          bezier
-          verticalLabelRotation={30}
-        />
-      </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Durée Moyenne (ms)</Text>
+          <LineChart
+            data={performanceData}
+            width={screenWidth - 32}
+            height={220}
+            yAxisLabel=""
+            yAxisSuffix=" ms"
+            chartConfig={chartConfig}
+            style={styles.chart}
+            bezier
+            verticalLabelRotation={30}
+          />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Opérations les Plus Lentes</Text>
-        {data.slowestOperations.map((op, index) => (
-          <View key={index} style={styles.operationItem}>
-            <Text style={styles.operationType}>{op.type}</Text>
-            <Text style={styles.operationName}>{op.name}</Text>
-            <Text style={styles.operationDuration}>{op.duration}ms</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Opérations les Plus Lentes</Text>
+          {data.slowestOperations.map((op, index) => (
+            <View key={index} style={styles.operationItem}>
+              <Text style={styles.operationType}>{op.type}</Text>
+              <Text style={styles.operationName}>{op.name}</Text>
+              <Text style={styles.operationDuration}>{op.duration}ms</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Résumé</Text>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>API Calls:</Text>
+            <Text style={styles.summaryValue}>
+              {data.summary.apiCalls.count} appels
+              ({data.summary.apiCalls.errors} erreurs)
+            </Text>
           </View>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Résumé</Text>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>API Calls:</Text>
-          <Text style={styles.summaryValue}>
-            {data.summary.apiCalls.count} appels
-            ({data.summary.apiCalls.errors} erreurs)
-          </Text>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>Rendus:</Text>
+            <Text style={styles.summaryValue}>
+              {data.summary.renders.count} rendus
+              ({data.summary.renders.errors} erreurs)
+            </Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>Opérations DB:</Text>
+            <Text style={styles.summaryValue}>
+              {data.summary.dbOperations.count} opérations
+              ({data.summary.dbOperations.errors} erreurs)
+            </Text>
+          </View>
         </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Rendus:</Text>
-          <Text style={styles.summaryValue}>
-            {data.summary.renders.count} rendus
-            ({data.summary.renders.errors} erreurs)
-          </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Opérations DB:</Text>
-          <Text style={styles.summaryValue}>
-            {data.summary.dbOperations.count} opérations
-            ({data.summary.dbOperations.errors} erreurs)
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </ErrorBoundary>
   );
 };
 
@@ -288,4 +285,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default PerformanceDashboard; 
+export default React.memo(PerformanceDashboard); 

@@ -2,6 +2,7 @@ import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sentry from '@sentry/react-native';
+import { QueryClient } from '@tanstack/react-query';
 
 // Configuration améliorée de Sentry
 Sentry.init({
@@ -9,24 +10,26 @@ Sentry.init({
   enableAutoSessionTracking: true,
   sessionTrackingIntervalMillis: 30000,
   attachStacktrace: true,
-  debug: __DEV__,
+  debug: false, // Désactiver le mode debug
   environment: __DEV__ ? 'development' : 'production',
-  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  tracesSampleRate: __DEV__ ? 1.0 : 0.1, // Réduire le taux d'échantillonnage en prod
   enableNative: Platform.OS !== 'web',
-  maxBreadcrumbs: 25, // Réduire pour limiter la taille (au lieu de 50)
-  maxValueLength: 250, // Réduire encore plus (au lieu de 1000)
-  normalizeDepth: 3,
-  beforeSend(event, hint) {
-    if (__DEV__) return null; // Ignorer en mode dev
+  maxBreadcrumbs: 10, // Réduire encore plus pour limiter les logs
+  maxValueLength: 150, // Réduire encore plus
+  normalizeDepth: 2,
+  beforeSend(event) {
+    // Ne pas envoyer d'événements en développement
+    if (__DEV__) return null;
 
-    if (!event || (!event.exception && !event.message)) return null; // Filtrer les événements vides
+    // Ignorer les événements non critiques en production
+    if (!event.exception && event.level !== 'error') return null;
 
     // Limiter la taille des contexts/extra
     if (event.contexts?.performance) {
-      event.contexts.performance = truncateObject(event.contexts.performance, 100); // Limiter à 100 caractères par champ
+      event.contexts.performance = truncateObject(event.contexts.performance, 50);
     }
     if (event.extra) {
-      event.extra = truncateObject(event.extra, 100);
+      event.extra = truncateObject(event.extra, 50);
     }
 
     // Supprimer les headers sensibles
@@ -90,6 +93,25 @@ interface PerformanceThresholds {
   imageLoad: number;
 }
 
+interface PerformanceData {
+  summary: {
+    apiCalls: { count: number; averageDuration: number; errors: number };
+    renders: { count: number; averageDuration: number; errors: number };
+    dbOperations: { count: number; averageDuration: number; errors: number };
+  };
+  slowestOperations: Array<{
+    type: string;
+    name: string;
+    duration: number;
+  }>;
+  errorRate: {
+    api: number;
+    render: number;
+    db: number;
+  };
+  performanceScore: number;
+}
+
 class MonitoringService {
   private static instance: MonitoringService;
   private metrics: PerformanceMetric[] = [];
@@ -102,6 +124,10 @@ class MonitoringService {
     dbOperation: 100, // ms
     imageLoad: 500, // ms
   };
+  private queryClient: QueryClient | null = null;
+  private apiMetrics: Map<string, { duration: number; success: boolean }[]> = new Map();
+  private renderMetrics: Map<string, { duration: number; success: boolean }[]> = new Map();
+  private dbMetrics: Map<string, { duration: number; success: boolean }[]> = new Map();
 
   private constructor() {
     if (Platform.OS !== 'web') {
@@ -400,73 +426,129 @@ class MonitoringService {
     ]);
   }
 
-  async getPerformanceReport() {
-    const summary = await this.getMetricsSummary();
-    const slowestOperations = this.metrics
-      .sort((a, b) => b.duration - a.duration)
-      .slice(0, 10);
+  async getPerformanceReport(): Promise<PerformanceData> {
+    const apiMetrics = this.calculateMetrics(this.apiMetrics);
+    const renderMetrics = this.calculateMetrics(this.renderMetrics);
+    const dbMetrics = this.calculateMetrics(this.dbMetrics);
 
-    const report = {
-      summary,
-      slowestOperations,
-      errorRate: {
-        api: this.getErrorRate('API_ERROR'),
-        render: this.getErrorRate('RENDER_ERROR'),
-        db: this.getErrorRate('DB_ERROR'),
-      },
-      performanceScore: this.calculatePerformanceScore(),
-    };
+    // Calculer les opérations les plus lentes
+    const allOperations = [
+      ...apiMetrics.operations.map(op => ({ ...op, type: 'API' })),
+      ...renderMetrics.operations.map(op => ({ ...op, type: 'Rendu' })),
+      ...dbMetrics.operations.map(op => ({ ...op, type: 'BD' })),
+    ].sort((a, b) => b.duration - a.duration).slice(0, 5);
 
-    return report;
-  }
+    // Calculer les taux d'erreur
+    const calculateErrorRate = (metrics: ReturnType<typeof this.calculateMetrics>) => 
+      metrics.count > 0 ? (metrics.errors / metrics.count) * 100 : 0;
 
-  private getErrorRate(errorType: ErrorEvent['type']) {
-    const totalErrors = this.errors.filter(e => e.type === errorType).length;
-    const totalOperations = this.metrics.filter(m => {
-      switch (errorType) {
-        case 'API_ERROR':
-          return m.type === 'API_CALL';
-        case 'RENDER_ERROR':
-          return m.type === 'RENDER';
-        case 'DB_ERROR':
-          return m.type === 'DB_OPERATION';
-        default:
-          return false;
-      }
-    }).length;
-
-    return totalOperations ? (totalErrors / totalOperations) * 100 : 0;
-  }
-
-  private calculatePerformanceScore() {
-    const weights = {
-      render: 0.4,
-      api: 0.3,
-      db: 0.2,
-      image: 0.1,
-    };
-
-    const scores = {
-      render: this.calculateTypeScore('RENDER', this.performanceThresholds.render),
-      api: this.calculateTypeScore('API_CALL', this.performanceThresholds.apiCall),
-      db: this.calculateTypeScore('DB_OPERATION', this.performanceThresholds.dbOperation),
-      image: this.calculateTypeScore('IMAGE_LOAD', this.performanceThresholds.imageLoad),
-    };
-
-    return (
-      scores.render * weights.render +
-      scores.api * weights.api +
-      scores.db * weights.db +
-      scores.image * weights.image
+    // Calculer le score de performance global
+    const performanceScore = 100 - (
+      (calculateErrorRate(apiMetrics) +
+       calculateErrorRate(renderMetrics) +
+       calculateErrorRate(dbMetrics)) / 3
     );
+
+    return {
+      summary: {
+        apiCalls: {
+          count: apiMetrics.count,
+          averageDuration: Math.round(apiMetrics.averageDuration),
+          errors: apiMetrics.errors,
+        },
+        renders: {
+          count: renderMetrics.count,
+          averageDuration: Math.round(renderMetrics.averageDuration),
+          errors: renderMetrics.errors,
+        },
+        dbOperations: {
+          count: dbMetrics.count,
+          averageDuration: Math.round(dbMetrics.averageDuration),
+          errors: dbMetrics.errors,
+        },
+      },
+      slowestOperations: allOperations.map(op => ({
+        type: op.type,
+        name: op.name,
+        duration: Math.round(op.duration),
+      })),
+      errorRate: {
+        api: Math.round(calculateErrorRate(apiMetrics) * 10) / 10,
+        render: Math.round(calculateErrorRate(renderMetrics) * 10) / 10,
+        db: Math.round(calculateErrorRate(dbMetrics) * 10) / 10,
+      },
+      performanceScore: Math.round(performanceScore * 10) / 10,
+    };
   }
 
-  private calculateTypeScore(type: PerformanceMetric['type'], threshold: number) {
-    const metrics = this.metrics.filter(m => m.type === type);
-    if (!metrics.length) return 100;
+  private calculateMetrics(metrics: Map<string, { duration: number; success: boolean }[]>) {
+    let totalCount = 0;
+    let totalDuration = 0;
+    let errorCount = 0;
+    const operations: { name: string; duration: number }[] = [];
 
-    const avgDuration = metrics.reduce((sum, m) => sum + m.duration, 0) / metrics.length;
-    return Math.max(0, 100 - (avgDuration / threshold) * 100);
+    metrics.forEach((calls, name) => {
+      totalCount += calls.length;
+      const totalCallDuration = calls.reduce((sum, call) => sum + call.duration, 0);
+      totalDuration += totalCallDuration;
+      errorCount += calls.filter(call => !call.success).length;
+      
+      operations.push({
+        name,
+        duration: totalCallDuration / calls.length,
+      });
+    });
+
+    return {
+      count: totalCount,
+      averageDuration: totalCount > 0 ? totalDuration / totalCount : 0,
+      errors: errorCount,
+      operations,
+    };
+  }
+
+  setQueryClient(client: QueryClient) {
+    this.queryClient = client;
+  }
+
+  trackApiCall(name: string, duration: number, success: boolean) {
+    const metrics = this.apiMetrics.get(name) || [];
+    metrics.push({ duration, success });
+    this.apiMetrics.set(name, metrics);
+    
+    if (!success) {
+      Sentry.addBreadcrumb({
+        category: 'api',
+        message: `API call failed: ${name}`,
+        level: 'error',
+      });
+    }
+  }
+
+  trackRender(componentName: string, duration: number, success: boolean) {
+    const metrics = this.renderMetrics.get(componentName) || [];
+    metrics.push({ duration, success });
+    this.renderMetrics.set(componentName, metrics);
+  }
+
+  trackDbOperation(operation: string, duration: number, success: boolean) {
+    const metrics = this.dbMetrics.get(operation) || [];
+    metrics.push({ duration, success });
+    this.dbMetrics.set(operation, metrics);
+    
+    if (!success) {
+      Sentry.addBreadcrumb({
+        category: 'database',
+        message: `Database operation failed: ${operation}`,
+        level: 'error',
+      });
+    }
+  }
+
+  clearMetrics() {
+    this.apiMetrics.clear();
+    this.renderMetrics.clear();
+    this.dbMetrics.clear();
   }
 }
 
@@ -589,7 +671,6 @@ export const measurePerformance = async <T>(
     
     return result;
   } catch (err) {
-    const duration = performance.now() - start;
     const error = err as Error;
     
     logError({

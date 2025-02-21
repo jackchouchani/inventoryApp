@@ -220,6 +220,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    ...theme.shadows.medium,
+    ...theme.shadows.md,
   },
 });

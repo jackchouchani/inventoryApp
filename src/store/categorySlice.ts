@@ -69,7 +69,7 @@ export const selectCategoriesWithItemCount = createSelector(
 );
 
 export const selectCategoryByName = createSelector(
-  [selectAllCategories, (state, name: string) => name.toLowerCase()],
+  [selectAllCategories, (_state, name: string) => name.toLowerCase()],
   (categories, name) => categories.find(
     category => category.name.toLowerCase() === name
   )
