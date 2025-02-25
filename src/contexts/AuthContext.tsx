@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { User, Session } from '@supabase/supabase-js';
-import { Platform, Image } from 'react-native';
+import { Platform } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 
 interface AuthUser {
   id: string;
@@ -51,37 +52,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let mounted = true;
+
     // Vérifier la session existante au démarrage
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email ?? '',
-          name: session.user.user_metadata?.name
-        });
+    async function initializeAuth() {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) throw error;
+        
+        if (mounted) {
+          setSession(session);
+          if (session?.user) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email ?? '',
+              name: session.user.user_metadata?.name
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Erreur d\'initialisation de l\'auth:', error);
+        Sentry.captureException(error);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
-      setIsLoading(false);
-    });
+    }
+
+    initializeAuth();
 
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email ?? '',
-            name: session.user.user_metadata?.name
-          });
-        } else {
-          setUser(null);
+      async (_event, session) => {
+        if (mounted) {
+          setSession(session);
+          if (session?.user) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email ?? '',
+              name: session.user.user_metadata?.name
+            });
+          } else {
+            setUser(null);
+          }
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = {

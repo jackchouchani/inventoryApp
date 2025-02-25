@@ -1,18 +1,25 @@
 export const theme = {
   colors: {
     primary: '#007AFF',
-    secondary: '#6c757d',
-    background: '#f5f5f5',
-    surface: '#ffffff',
-    error: '#ff4444',
+    secondary: '#5856D6',
+    background: '#F5F5F5',
+    surface: '#FFFFFF',
+    error: '#FF3B30',
+    success: '#4CAF50',
+    warning: '#FF9500',
     text: {
-      primary: '#333333',
+      primary: '#000000',
       secondary: '#666666',
       disabled: '#999999',
-      inverse: '#ffffff'
+      inverse: '#FFFFFF'
     },
-    border: '#dddddd',
-    shadow: '#000000'
+    border: '#E5E5E5',
+    shadow: '#000000',
+    danger: {
+      main: '#FF3B30',
+      background: '#FFF5F5',
+      text: '#FF3B30'
+    }
   },
   spacing: {
     xs: 4,
@@ -24,46 +31,49 @@ export const theme = {
   borderRadius: {
     sm: 4,
     md: 8,
-    lg: 16
+    lg: 12,
+    xl: 20
   },
   typography: {
     h1: {
-      fontSize: 24,
-      fontWeight: 'bold'
+      fontSize: 32,
+      fontWeight: '700'
     },
     h2: {
-      fontSize: 20,
-      fontWeight: 'bold'
+      fontSize: 24,
+      fontWeight: '600'
     },
     body: {
-      fontSize: 16
+      fontSize: 16,
+      fontWeight: '400'
     },
     caption: {
-      fontSize: 14
+      fontSize: 12,
+      fontWeight: '400'
     }
   },
   shadows: {
-    small: {
+    sm: {
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+      shadowOpacity: 0.20,
+      shadowRadius: 1.41,
+      elevation: 2,
+    },
+    md: {
       shadowColor: '#000',
       shadowOffset: {
         width: 0,
         height: 2,
       },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2
-    },
-    medium: {
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-      shadowOpacity: 0.15,
-      shadowRadius: 6,
-      elevation: 4
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
     }
   }
-};
+} as const;
 
 export type Theme = typeof theme;

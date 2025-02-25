@@ -1,185 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React, { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useDispatch, useSelector } from 'react-redux';
-import { database } from '../../src/database/database';
-import { Category } from '../../src/types/category';
+import { useSelector, useDispatch } from 'react-redux';
 import { selectCategoryById, editCategory } from '../../src/store/categorySlice';
-import type { RootState } from '../../src/store/store';
-import { IconSelector } from '../../src/components/IconSelector';
-import { MaterialIconName } from '../../src/types/icons';
+import { RootState } from '../../src/store/store';
+import { CategoryForm, type CategoryFormData } from '../../src/components/CategoryForm';
+import Toast from 'react-native-toast-message';
+import * as Sentry from '@sentry/react-native';
+import type { MaterialIconName } from '../../src/types/icons';
 
 export default function EditCategoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const dispatch = useDispatch();
-  const categoryId = parseInt(id, 10);
-  
-  const category = useSelector((state: RootState) => selectCategoryById(state, categoryId));
-  
-  const [name, setName] = useState(category?.name || '');
-  const [description, setDescription] = useState(category?.description || '');
-  const [selectedIcon, setSelectedIcon] = useState<MaterialIconName>(category?.icon || 'folder');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  const categoryId = id ? parseInt(id, 10) : null;
+  const category = useSelector((state: RootState) => 
+    categoryId ? selectCategoryById(state, categoryId) : null
+  );
 
-  useEffect(() => {
-    if (!category) {
-      Alert.alert('Erreur', 'Catégorie non trouvée');
-      router.back();
-    }
-  }, [category, router]);
-
-  useEffect(() => {
-    if (category) {
-      setName(category.name);
-      setDescription(category.description || '');
-      setSelectedIcon(category.icon || 'folder');
-    }
-  }, [category]);
-
-  const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Erreur', 'Le nom de la catégorie est requis');
-      return;
-    }
-
-    if (!selectedIcon) {
-      Alert.alert('Erreur', 'Veuillez sélectionner une icône');
-      return;
-    }
-
+  const handleSubmit = async (data: CategoryFormData) => {
+    if (!category || !categoryId) return;
+    
     try {
       setLoading(true);
-      setError(null);
 
-      const updateData = {
-        name: name.trim(),
-        description: description.trim(),
-        icon: selectedIcon
+      // Convertir la date en chaîne ISO pour la sérialisation Redux
+      const isoDate = new Date().toISOString();
+
+      const payload = {
+        id: categoryId,
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        icon: data.icon,
+        updatedAt: isoDate
       };
 
-      console.log('Mise à jour de la catégorie avec les données:', updateData);
-
-      // Mise à jour dans la base de données
-      await database.updateCategory(categoryId, updateData);
-
-      // Mise à jour dans le store
-      dispatch(editCategory({
-        id: categoryId,
-        ...updateData,
-        createdAt: category?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }));
-
-      Alert.alert('Succès', 'Catégorie mise à jour avec succès');
+      await dispatch(editCategory(payload));
+      Toast.show({
+        type: 'success',
+        text1: 'Succès',
+        text2: 'Catégorie mise à jour avec succès'
+      });
       router.back();
     } catch (error) {
-      console.error('Erreur lors de la mise à jour de la catégorie:', error);
-      setError('Erreur lors de la mise à jour de la catégorie');
+      Sentry.captureException(error, {
+        extra: {
+          categoryId,
+          action: 'edit_category'
+        }
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur de mise à jour',
+        text2: 'Une erreur est survenue lors de la mise à jour de la catégorie'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
+  if (!category) {
+    return null;
   }
 
+  const initialData: CategoryFormData = {
+    name: category.name,
+    description: category.description || '',
+    icon: (category.icon as MaterialIconName) || 'folder'
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.label}>Nom</Text>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-        placeholder="Nom de la catégorie"
-        placeholderTextColor="#999"
-      />
-
-      <Text style={styles.label}>Description</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        value={description}
-        onChangeText={setDescription}
-        placeholder="Description de la catégorie"
-        placeholderTextColor="#999"
-        multiline
-        numberOfLines={4}
-      />
-
-      <Text style={styles.label}>Icône</Text>
-      <IconSelector
-        selectedIcon={selectedIcon}
-        onSelectIcon={(icon: MaterialIconName) => setSelectedIcon(icon)}
-      />
-
-      {error && (
-        <Text style={styles.errorText}>{error}</Text>
-      )}
-
-      <TouchableOpacity 
-        style={styles.saveButton}
-        onPress={handleSave}
-        disabled={loading}
-      >
-        <Text style={styles.saveButtonText}>Enregistrer</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    <CategoryForm
+      initialData={initialData}
+      onSubmit={handleSubmit}
+      submitButtonText="Enregistrer"
+      title="Modifier la catégorie"
+      loading={loading}
+    />
   );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-}); 
+} 

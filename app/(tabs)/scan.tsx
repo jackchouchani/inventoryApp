@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Modal, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
-import { useRouter, useNavigation } from 'expo-router';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, FlatList, Alert, TextInput, SafeAreaView, ActivityIndicator, ScrollView, AppState } from 'react-native';
+import { useRouter, usePathname } from 'expo-router';
 import { Scanner } from '../../src/components/Scanner';
-import { Container, Item, updateItem, getContainers, getItems } from '../../src/database/database';
-import { useRefreshStore } from '../../src/store/refreshStore';
+import { databaseInterface, Container, Item } from '../../src/database/database';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useDispatch } from 'react-redux';
-import { updateItem as updateItemAction } from '../../src/store/itemsSlice';
+import { updateItem } from '../../src/store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
+import { debounce } from '../../src/utils/debounce';
+import { ErrorBoundary } from '../../src/components/ErrorBoundary';
+import { theme } from '../../src/utils/theme';
 
 interface ScanScreenState {
   mode: 'manual' | 'scanner';
@@ -40,21 +42,86 @@ const INITIAL_STATE: ScanScreenState = {
   }
 };
 
+const ItemRow = React.memo<{
+  item: Item;
+  selectedContainer: Container | null;
+  containers: Container[];
+  onPress: () => void;
+  isAssigning: boolean;
+  assignmentProgress: {
+    itemId: number;
+    status: 'pending' | 'success' | 'error';
+  };
+}>(({ item, selectedContainer, containers, onPress, isAssigning, assignmentProgress }) => {
+  const isSelected = item.containerId === selectedContainer?.id;
+  const isInOtherContainer = item.containerId !== null && item.containerId !== selectedContainer?.id;
+  const isLoading = assignmentProgress.itemId === item.id && assignmentProgress.status === 'pending';
+  const containerName = item.containerId ? containers.find(c => c.id === item.containerId)?.name : '';
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.itemRow,
+        isSelected && styles.itemSelected,
+        isInOtherContainer && styles.itemInOtherContainer,
+        isLoading && styles.itemLoading
+      ]}
+      onPress={onPress}
+      disabled={isAssigning || !selectedContainer}
+    >
+      <View style={styles.itemContent}>
+        <View>
+          <Text style={styles.itemText}>{item.name}</Text>
+          {isInOtherContainer && containerName && (
+            <Text style={styles.containerInfo}>
+              Dans: {containerName}
+            </Text>
+          )}
+        </View>
+        <View style={styles.itemStatus}>
+          {assignmentProgress.itemId === item.id ? (
+            assignmentProgress.status === 'pending' ? (
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            ) : assignmentProgress.status === 'success' ? (
+              <MaterialIcons name="check-circle" size={24} color={theme.colors.success} />
+            ) : (
+              <MaterialIcons name="error" size={24} color={theme.colors.error} />
+            )
+          ) : (
+            isSelected && (
+              <MaterialIcons name="check" size={24} color={theme.colors.success} />
+            )
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 const ScanScreen: React.FC = () => {
   const router = useRouter();
-  const navigation = useNavigation();
+  const pathname = usePathname();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const [scanState, setScanState] = useState<ScanScreenState>(INITIAL_STATE);
-  const [error, setError] = useState<string | null>(null);
-  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  const [error] = useState<string | null>(null);
 
   // Utilisation de useInventoryData pour gérer les données
-  const { items, containers, isLoading, refetch } = useInventoryData();
+  const { data: inventoryData, isLoading, refetch } = useInventoryData({});
+  const items = inventoryData?.items ?? [];
+  const containers = inventoryData?.containers ?? [];
 
-  // Gestion des filtres
-  const filteredItems = useCallback(() => {
-    return items.filter(item => {
+  // Debounced search
+  const debouncedSearch = useMemo(
+    () => debounce((text: string) => {
+      setScanState(prev => ({ ...prev, searchQuery: text }));
+    }, 300),
+    []
+  );
+
+  // Memoized filtered items
+  const filteredItems = useMemo(() => {
+    return items.filter((item: Item) => {
       const matchesSearch = item.name.toLowerCase().includes(scanState.searchQuery.toLowerCase());
       
       if (scanState.showOnlySelected) {
@@ -69,28 +136,55 @@ const ScanScreen: React.FC = () => {
     });
   }, [items, scanState.searchQuery, scanState.showOnlySelected, scanState.showOtherContainers, scanState.selectedContainer]);
 
-  // Gestion de la navigation
+  // Gestion de la caméra basée sur le pathname
   useEffect(() => {
-    const unsubscribeBlur = navigation.addListener('blur', () => {
+    if (pathname !== '/(tabs)/scan') {
       setScanState(prev => ({
         ...prev,
         isScannerActive: false,
         mode: 'scanner'
       }));
-    });
+    }
+  }, [pathname]);
 
-    const unsubscribeFocus = navigation.addListener('focus', () => {
-      setScanState(prev => ({
-        ...prev,
-        isScannerActive: true
-      }));
+  // Gestion de l'AppState
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState !== 'active') {
+        setScanState(prev => ({
+          ...prev,
+          isScannerActive: false,
+          mode: 'scanner'
+        }));
+      }
     });
 
     return () => {
-      unsubscribeBlur();
-      unsubscribeFocus();
+      subscription.remove();
     };
-  }, [navigation]);
+  }, []);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      setScanState(prev => ({
+        ...prev,
+        isScannerActive: false,
+        mode: 'scanner'
+      }));
+    };
+  }, []);
+
+  // Gestion du changement de mode (scanner/manuel)
+  const handleModeChange = useCallback(() => {
+    setScanState(prev => ({
+      ...prev,
+      mode: prev.mode === 'manual' ? 'scanner' : 'manual',
+      selectedContainer: null,
+      scanMode: 'container',
+      isScannerActive: prev.mode === 'manual' // Activer la caméra uniquement si on passe en mode scanner
+    }));
+  }, []);
 
   // Gestion de l'assignation manuelle
   const handleManualAssignment = useCallback(async (itemId: number) => {
@@ -103,7 +197,7 @@ const ScanScreen: React.FC = () => {
         assignmentProgress: { itemId, status: 'pending' }
       }));
       
-      const item = items.find(i => i.id === itemId);
+      const item = items.find((i: Item) => i.id === itemId);
       if (!item) return;
       
       const updateData = {
@@ -113,10 +207,10 @@ const ScanScreen: React.FC = () => {
       };
       
       // Mise à jour optimiste
-      dispatch(updateItemAction(updateData));
+      dispatch(updateItem(updateData));
       
       // Mise à jour de la base de données
-      await updateItem(itemId, updateData);
+      await databaseInterface.updateItem(itemId, updateData);
       
       // Invalider les requêtes
       queryClient.invalidateQueries({ queryKey: ['items'] });
@@ -160,11 +254,11 @@ const ScanScreen: React.FC = () => {
         setScanState(prev => ({
           ...prev,
           scanMode: 'item',
-          selectedContainer: containers.find(c => c.qrCode === result.data?.qrCode) || null
+          selectedContainer: containers.find((c: Container) => c.qrCode === result.data?.qrCode) || null
         }));
       } else if (result.type === 'item' && scanState.selectedContainer) {
         try {
-          const item = items.find(i => i.qrCode === result.data?.qrCode);
+          const item = items.find((i: Item) => i.qrCode === result.data?.qrCode);
           if (!item) return;
 
           const updateData = {
@@ -174,10 +268,10 @@ const ScanScreen: React.FC = () => {
           };
 
           // Mise à jour optimiste
-          dispatch(updateItemAction(updateData));
+          dispatch(updateItem(updateData));
 
           // Mise à jour de la base de données
-          await updateItem(item.id!, updateData);
+          await databaseInterface.updateItem(item.id!, updateData);
 
           // Invalider les requêtes
           queryClient.invalidateQueries({ queryKey: ['items'] });
@@ -206,156 +300,128 @@ const ScanScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.modeButton}
-            onPress={() => {
-              setScanState(prev => ({
-                ...prev,
-                mode: prev.mode === 'manual' ? 'scanner' : 'manual',
-                selectedContainer: null,
-                scanMode: 'container'
-              }));
-            }}
-          >
-            <MaterialIcons 
-              name={scanState.mode === 'manual' ? "qr-code-scanner" : "edit"} 
-              size={24} 
-              color="#fff" 
-            />
-            <Text style={styles.modeButtonText}>
-              {scanState.mode === 'manual' ? 'Mode Scanner' : 'Mode Manuel'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+    <ErrorBoundary>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.modeButton}
+              onPress={handleModeChange}
+            >
+              <MaterialIcons 
+                name={scanState.mode === 'manual' ? "qr-code-scanner" : "edit"} 
+                size={24} 
+                color="#fff" 
+              />
+              <Text style={styles.modeButtonText}>
+                {scanState.mode === 'manual' ? 'Mode Scanner' : 'Mode Manuel'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        {scanState.mode === 'manual' ? (
-          <View style={styles.manualContainer}>
-            <ScrollView>
-              <Text style={styles.sectionTitle}>Sélectionner un container:</Text>
-              <View style={styles.containerGrid}>
-                {containers.map((container) => (
-                  <TouchableOpacity
-                    key={container.id}
-                    style={[
-                      styles.containerButton,
-                      scanState.selectedContainer?.id === container.id && styles.containerSelected
-                    ]}
-                    onPress={() => setScanState(prev => ({ ...prev, selectedContainer: container }))}
-                  >
-                    <Text style={styles.containerText}>{container.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {scanState.mode === 'manual' ? (
+            <View style={styles.manualContainer}>
+              <ScrollView>
+                <Text style={styles.sectionTitle}>Sélectionner un container:</Text>
+                <View style={styles.containerGrid}>
+                  {containers.map((container: Container) => (
+                    <TouchableOpacity
+                      key={container.id}
+                      style={[
+                        styles.containerButton,
+                        scanState.selectedContainer?.id === container.id && styles.containerSelected
+                      ]}
+                      onPress={() => setScanState(prev => ({ ...prev, selectedContainer: container }))}
+                    >
+                      <Text style={styles.containerText}>{container.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {scanState.selectedContainer && (
+                  <>
+                    <Text style={styles.sectionTitle}>
+                      Articles à assigner à {scanState.selectedContainer.name}:
+                    </Text>
+                  
+                    <View style={styles.searchContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Rechercher un article..."
+                        value={scanState.searchQuery}
+                        onChangeText={debouncedSearch}
+                      />
+                    </View>
+
+                    <View style={styles.filterContainer}>
+                      <TouchableOpacity
+                        style={[styles.filterButton, scanState.showOnlySelected && styles.filterButtonActive]}
+                        onPress={() => setScanState(prev => ({ ...prev, showOnlySelected: !prev.showOnlySelected }))}
+                      >
+                        <Text style={[styles.filterButtonText, scanState.showOnlySelected && styles.filterButtonTextActive]}>
+                          Articles assignés
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.filterButton, scanState.showOtherContainers && styles.filterButtonActive]}
+                        onPress={() => setScanState(prev => ({ ...prev, showOtherContainers: !prev.showOtherContainers }))}
+                      >
+                        <Text style={[styles.filterButtonText, scanState.showOtherContainers && styles.filterButtonTextActive]}>
+                          Tous les articles
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </ScrollView>
 
               {scanState.selectedContainer && (
-                <>
-                  <Text style={styles.sectionTitle}>
-                    Articles à assigner à {scanState.selectedContainer.name}:
-                  </Text>
-                
-                  <View style={styles.searchContainer}>
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Rechercher un article..."
-                      value={scanState.searchQuery}
-                      onChangeText={(text) => setScanState(prev => ({ ...prev, searchQuery: text }))}
+                <FlatList
+                  data={filteredItems}
+                  renderItem={({ item }) => (
+                    <ItemRow
+                      item={item}
+                      selectedContainer={scanState.selectedContainer}
+                      containers={containers}
+                      onPress={() => handleManualAssignment(item.id!)}
+                      isAssigning={scanState.isAssigning}
+                      assignmentProgress={scanState.assignmentProgress}
                     />
-                  </View>
-
-                  <View style={styles.filterContainer}>
-                    <TouchableOpacity
-                      style={[styles.filterButton, scanState.showOnlySelected && styles.filterButtonActive]}
-                      onPress={() => setScanState(prev => ({ ...prev, showOnlySelected: !prev.showOnlySelected }))}
-                    >
-                      <Text style={[styles.filterButtonText, scanState.showOnlySelected && styles.filterButtonTextActive]}>
-                        Articles assignés
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.filterButton, scanState.showOtherContainers && styles.filterButtonActive]}
-                      onPress={() => setScanState(prev => ({ ...prev, showOtherContainers: !prev.showOtherContainers }))}
-                    >
-                      <Text style={[styles.filterButtonText, scanState.showOtherContainers && styles.filterButtonTextActive]}>
-                        Tous les articles
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
+                  )}
+                  keyExtractor={item => item.id!.toString()}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={5}
+                  windowSize={5}
+                  removeClippedSubviews={true}
+                  style={styles.itemList}
+                />
               )}
-            </ScrollView>
-
-            {scanState.selectedContainer && (
-              <FlatList
-                data={filteredItems()}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.itemRow,
-                      item.containerId === scanState.selectedContainer?.id && styles.itemSelected,
-                      item.containerId !== null && 
-                      item.containerId !== scanState.selectedContainer?.id && 
-                      styles.itemInOtherContainer,
-                      scanState.assignmentProgress.itemId === item.id && 
-                      scanState.assignmentProgress.status === 'pending' && 
-                      styles.itemLoading
-                    ]}
-                    onPress={() => handleManualAssignment(item.id!)}
-                    disabled={scanState.isAssigning || !scanState.selectedContainer}
-                  >
-                    <View style={styles.itemContent}>
-                      <View>
-                        <Text style={styles.itemText}>{item.name}</Text>
-                        {item.containerId !== null && 
-                         item.containerId !== scanState.selectedContainer?.id && (
-                          <Text style={styles.containerInfo}>
-                            Dans: {containers.find(c => c.id === item.containerId)?.name}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.itemStatus}>
-                        {scanState.assignmentProgress.itemId === item.id ? (
-                          scanState.assignmentProgress.status === 'pending' ? (
-                            <ActivityIndicator size="small" color="#007AFF" />
-                          ) : scanState.assignmentProgress.status === 'success' ? (
-                            <MaterialIcons name="check-circle" size={24} color="#4CAF50" />
-                          ) : (
-                            <MaterialIcons name="error" size={24} color="#FF3B30" />
-                          )
-                        ) : (
-                          item.containerId === scanState.selectedContainer?.id && (
-                            <MaterialIcons name="check" size={24} color="#4CAF50" />
-                          )
-                        )}
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                )}
-                keyExtractor={item => item.id!.toString()}
-                style={styles.itemList}
+            </View>
+          ) : (
+            <View style={styles.scannerContainer}>
+              <Scanner 
+                onClose={() => {
+                  setScanState(prev => ({
+                    ...prev,
+                    isScannerActive: false
+                  }));
+                  router.back();
+                }} 
+                isActive={scanState.isScannerActive}
+                onScan={handleScanResult}
               />
-            )}
-          </View>
-        ) : (
-          <View style={styles.scannerContainer}>
-            <Scanner 
-              onClose={() => router.back()} 
-              isActive={scanState.isScannerActive}
-              onScan={handleScanResult}
-            />
-          </View>
-        )}
+            </View>
+          )}
 
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
+    </ErrorBoundary>
   );
 };
 

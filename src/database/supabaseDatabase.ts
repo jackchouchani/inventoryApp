@@ -3,7 +3,6 @@ import type { DatabaseInterface } from './database';
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
-import { photoService } from '../services/photoService';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -38,27 +37,6 @@ const ITEM_DETAIL_FIELDS = `
   sold_at
 `;
 
-const CONTAINER_FIELDS = `
-  id,
-  name,
-  description,
-  number,
-  qr_code,
-  created_at,
-  updated_at,
-  deleted,
-  user_id
-`;
-
-const CATEGORY_FIELDS = `
-  id,
-  name,
-  description,
-  icon,
-  created_at,
-  updated_at
-`;
-
 export class SupabaseDatabase implements DatabaseInterface {
   async getContainers(): Promise<Container[]> {
     try {
@@ -69,7 +47,6 @@ export class SupabaseDatabase implements DatabaseInterface {
       
       // Si erreur ou pas de données, retourner un tableau vide
       if (error || !data) {
-        console.log('Aucun container trouvé ou erreur:', error);
         return [];
       }
       
@@ -119,7 +96,6 @@ export class SupabaseDatabase implements DatabaseInterface {
 
   async getItems(): Promise<Item[]> {
     try {
-      console.log('Champs demandés:', ITEM_LIST_FIELDS);
       
       const { data, error } = await supabase
         .from('items')
@@ -136,46 +112,19 @@ export class SupabaseDatabase implements DatabaseInterface {
         return [];
       }
 
-      console.log('Structure d\'un item brut:', data[0] ? Object.keys(data[0]) : 'Aucun item');
-      console.log('Données brutes des items:', JSON.stringify(data, null, 2));
-      
-      const mappedItems = await Promise.all(data.map(async item => {
-        let photo_storage_url = item.photo_storage_url;
-        
-        // Si l'URL commence par "data:", c'est une image base64
-        if (photo_storage_url?.startsWith('data:image')) {
-          try {
-            console.log(`Migration de la photo base64 pour l'item ${item.id}...`);
-            photo_storage_url = await photoService.migrateBase64ToStorage(photo_storage_url);
-            
-            // Mettre à jour l'URL dans la base de données
-            await supabase
-              .from('items')
-              .update({ photo_storage_url })
-              .eq('id', item.id);
-            
-            console.log(`Photo migrée avec succès pour l'item ${item.id}`);
-          } catch (error) {
-            console.error(`Erreur lors de la migration de la photo pour l'item ${item.id}:`, error);
-          }
-        }
-        
-        const mappedItem = {
-          id: item.id,
-          name: item.name,
-          description: '', // Champ non nécessaire dans la liste
-          purchasePrice: item.purchase_price,
-          sellingPrice: item.selling_price,
-          status: item.status,
-          photo_storage_url,
-          containerId: item.container_id,
-          categoryId: item.category_id,
-          qrCode: item.qr_code,
-          createdAt: item.created_at,
-          updatedAt: item.updated_at
-        };
-        console.log(`Item ${item.id} - photo_storage_url:`, photo_storage_url);
-        return mappedItem;
+      const mappedItems = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: '', // Champ non nécessaire dans la liste
+        purchasePrice: item.purchase_price,
+        sellingPrice: item.selling_price,
+        status: item.status,
+        photo_storage_url: item.photo_storage_url,
+        containerId: item.container_id,
+        categoryId: item.category_id,
+        qrCode: item.qr_code,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
       }));
       
       return mappedItems;
@@ -283,7 +232,7 @@ export class SupabaseDatabase implements DatabaseInterface {
   async addContainer(container: ContainerInput): Promise<number> {
     try {
       if (!container.name) {
-        throw handleValidationError('Le nom du container est requis', 'addContainer');
+        handleValidationError('Le nom du container est requis');
       }
 
       // Récupérer l'utilisateur actuel
@@ -322,7 +271,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       return data.id;
     } catch (error) {
       console.error('Erreur complète dans addContainer:', error);
-      handleDatabaseError(error as PostgrestError, 'addContainer');
+      handleDatabaseError(error as PostgrestError);
       throw error;
     }
   }
@@ -421,7 +370,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         soldAt: data.sold_at
       };
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'getItemByQRCode');
+      handleDatabaseError(error as PostgrestError);
       return null;
     }
   }
@@ -545,15 +494,57 @@ export class SupabaseDatabase implements DatabaseInterface {
   }
 
   async deleteCategory(id: number): Promise<void> {
-    const { error } = await supabase
-      .from('categories')
-      .delete()
-      .eq('id', id);
+    try {
+      // Vérifier si la catégorie existe
+      const { data: category, error: checkError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', id)
+        .single();
 
-    if (error) throw error;
+      if (checkError || !category) {
+        throw new Error(`Catégorie avec l'ID ${id} n'existe pas`);
+      }
+
+      // Vérifier si la catégorie est utilisée par des éléments
+      const { data: items, error: itemsError } = await supabase
+        .from('items')
+        .select('id')
+        .eq('category_id', id)
+        .is('deleted', false);
+
+      if (itemsError) {
+        throw new Error(`Erreur lors de la vérification des éléments liés: ${itemsError.message}`);
+      }
+
+      // Si des éléments utilisent cette catégorie, mettre à jour leur category_id à null
+      if (items && items.length > 0) {
+        const { error: updateItemsError } = await supabase
+          .from('items')
+          .update({ category_id: null })
+          .eq('category_id', id);
+
+        if (updateItemsError) {
+          throw new Error(`Erreur lors de la mise à jour des éléments liés: ${updateItemsError.message}`);
+        }
+      }
+
+      // Marquer la catégorie comme supprimée plutôt que de la supprimer complètement
+      const { error: deleteError } = await supabase
+        .from('categories')
+        .update({ deleted: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (deleteError) {
+        throw new Error(`Erreur lors de la suppression de la catégorie: ${deleteError.message}`);
+      }
+    } catch (error) {
+      console.error('Erreur dans deleteCategory:', error);
+      throw error;
+    }
   }
 
-  async storePhotoUri(uri: string): Promise<void> {
+  async storePhotoUri(_uri: string): Promise<void> {
     // Pour Supabase, cette fonction n'est probablement pas nécessaire
     // car nous utilisons déjà photoService pour gérer les photos
     console.warn('storePhotoUri not needed in Supabase implementation');
@@ -639,7 +630,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         soldAt: data.sold_at
       };
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'getItem');
+      handleDatabaseError(error as PostgrestError);
       return null;
     }
   }
@@ -670,7 +661,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         updatedAt: item.updated_at
       }));
     } catch (error) {
-      handleDatabaseError(error as PostgrestError, 'searchItems');
+      handleDatabaseError(error as PostgrestError);
       return [];
     }
   }

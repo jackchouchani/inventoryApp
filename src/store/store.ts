@@ -2,7 +2,6 @@ import { configureStore } from '@reduxjs/toolkit';
 import itemsReducer from './itemsSlice';
 import categoriesReducer from './categorySlice';
 import containersReducer from './containersSlice';
-import { ContainersState } from './containersSlice';
 import { categoriesAdapter } from './categorySlice';
 import { itemsAdapter } from './itemsAdapter';
 import { containersAdapter } from './containersSlice';

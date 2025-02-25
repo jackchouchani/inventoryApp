@@ -8,10 +8,10 @@ export interface Item {
     photo_storage_url?: string;
     containerId?: number | null;
     categoryId?: number;
-    qrCode: string;
     createdAt: string;
     updatedAt: string;
     soldAt?: string;
+    qrCode?: string;
 }
 
 export type ItemInput = Omit<Item, 'id' | 'createdAt' | 'updatedAt'>;

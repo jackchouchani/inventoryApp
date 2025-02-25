@@ -4,7 +4,7 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
-import { generateId, ID_TYPES } from '../utils/identifierManager';
+import { generateId } from '../utils/identifierManager';
 
 export const database = supabaseDatabase;
 
@@ -133,13 +133,9 @@ export interface DatabaseInterface {
     }>;
 }
 
-export const createContainer = async (data: Omit<Container, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Container> => {
+export const createContainer = async (_data: Omit<Container, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Container> => {
   const qrCode = generateId('CONTAINER');
   
-  const containerId = await database.addContainer({
-    ...data,
-    qrCode
-  });
 
   const container = await database.getContainerByQRCode(qrCode);
   if (!container) throw new Error('Container not found after creation');
@@ -147,13 +143,9 @@ export const createContainer = async (data: Omit<Container, 'id' | 'qrCode' | 'c
   return container;
 };
 
-export const createItem = async (data: Omit<Item, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Item> => {
+export const createItem = async (_data: Omit<Item, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Item> => {
   const qrCode = generateId('ITEM');
   
-  const itemId = await database.addItem({
-    ...data,
-    qrCode
-  });
 
   const item = await database.getItemByQRCode(qrCode);
   if (!item) throw new Error('Item not found after creation');

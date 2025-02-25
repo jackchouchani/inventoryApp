@@ -16,6 +16,10 @@ interface ValidationRules {
 export const useValidation = (rules: ValidationRules) => {
   const [errors, setErrors] = useState<string[]>([]);
 
+  const clearErrors = useCallback(() => {
+    setErrors([]);
+  }, []);
+
   const validateField = useCallback((field: string, value: string) => {
     const fieldRules = rules[field];
     const fieldErrors: string[] = [];
@@ -71,5 +75,6 @@ export const useValidation = (rules: ValidationRules) => {
     errors,
     validateField,
     validateForm,
+    clearErrors,
   };
 }; 

@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform, Modal, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState } from '../../src/store/store';
+import { useSelector } from 'react-redux';
 import { database, createContainer, createItem } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { generateId } from '../../src/utils/identifierManager';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { useQueryClient } from '@tanstack/react-query';
+import { handleError } from '../../src/utils/errorHandler';
+import { theme } from '../../src/utils/theme';
+import * as Sentry from '@sentry/react-native';
 
 interface ConfirmationModalProps {
   visible: boolean;
@@ -19,7 +20,7 @@ interface ConfirmationModalProps {
   onCancel: () => void;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ visible, title, message, onConfirm, onCancel }) => (
+const ConfirmationModal = React.memo<ConfirmationModalProps>(({ visible, title, message, onConfirm, onCancel }) => (
   <Modal
     animationType="fade"
     transparent={true}
@@ -31,154 +32,197 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ visible, title, m
         <Text style={styles.modalTitle}>{title}</Text>
         <Text style={styles.modalMessage}>{message}</Text>
         <View style={styles.modalButtons}>
-          <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={onCancel}>
+          <Pressable 
+            style={[styles.modalButton, styles.cancelButton]} 
+            onPress={onCancel}
+            accessibilityLabel="Annuler"
+          >
             <Text style={styles.cancelButtonText}>Annuler</Text>
           </Pressable>
-          <Pressable style={[styles.modalButton, styles.confirmButton]} onPress={onConfirm}>
+          <Pressable 
+            style={[styles.modalButton, styles.confirmButton]} 
+            onPress={onConfirm}
+            accessibilityLabel="Confirmer"
+          >
             <Text style={styles.confirmButtonText}>Confirmer</Text>
           </Pressable>
         </View>
       </View>
     </View>
   </Modal>
-);
+));
+
+ConfirmationModal.displayName = 'ConfirmationModal';
+
+interface UIState {
+  isResetModalVisible: boolean;
+  isLoading: boolean;
+}
 
 const SettingsScreen = () => {
   const router = useRouter();
-  const dispatch = useDispatch();
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
-  const [isResetModalVisible, setIsResetModalVisible] = useState(false);
+  const [uiState, setUiState] = useState<UIState>({
+    isResetModalVisible: false,
+    isLoading: false
+  });
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'User initiated logout',
+        level: 'info'
+      });
+      
       await signOut();
       router.replace('/(auth)/login');
     } catch (error) {
-      console.error('Erreur de déconnexion:', error);
+      handleError(error, 'Erreur lors de la déconnexion');
+      Sentry.captureException(error, {
+        tags: { action: 'logout' }
+      });
     }
-  };
+  }, [signOut, router]);
 
-  const handleResetDatabase = async () => {
-    if (Platform.OS === 'web') {
-      setIsResetModalVisible(true);
-    } else {
-      Alert.alert(
-        'Réinitialiser la base de données',
-        'Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible.',
-        [
-          {
-            text: 'Annuler',
-            style: 'cancel',
-          },
-          {
-            text: 'Réinitialiser',
-            style: 'destructive',
-            onPress: performReset
-          }
-        ],
-        { cancelable: false }
-      );
-    }
-  };
-
-  const performReset = async () => {
-    console.log('Début de la réinitialisation');
+  const performReset = useCallback(async () => {
     try {
+      setUiState(prev => ({ ...prev, isLoading: true }));
+      
+      Sentry.addBreadcrumb({
+        category: 'database',
+        message: 'Database reset initiated',
+        level: 'warning'
+      });
+
       await database.resetDatabase();
-      console.log('Base de données réinitialisée avec succès');
       await queryClient.invalidateQueries();
       triggerRefresh();
-      if (Platform.OS === 'web') {
-        alert('Base de données réinitialisée avec succès');
-      } else {
-        Alert.alert('Succès', 'Base de données réinitialisée avec succès');
-      }
-    } catch (error) {
-      console.error('Erreur lors de la réinitialisation:', error);
-      if (Platform.OS === 'web') {
-        alert('Impossible de réinitialiser la base de données');
-      } else {
-        Alert.alert('Erreur', 'Impossible de réinitialiser la base de données');
-      }
-    } finally {
-      setIsResetModalVisible(false);
-    }
-  };
 
-  const generateTestData = async () => {
+      setUiState(prev => ({ 
+        ...prev, 
+        isResetModalVisible: false,
+        isLoading: false 
+      }));
+
+      Alert.alert('Succès', 'Base de données réinitialisée avec succès');
+    } catch (error) {
+      setUiState(prev => ({ ...prev, isLoading: false }));
+      handleError(error, 'Erreur lors de la réinitialisation');
+      Sentry.captureException(error, {
+        tags: { action: 'database_reset' }
+      });
+    }
+  }, [queryClient, triggerRefresh]);
+
+  const handleResetDatabase = useCallback(async () => {
     try {
-      // Ajouter des catégories
-      const cat1Id = await database.addCategory({ 
-        name: 'Vêtements', 
-        description: 'Tous types de vêtements',
-      });
-      const cat2Id = await database.addCategory({ 
-        name: 'Électronique', 
-        description: 'Appareils électroniques',
-      });
-      const cat3Id = await database.addCategory({ 
-        name: 'Livres', 
-        description: 'Livres et magazines',
-      });
-
-      // Ajouter des containers avec le nouveau système d'identifiants
-      const container1 = await createContainer({ 
-        number: 1,
-        name: 'Box A1', 
-        description: 'Premier container'
-      });
-      const container2 = await createContainer({ 
-        number: 2,
-        name: 'Box B2', 
-        description: 'Deuxième container'
-      });
-
-      // Ajouter des items avec le nouveau système d'identifiants
-      await createItem({
-        name: 'T-shirt bleu',
-        description: 'T-shirt en coton',
-        purchasePrice: 5,
-        sellingPrice: 15,
-        status: 'available',
-        categoryId: cat1Id,
-        containerId: container1.id
-      });
-
-      await createItem({
-        name: 'Smartphone',
-        description: 'Téléphone Android',
-        purchasePrice: 100,
-        sellingPrice: 200,
-        status: 'available',
-        categoryId: cat2Id,
-        containerId: container1.id
-      });
-
-      await createItem({
-        name: 'Roman policier',
-        description: 'Livre de poche',
-        purchasePrice: 3,
-        sellingPrice: 8,
-        status: 'available',
-        categoryId: cat3Id,
-        containerId: container2.id
-      });
-
-      triggerRefresh();
-      Alert.alert('Succès', 'Données de test générées avec succès');
+      if (Platform.OS === 'web') {
+        setUiState(prev => ({ ...prev, isResetModalVisible: true }));
+      } else {
+        Alert.alert(
+          'Réinitialiser la base de données',
+          'Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible.',
+          [
+            {
+              text: 'Annuler',
+              style: 'cancel',
+            },
+            {
+              text: 'Réinitialiser',
+              style: 'destructive',
+              onPress: performReset
+            }
+          ],
+          { cancelable: false }
+        );
+      }
     } catch (error) {
-      console.error('Erreur lors de la génération des données de test:', error);
-      Alert.alert('Erreur', 'Impossible de générer les données de test');
+      handleError(error, 'Erreur lors de la réinitialisation');
     }
-  };
+  }, [performReset]);
+
+  const generateTestData = useCallback(async () => {
+    if (__DEV__) {
+      try {
+        setUiState(prev => ({ ...prev, isLoading: true }));
+        
+        // Ajouter des catégories
+        const cat1Id = await database.addCategory({ 
+          name: 'Vêtements', 
+          description: 'Tous types de vêtements',
+        });
+        const cat2Id = await database.addCategory({ 
+          name: 'Électronique', 
+          description: 'Appareils électroniques',
+        });
+        const cat3Id = await database.addCategory({ 
+          name: 'Livres', 
+          description: 'Livres et magazines',
+        });
+
+        // Ajouter des containers avec le nouveau système d'identifiants
+        const container1 = await createContainer({ 
+          number: 1,
+          name: 'Box A1', 
+          description: 'Premier container'
+        });
+        const container2 = await createContainer({ 
+          number: 2,
+          name: 'Box B2', 
+          description: 'Deuxième container'
+        });
+
+        // Ajouter des items avec le nouveau système d'identifiants
+        await createItem({
+          name: 'T-shirt bleu',
+          description: 'T-shirt en coton',
+          purchasePrice: 5,
+          sellingPrice: 15,
+          status: 'available',
+          categoryId: cat1Id,
+          containerId: container1.id
+        });
+
+        await createItem({
+          name: 'Smartphone',
+          description: 'Téléphone Android',
+          purchasePrice: 100,
+          sellingPrice: 200,
+          status: 'available',
+          categoryId: cat2Id,
+          containerId: container1.id
+        });
+
+        await createItem({
+          name: 'Roman policier',
+          description: 'Livre de poche',
+          purchasePrice: 3,
+          sellingPrice: 8,
+          status: 'available',
+          categoryId: cat3Id,
+          containerId: container2.id
+        });
+
+        triggerRefresh();
+        setUiState(prev => ({ ...prev, isLoading: false }));
+        Alert.alert('Succès', 'Données de test générées avec succès');
+      } catch (error) {
+        setUiState(prev => ({ ...prev, isLoading: false }));
+        handleError(error, 'Erreur lors de la génération des données de test');
+      }
+    } else {
+      console.warn('Test data generation is disabled in production');
+    }
+  }, [triggerRefresh]);
 
   if (!categories) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
@@ -251,11 +295,11 @@ const SettingsScreen = () => {
       </TouchableOpacity>
 
       <ConfirmationModal
-        visible={isResetModalVisible}
+        visible={uiState.isResetModalVisible}
         title="Réinitialiser la base de données"
         message="Êtes-vous sûr de vouloir réinitialiser la base de données ? Cette action est irréversible."
         onConfirm={performReset}
-        onCancel={() => setIsResetModalVisible(false)}
+        onCancel={() => setUiState(prev => ({ ...prev, isResetModalVisible: false }))}
       />
     </View>
   );
@@ -264,50 +308,51 @@ const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.background,
   },
   topBar: {
     height: Platform.OS === 'ios' ? 44 : 56,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: theme.colors.border,
     marginTop: Platform.OS === 'ios' ? 47 : 0,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    marginLeft: -8,
+    padding: theme.spacing.sm,
+    marginLeft: -theme.spacing.sm,
   },
   backButtonText: {
-    fontSize: 17,
-    color: '#007AFF',
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.primary,
     marginLeft: -4,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fff',
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
   menuText: {
     flex: 1,
-    marginLeft: 15,
-    fontSize: 16,
+    marginLeft: theme.spacing.md,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text.primary,
   },
   dangerItem: {
-    marginTop: 20,
+    marginTop: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#e5e5e5',
-    backgroundColor: '#fff5f5',
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.danger.background,
   },
   dangerText: {
-    color: '#FF3B30',
+    color: theme.colors.danger.text,
     fontWeight: '500',
   },
   loadingContainer: {
@@ -315,9 +360,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text.secondary,
   },
   modalOverlay: {
     flex: 1,
@@ -326,42 +371,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 20,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.lg,
     width: Platform.OS === 'web' ? '80%' : '90%',
     maxWidth: 500,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: theme.typography.h2.fontSize,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: theme.spacing.sm,
+    color: theme.colors.text.primary,
   },
   modalMessage: {
-    fontSize: 16,
-    marginBottom: 20,
+    fontSize: theme.typography.body.fontSize,
+    marginBottom: theme.spacing.lg,
+    color: theme.colors.text.primary,
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
+    gap: theme.spacing.sm,
   },
   modalButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 5,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.sm,
   },
   cancelButton: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.surface,
   },
   confirmButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: theme.colors.danger.main,
   },
   cancelButtonText: {
-    color: '#666',
+    color: theme.colors.text.disabled,
   },
   confirmButtonText: {
-    color: 'white',
+    color: theme.colors.text.inverse,
+  },
+  topBarTitle: {
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    flex: 1,
+    textAlign: 'center',
+    marginRight: theme.spacing.xl,
   },
 });
 

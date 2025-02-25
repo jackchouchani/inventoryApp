@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { checkNetworkConnection, subscribeToNetworkChanges } from '../utils/networkCheck';
+import { checkNetworkConnection, subscribeToNetworkChanges } from '../utils/networkUtils';
 import * as Sentry from '@sentry/react-native';
 
 interface NetworkErrorBoundaryProps {
@@ -29,8 +29,8 @@ export const NetworkErrorBoundary: React.FC<NetworkErrorBoundaryProps> = ({
       }
     };
 
-    const unsubscribe = subscribeToNetworkChanges((connected) => {
-      setIsConnected(connected);
+    const unsubscribe = subscribeToNetworkChanges((state) => {
+      setIsConnected(state.isConnected ?? false);
     });
 
     checkConnection();

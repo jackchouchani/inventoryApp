@@ -1,21 +1,37 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
+import { Platform, Alert } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
+import { AuthError } from '@supabase/supabase-js';
 
 // Types d'erreurs
-export enum ErrorType {
-  DATABASE = 'DATABASE',
-  AUTHENTICATION = 'AUTHENTICATION',
-  NETWORK = 'NETWORK',
-  SCANNER = 'SCANNER',
-  VALIDATION = 'VALIDATION',
-  UNKNOWN = 'UNKNOWN'
-}
+export const ErrorType = {
+  DATABASE: 'DATABASE',
+  AUTHENTICATION: 'AUTHENTICATION',
+  NETWORK: 'NETWORK',
+  SCANNER: 'SCANNER',
+  VALIDATION: 'VALIDATION',
+  UNKNOWN: 'UNKNOWN',
+  CONTAINER_CONTENTS_LOAD_MORE: 'CONTAINER_CONTENTS_LOAD_MORE',
+  CONTAINER_CONTENTS_REFRESH: 'CONTAINER_CONTENTS_REFRESH',
+  GRID_ERROR: 'GRID_ERROR'
+} as const;
+
+export type ErrorTypeEnum = typeof ErrorType[keyof typeof ErrorType];
 
 // Structure pour les messages d'erreur traduits
 interface ErrorMessage {
   fr: string;
   en: string;
+}
+
+export interface ErrorDetails {
+  message: string;
+  code?: string;
+  type: ErrorTypeEnum;
+  originalError?: unknown;
+  context: string;
 }
 
 // Mapping des codes d'erreur Supabase
@@ -102,7 +118,7 @@ const supabaseErrorCodes: Record<string, ErrorMessage> = {
 };
 
 // Messages d'erreur génériques par type
-const genericErrors: Record<ErrorType, ErrorMessage> = {
+const genericErrors: Record<ErrorTypeEnum, ErrorMessage> = {
   [ErrorType.DATABASE]: {
     fr: 'Erreur de base de données.',
     en: 'Database error.'
@@ -126,96 +142,209 @@ const genericErrors: Record<ErrorType, ErrorMessage> = {
   [ErrorType.UNKNOWN]: {
     fr: 'Une erreur inattendue s\'est produite.',
     en: 'An unexpected error occurred.'
+  },
+  [ErrorType.CONTAINER_CONTENTS_LOAD_MORE]: {
+    fr: 'Erreur lors du chargement des éléments supplémentaires.',
+    en: 'Error loading more items.'
+  },
+  [ErrorType.CONTAINER_CONTENTS_REFRESH]: {
+    fr: 'Erreur lors du rafraîchissement des éléments.',
+    en: 'Error refreshing items.'
+  },
+  [ErrorType.GRID_ERROR]: {
+    fr: 'Erreur dans l\'affichage de la grille.',
+    en: 'Grid display error.'
   }
 };
 
-// Options pour le logging des erreurs
-interface ErrorOptions {
-  context?: string;
-  additionalData?: Record<string, any>;
-  shouldNotify?: boolean;
-  customMessage?: ErrorMessage;
+interface ErrorContext {
+    context: string;
+    [key: string]: any;
 }
 
-export interface ErrorDetails {
-  message: string;
-  type: ErrorType;
-  code?: string;
-  context?: string;
+interface ErrorHandlerOptions {
+  showAlert?: boolean;
+  logToSentry?: boolean;
+  source?: string;
+  message?: string;
 }
 
-// Fonction principale de gestion des erreurs
+/**
+ * Gère les erreurs de manière centralisée
+ * @param error - L'erreur à gérer
+ * @param message - Message d'erreur à afficher à l'utilisateur
+ * @param options - Options de gestion d'erreur
+ */
 export const handleError = (
-  error: unknown,
-  type: ErrorType = ErrorType.UNKNOWN,
-  options: ErrorOptions = {}
-): ErrorDetails => {
-  const { context, additionalData, shouldNotify = true, customMessage } = options;
-
-  // Log l'erreur dans Sentry
-  Sentry.captureException(error, {
-    extra: {
-      type,
-      context,
-      additionalData
-    },
-  });
-
+  error: Error | AuthError | unknown,
+  message: string,
+  options: ErrorHandlerOptions = { showAlert: true, logToSentry: true }
+) => {
   // Log l'erreur en console en développement
   if (__DEV__) {
-    console.error(`Error in ${context} (${type}):`, error);
+    console.error(message, error);
   }
 
-  // Déterminer le message d'erreur
-  let errorMessage: ErrorMessage;
-  
-  if (customMessage) {
-    errorMessage = customMessage;
-  } else if (error instanceof Error && 'code' in error) {
-    const code = (error as any).code;
-    errorMessage = supabaseErrorCodes[code] || genericErrors[type];
-  } else {
-    errorMessage = genericErrors[type];
-  }
-
-  // Afficher un toast si nécessaire
-  if (shouldNotify) {
-    Toast.show({
-      type: 'error',
-      text1: 'Erreur',
-      text2: errorMessage.fr,
-      position: 'bottom',
-      visibilityTime: 4000,
-      autoHide: true,
+  // Log l'erreur dans Sentry en production
+  if (options.logToSentry) {
+    Sentry.captureException(error, {
+      extra: { message }
     });
   }
 
-  return {
-    message: errorMessage.fr,
-    type,
-    code: error instanceof Error && 'code' in error ? (error as any).code : undefined,
-    context
-  };
+  // Afficher une alerte à l'utilisateur
+  if (options.showAlert) {
+    if (Platform.OS === 'web') {
+      alert(message);
+    } else {
+      Alert.alert('Erreur', message);
+    }
+  }
+
+  // Gérer les erreurs spécifiques
+  if (error instanceof AuthError) {
+    processAuthError(error);
+  }
 };
+
+/**
+ * Traite les erreurs d'authentification en interne
+ * @param error - L'erreur d'authentification
+ */
+const processAuthError = (error: AuthError) => {
+  switch (error.status) {
+    case 401:
+      // Rediriger vers la page de connexion
+      break;
+    case 403:
+      // Gérer les erreurs de permission
+      break;
+    default:
+      // Gérer les autres erreurs d'auth
+      break;
+  }
+};
+
+class ErrorHandler {
+  handleError(error: unknown, { context, severity = 'error', extraData }: ErrorContext): ErrorDetails {
+    console.error(`[${context}]`, error);
+
+    // Enrichir le contexte pour Sentry
+    const errorContext = {
+      timestamp: new Date().toISOString(),
+      context,
+      ...extraData,
+      deviceInfo: {
+        platform: Platform.OS,
+        version: Platform.Version,
+        brand: Platform.select({
+          ios: 'Apple',
+          android: 'Android',
+          default: 'Unknown'
+        })
+      },
+      appState: {
+        isConnected: NetInfo.useNetInfo().isConnected,
+        lastAction: extraData?.lastAction || 'unknown'
+      }
+    };
+
+    // Configurer les breadcrumbs pour Sentry
+    Sentry.addBreadcrumb({
+      category: context,
+      message: this.getErrorMessage(error),
+      level: severity as Sentry.SeverityLevel,
+      data: errorContext
+    });
+
+    // Capturer l'exception avec le contexte enrichi
+    Sentry.captureException(error, {
+      level: severity as Sentry.SeverityLevel,
+      contexts: {
+        error: errorContext
+      },
+      tags: {
+        errorType: context,
+        errorCode: error instanceof Error && 'code' in error ? (error as any).code : 'unknown'
+      }
+    });
+
+    // Afficher le toast avec un style amélioré
+    Toast.show({
+      type: severity === 'error' ? 'error' : 'info',
+      text1: this.getErrorTitle(context),
+      text2: this.getErrorMessage(error),
+      position: 'bottom',
+      visibilityTime: 4000,
+      props: {
+        style: {
+          borderLeftColor: severity === 'error' ? '#FF3B30' : '#007AFF'
+        }
+      }
+    });
+
+    return {
+      message: this.getErrorMessage(error),
+      type: context as ErrorTypeEnum,
+      originalError: error,
+      code: error instanceof Error && 'code' in error ? (error as any).code : undefined,
+      context: errorContext
+    };
+  }
+
+  private getErrorTitle(context: string): string {
+    switch (context) {
+      case ErrorType.DATABASE:
+        return 'Erreur de base de données';
+      case ErrorType.AUTHENTICATION:
+        return 'Erreur d\'authentification';
+      case ErrorType.NETWORK:
+        return 'Erreur réseau';
+      case ErrorType.SCANNER:
+        return 'Erreur de scanner';
+      case ErrorType.VALIDATION:
+        return 'Erreur de validation';
+      default:
+        return 'Erreur';
+    }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      if ('code' in error && typeof (error as any).code === 'string') {
+        const code = (error as any).code;
+        return supabaseErrorCodes[code]?.fr || genericErrors[ErrorType.UNKNOWN].fr;
+      }
+      return error.message;
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    return genericErrors[ErrorType.UNKNOWN].fr;
+  }
+}
+
+export const errorHandler = new ErrorHandler();
 
 // Fonctions utilitaires spécialisées
-export const handleValidationError = (message: string, context?: string) => {
-  return handleError(new Error(message), ErrorType.VALIDATION, { context });
+export const handleValidationError = (message: string): ErrorDetails => {
+  return errorHandler.handleError(new Error(message), { context: ErrorType.VALIDATION });
 };
 
-export const handleAuthError = (error: Error, context?: string) => {
-  return handleError(error, ErrorType.AUTHENTICATION, { context });
+export const handleAuthError = (error: Error): ErrorDetails => {
+  return errorHandler.handleError(error, { context: ErrorType.AUTHENTICATION });
 };
 
-export const handleDatabaseError = (error: PostgrestError | Error, context?: string) => {
-  return handleError(error, ErrorType.DATABASE, { context });
+export const handleDatabaseError = (error: PostgrestError | Error): ErrorDetails => {
+  return errorHandler.handleError(error, { context: ErrorType.DATABASE });
 };
 
-export const handleScannerError = (error: Error, context?: string) => {
-  return handleError(error, ErrorType.SCANNER, { context });
+export const handleScannerError = (error: Error): ErrorDetails => {
+  return errorHandler.handleError(error, { context: ErrorType.SCANNER });
 };
 
-export const handleNetworkError = (error: Error, context?: string) => {
+export const handleNetworkError = (error: Error): ErrorDetails => {
+  // Détecter le type d'erreur réseau
   let networkErrorType = 'network/unknown';
   
   if (error.message.includes('timeout')) {
@@ -224,28 +353,8 @@ export const handleNetworkError = (error: Error, context?: string) => {
     networkErrorType = 'network/no-connection';
   }
 
-  const errorMessage = supabaseErrorCodes[networkErrorType] || {
-    fr: 'Erreur de connexion réseau.',
-    en: 'Network connection error.'
-  };
-
-  return handleError(error, ErrorType.NETWORK, {
-    context,
-    additionalData: { networkErrorType },
-    customMessage: errorMessage
+  return errorHandler.handleError(error, { 
+    context: ErrorType.NETWORK,
+    extraData: { networkErrorType }
   });
-};
-
-// Fonction utilitaire pour vérifier la connexion réseau
-export const checkNetworkConnection = async (): Promise<boolean> => {
-  try {
-    const response = await fetch('https://www.google.com', { 
-      method: 'HEAD',
-      mode: 'no-cors'
-    });
-    return true;
-  } catch (error) {
-    handleNetworkError(error as Error, 'checkNetworkConnection');
-    return false;
-  }
 }; 

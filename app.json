@@ -13,33 +13,28 @@
       "backgroundColor": "#ffffff"
     },
     "updates": {
-      "fallbackToCacheTimeout": 0,
-      "assetPatternsToBeBundled": [
-        "**/*.ttf",
-        "**/*.png",
-        "**/*.js",
-        "**/*.mp3"
-      ]
+      "fallbackToCacheTimeout": 0
     },
+    "assetBundlePatterns": ["**/*"],
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes et prendre des photos."
+        }
+      ],
+      [
         "expo-image-picker",
         {
-          "photosPermission": "L'application nécessite l'accès à vos photos.",
-          "cameraPermission": "L'application nécessite l'accès à votre caméra."
+          "photosPermission": "L'application nécessite l'accès à vos photos pour sauvegarder les images des articles.",
+          "cameraPermission": "L'application nécessite l'accès à votre caméra pour prendre des photos des articles."
         }
       ],
       [
         "expo-barcode-scanner",
         {
           "cameraPermission": "L'application a besoin d'accéder à votre caméra pour scanner les QR codes."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "L'application nécessite l'accès à la caméra pour scanner les QR codes."
         }
       ],
       [
@@ -54,16 +49,14 @@
       "bundleIdentifier": "com.anonymous.inventoryApp",
       "buildNumber": "1.0.0",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "fetch",
-          "remote-notification"
-        ],
-        "UIStatusBarHidden": false,
-        "NSCameraUsageDescription": "Cette application nécessite l'accès à la caméra pour scanner les QR codes",
-        "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos.",
-        "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone.",
+        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "NSCameraUsageDescription": "L'application nécessite l'accès à la caméra pour scanner les QR codes et prendre des photos.",
+        "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos pour sauvegarder les images des articles.",
+        "NSPhotoLibraryAddUsageDescription": "L'application nécessite l'accès à vos photos pour sauvegarder les images des articles.",
+        "NSMicrophoneUsageDescription": "L'application nécessite l'accès au microphone pour les retours sonores.",
         "NSHapticsUsageDescription": "L'application utilise les vibrations pour le retour haptique",
-        "UIViewControllerBasedStatusBarAppearance": false
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "NSFaceIDUsageDescription": "L'application utilise l'authentification biométrique pour sécuriser vos données."
       }
     },
     "android": {
@@ -71,13 +64,7 @@
         "foregroundImage": "./assets/Logo.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.VIBRATE",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ],
+      "permissions": ["CAMERA", "RECORD_AUDIO", "USE_BIOMETRIC"],
       "package": "com.anonymous.inventoryApp",
       "versionCode": 1
     },
@@ -91,19 +78,7 @@
       "startUrl": "/",
       "display": "standalone",
       "orientation": "portrait",
-      "description": "Application de gestion d'inventaire",
-      "dir": "ltr",
-      "preferRelatedApplications": true,
-      "relatedApplications": [
-        {
-          "platform": "play",
-          "id": "com.anonymous.inventoryApp"
-        },
-        {
-          "platform": "itunes",
-          "url": "https://apps.apple.com/app/inventoryApp"
-        }
-      ]
+      "description": "Application de gestion d'inventaire"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
@@ -114,9 +89,6 @@
       "eas": {
         "projectId": "493303ca-8459-4234-b01d-1103a21f67c1"
       }
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ]
+    }
   }
 }

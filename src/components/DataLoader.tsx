@@ -1,7 +1,103 @@
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../config/supabase';
+import React, { useEffect, useState, memo } from 'react';
+import { View, ActivityIndicator, Text, Platform } from 'react-native';
+import { useInitialData } from '../hooks/useInitialData';
+import { styles } from '../styles/dataLoader';
+import { theme } from '../utils/theme';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
+import { useSegments } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const CACHE_KEYS = {
+  categories: 'cache_categories_v1',
+  containers: 'cache_containers_v1',
+};
+
+const storage = {
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(key, value);
+    } else {
+      await AsyncStorage.setItem(key, value);
+    }
+  },
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      return localStorage.getItem(key);
+    } else {
+      return await AsyncStorage.getItem(key);
+    }
+  }
+};
+
+const CacheManager: React.FC = () => {
+  const { user } = useAuth();
+  const segments = useSegments();
+  const isAuthGroup = segments[0] === "(auth)";
+  const queryClient = useQueryClient();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Restaurer les données du cache au démarrage
+  useEffect(() => {
+    const restoreCache = async () => {
+      if (user && !isAuthGroup && !isInitialized) {
+        try {
+          const [categoriesCache, containersCache] = await Promise.all([
+            storage.getItem(CACHE_KEYS.categories),
+            storage.getItem(CACHE_KEYS.containers),
+          ]);
+
+          if (categoriesCache) {
+            const categories = JSON.parse(categoriesCache);
+            queryClient.setQueryData(['categories'], categories);
+          }
+
+          if (containersCache) {
+            const containers = JSON.parse(containersCache);
+            queryClient.setQueryData(['containers'], containers);
+          }
+
+          setIsInitialized(true);
+        } catch (error) {
+          console.error('Erreur lors de la restauration du cache:', error);
+        }
+      }
+    };
+
+    restoreCache();
+  }, [user, isAuthGroup, queryClient, isInitialized]);
+
+  // Sauvegarder les données dans le cache
+  useEffect(() => {
+    if (!user || isAuthGroup || !isInitialized) return;
+
+    const setupCache = async () => {
+      try {
+        const categories = queryClient.getQueryData(['categories']);
+        const containers = queryClient.getQueryData(['containers']);
+
+        if (categories) {
+          await storage.setItem(CACHE_KEYS.categories, JSON.stringify(categories));
+        }
+        if (containers) {
+          await storage.setItem(CACHE_KEYS.containers, JSON.stringify(containers));
+        }
+      } catch (error) {
+        console.error('Erreur lors de la mise en cache:', error);
+      }
+    };
+
+    const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+      setupCache();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, isAuthGroup, queryClient, isInitialized]);
+
+  return null;
+};
 
 interface DataLoaderProps {
   children: React.ReactNode;
@@ -9,109 +105,72 @@ interface DataLoaderProps {
   showLoadingUI?: boolean;
 }
 
-export const DataLoader: React.FC<DataLoaderProps> = ({ 
+export const DataLoader: React.FC<DataLoaderProps> = memo(({ 
   children, 
   onLoadComplete,
-  showLoadingUI = false 
+  showLoadingUI = true 
 }) => {
   const [hasCalledComplete, setHasCalledComplete] = useState(false);
-
-  const { 
-    data: categories, 
-    isLoading: isCategoriesLoading,
-    error: categoriesError
-  } = useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .is('deleted', false);
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 3
-  });
-
-  const { 
-    data: containers, 
-    isLoading: isContainersLoading,
-    error: containersError
-  } = useQuery({
-    queryKey: ['containers'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('containers')
-        .select('*')
-        .is('deleted', false);
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    retry: 3
-  });
+  const { isLoading, error } = useInitialData();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const segments = useSegments();
+  const isAuthGroup = segments[0] === "(auth)";
 
   useEffect(() => {
-    if (!hasCalledComplete && !isCategoriesLoading && !isContainersLoading) {
+    queryClient.setDefaultOptions({
+      queries: {
+        ...queryClient.getDefaultOptions().queries,
+        enabled: !!user && !isAuthGroup,
+      },
+    });
+
+    if (user && !isAuthGroup) {
+      queryClient.invalidateQueries();
+    }
+  }, [user, queryClient, isAuthGroup]);
+
+  useEffect(() => {
+    if (!hasCalledComplete && !isLoading) {
       setHasCalledComplete(true);
       onLoadComplete?.();
     }
-  }, [isCategoriesLoading, isContainersLoading, hasCalledComplete, onLoadComplete]);
+  }, [isLoading, hasCalledComplete, onLoadComplete]);
 
-  if (categoriesError || containersError) {
+  if (isAuthGroup) {
+    return <>{children}</>;
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  if (error) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>
           Une erreur est survenue lors du chargement des données
         </Text>
         <Text style={styles.errorDetail}>
-          {categoriesError?.message || containersError?.message}
+          {error.message}
         </Text>
       </View>
     );
   }
 
-  if (isCategoriesLoading || isContainersLoading) {
+  if (isLoading && showLoadingUI) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Chargement des données...</Text>
       </View>
     );
   }
 
-  return <>{children}</>;
-};
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  errorDetail: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
+  return (
+    <>
+      <CacheManager />
+      {children}
+    </>
+  );
 }); 

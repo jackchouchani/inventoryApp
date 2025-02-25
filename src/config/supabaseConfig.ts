@@ -1,5 +1,5 @@
 export const SUPABASE_CONFIG = {
-  S3_URL: 'https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/object/public',
+  S3_URL: 'https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/s3',
   STORAGE: {
     BUCKETS: {
       PHOTOS: 'images'

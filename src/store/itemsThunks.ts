@@ -3,7 +3,7 @@ import { Item } from '../types/item';
 import { RootState } from './store';
 import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
-import { ErrorType } from '../utils/errorHandler';
+import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
 // Types pour les réponses et erreurs
@@ -14,33 +14,29 @@ interface FetchItemsResponse {
 }
 
 interface ThunkError {
-  message: {
-    fr: string;
-    en: string;
-  };
-  type: ErrorType;
+  message: string;
+  type: ErrorTypeEnum;
   originalError: unknown;
 }
 
 // Constantes
 const ITEMS_PER_PAGE = 20;
 
+// Fonction utilitaire pour convertir ErrorDetails en ThunkError
+const convertToThunkError = (error: ErrorDetails): ThunkError => ({
+  message: error.message,
+  type: error.type,
+  originalError: error.originalError || error
+});
+
 // Fonction utilitaire pour gérer les erreurs
-const handleError = (error: unknown): ThunkError => {
+const handleThunkError = (error: unknown): ThunkError => {
   const errorDetails = handleDatabaseError(
     error instanceof Error || (error && typeof error === 'object' && 'code' in error)
       ? (error as Error | PostgrestError)
       : new Error('Une erreur inconnue est survenue')
   );
-
-  return {
-    message: {
-      fr: errorDetails.message,
-      en: errorDetails.message // Pour la cohérence, on utilise le même message
-    },
-    type: errorDetails.type,
-    originalError: error
-  };
+  return convertToThunkError(errorDetails);
 };
 
 export const fetchItems = createAsyncThunk<
@@ -83,7 +79,7 @@ export const fetchItems = createAsyncThunk<
       hasMore: (count || 0) > (page + 1) * limit
     };
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 });
 
@@ -123,7 +119,7 @@ export const fetchItemByBarcode = createAsyncThunk<
       soldAt: data.sold_at
     };
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 });
 
@@ -163,7 +159,7 @@ export const fetchSimilarItems = createAsyncThunk<
       soldAt: item.sold_at
     }));
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 });
 
@@ -229,7 +225,7 @@ export const updateItemStatus = createAsyncThunk<
       soldAt: data.sold_at
     };
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 });
 
@@ -268,7 +264,7 @@ export const moveItem = createAsyncThunk<
       soldAt: data.sold_at
     };
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 });
 
@@ -316,6 +312,6 @@ export const bulkUpdateItems = createAsyncThunk<
       soldAt: item.sold_at
     }));
   } catch (error) {
-    return rejectWithValue(handleError(error));
+    return rejectWithValue(handleThunkError(error));
   }
 }); 
