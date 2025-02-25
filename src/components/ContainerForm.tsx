@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Container } from '../types/container';
 import { theme } from '../utils/theme';
@@ -8,7 +8,7 @@ import { useValidation } from '../hooks/useValidation';
 
 interface ContainerFormProps {
   initialData?: Container | null;
-  onSubmit: (container: Omit<Container, 'id'>) => void;
+  onSubmit: (container: Omit<Container, 'id'>) => Promise<boolean>;
   onCancel: () => void;
 }
 
@@ -37,8 +37,12 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
     qrCode: initialData?.qrCode || generateId('CONTAINER')
   });
 
-  const { errors, validateField, validateForm } = useValidation(CONTAINER_VALIDATION_RULES);
+  const { errors, validateField, validateForm, clearErrors } = useValidation(CONTAINER_VALIDATION_RULES);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    clearErrors();
+  }, [initialData, clearErrors]);
 
   const handleFieldChange = useCallback((field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -46,6 +50,8 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
   }, [validateField]);
 
   const handleSubmit = async () => {
+    clearErrors();
+    
     const validationErrors = validateForm(formData);
     if (Object.keys(validationErrors).length > 0) {
       Alert.alert(
@@ -58,7 +64,7 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
 
     try {
       setIsSubmitting(true);
-      await onSubmit({
+      const success = await onSubmit({
         name: formData.name.trim(),
         number: parseInt(formData.number.trim(), 10),
         description: formData.description.trim(),
@@ -66,6 +72,10 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
         createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      
+      if (success) {
+        onCancel();
+      }
     } catch (err) {
       Alert.alert(
         'Erreur',

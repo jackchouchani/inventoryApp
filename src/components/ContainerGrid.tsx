@@ -1,5 +1,5 @@
-import React, { useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions, RefreshControl } from 'react-native';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import { GridErrorBoundary } from './GridErrorBoundary';
@@ -42,6 +42,25 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
   onContainerPress,
   onRetry,
 }) => {
+  const [refreshing, setRefreshing] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  useEffect(() => {
+    setForceUpdate(prev => prev + 1);
+  }, [containers.length]);
+
+  const onRefresh = useCallback(async () => {
+    if (onRetry) {
+      setRefreshing(true);
+      try {
+        await onRetry();
+        setForceUpdate(prev => prev + 1);
+      } finally {
+        setRefreshing(false);
+      }
+    }
+  }, [onRetry]);
+
   const itemCountMap = useMemo(() => {
     return items.reduce((acc, item) => {
       if (item.containerId) {
@@ -81,6 +100,15 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
       maxToRenderPerBatch={4}
       windowSize={5}
       removeClippedSubviews={true}
+      extraData={[containers.length, forceUpdate]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#007AFF']}
+          tintColor={'#007AFF'}
+        />
+      }
     />
   );
 

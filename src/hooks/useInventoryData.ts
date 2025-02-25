@@ -17,6 +17,7 @@ interface UseInventoryFilters {
   status?: 'all' | 'available' | 'sold';
   minPrice?: number;
   maxPrice?: number;
+  forceRefresh?: boolean;
 }
 
 interface InventoryData {
@@ -35,91 +36,7 @@ export const queryKeys = {
   allInventoryData: ['inventory', 'all'] as const,
 };
 
-// Fonction pour récupérer toutes les données d'inventaire
-const fetchInventoryData = async (): Promise<InventoryData> => {
-  try {
-    const [itemsResponse, containersResponse, categoriesResponse] = await Promise.all([
-      supabase.from('items').select('*').is('deleted', false),
-      supabase.from('containers').select('*').is('deleted', false),
-      supabase.from('categories').select('*').is('deleted', false)
-    ]);
-
-    if (itemsResponse.error) throw itemsResponse.error;
-    if (containersResponse.error) throw containersResponse.error;
-    if (categoriesResponse.error) throw categoriesResponse.error;
-
-    return {
-      items: (itemsResponse.data || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        purchasePrice: parseFloat(item.purchase_price) || 0,
-        sellingPrice: parseFloat(item.selling_price) || 0,
-        status: item.status,
-        photo_storage_url: item.photo_storage_url,
-        containerId: item.container_id,
-        categoryId: item.category_id,
-        qrCode: item.qr_code,
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
-        quantity: item.quantity || 1
-      })),
-      containers: (containersResponse.data || []).map(container => ({
-        id: container.id,
-        name: container.name,
-        number: container.number,
-        description: container.description,
-        qrCode: container.qr_code,
-        createdAt: container.created_at,
-        updatedAt: container.updated_at,
-        capacity: container.capacity || 0,
-        currentItems: container.current_items || 0
-      })),
-      categories: (categoriesResponse.data || []).map(category => ({
-        id: category.id,
-        name: category.name,
-        description: category.description,
-        createdAt: category.created_at,
-        updatedAt: category.updated_at
-      }))
-    };
-  } catch (error) {
-    if (error instanceof PostgrestError) {
-      handleDatabaseError(error);
-    }
-    throw error;
-  }
-};
-
-interface UseInventoryDataParams {
-  search?: string;
-  categoryId?: number;
-  containerId?: number | 'none';
-  status?: 'available' | 'sold';
-  minPrice?: number;
-  maxPrice?: number;
-  staleTime?: number;
-  gcTime?: number;
-  enabled?: boolean;
-}
-
-interface UseInventoryDataResult {
-  items: Item[];
-  categories: Category[];
-  containers: Container[];
-  isLoading: boolean;
-  error: Error | null;
-  hasMore: boolean;
-  totalCount: number;
-  fetchNextPage: () => Promise<void>;
-  refetch: () => Promise<void>;
-}
-
-// Type pour les données de retour de useQuery
-type QueryData = Item[] | null;
-
 export function useInventoryData(filters: UseInventoryFilters) {
-  const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
 
   return useQuery<InventoryData, Error>({
@@ -160,9 +77,15 @@ export function useInventoryData(filters: UseInventoryFilters) {
             containerId: item.container_id,
             categoryId: item.category_id,
             createdAt: item.created_at,
-            updatedAt: item.updated_at
+            updatedAt: item.updated_at,
+            qrCode: item.qr_code
           })),
-          containers: containersResponse.data || [],
+          containers: (containersResponse.data || []).map(container => ({
+            ...container,
+            createdAt: container.created_at,
+            updatedAt: container.updated_at,
+            qrCode: container.qr_code
+          })),
           categories: categoriesResponse.data || []
         };
       } catch (error) {
@@ -171,7 +94,7 @@ export function useInventoryData(filters: UseInventoryFilters) {
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: filters.forceRefresh ? 0 : 5 * 60 * 1000, // 0 si forceRefresh est true, sinon 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     retry: 2
   });
@@ -236,7 +159,7 @@ export const useItemMutation = () => {
         throw error;
       }
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.items });
       queryClient.invalidateQueries({ queryKey: queryKeys.allInventoryData });
       Toast.show({

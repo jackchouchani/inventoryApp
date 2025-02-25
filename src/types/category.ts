@@ -1,11 +1,10 @@
-
 export interface Category {
     id: number;
     name: string;
     description?: string;
     icon?: string;
-    createdAt?: Date;
-    updatedAt?: Date;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
 }
 
 export type CategoryInput = Omit<Category, 'id' | 'createdAt' | 'updatedAt'>;

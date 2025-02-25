@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform } from 'react-native';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { Container } from '../../src/types/container';
@@ -21,53 +21,106 @@ import { theme } from '../../src/utils/theme';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import { useContainerManagement } from '../../src/hooks/useContainerManagement';
 import { useSearchDebounce } from '../../src/hooks/useSearchDebounce';
+import { removeContainer, setContainers, selectAllContainers, updateContainer, addContainer } from '../../src/store/containersSlice';
+import { useQueryClient } from '@tanstack/react-query';
+import ConfirmationDialog from '../../src/components/ConfirmationDialog';
+
+interface ContainerInfoProps {
+  containerId: number | null;
+  containers: Container[];
+  style?: any;
+}
+
+const ContainerInfo: React.FC<ContainerInfoProps> = ({ containerId, containers, style }) => {
+  const containerText = React.useMemo(() => {
+    if (!containerId) {
+      return "Sans container";
+    }
+    
+    const container = containers.find(c => c.id === containerId);
+    if (!container) {
+      return "Container inconnu";
+    }
+    
+    return container.name + (container.number ? ' #' + container.number : '');
+  }, [containerId, containers]);
+  
+  return <Text style={style}>{containerText}</Text>;
+};
 
 interface ItemListProps {
   item: Item;
   onPress: (id: number) => void;
   categories: Array<{ id: number; name: string }>;
+  containers: Container[];
 }
 
-const ItemListItem: React.FC<ItemListProps> = React.memo(({ item, onPress, categories }) => (
-  <TouchableOpacity
-    style={styles.itemCard}
-    onPress={() => item.id && onPress(item.id)}
-  >
-    <View style={styles.itemInfo}>
-      <Text style={styles.itemName}>{item.name}</Text>
-      <Text style={styles.itemCategory}>
-        {categories.find(c => c.id === item.categoryId)?.name}
-      </Text>
-      <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
-    </View>
-    <MaterialIcons name="add-circle-outline" size={24} color={theme.colors.success} />
-  </TouchableOpacity>
-));
+const ItemListItem: React.FC<ItemListProps> = React.memo(({ item, onPress, categories, containers }) => {
+  const categoryName = React.useMemo(() => 
+    categories.find(c => c.id === item.categoryId)?.name || 'Sans catégorie', 
+    [categories, item.categoryId]
+  );
+  
+  return (
+    <TouchableOpacity
+      style={styles.itemCard}
+      onPress={() => item.id && onPress(item.id)}
+    >
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName}>{item.name}</Text>
+        <View style={styles.itemMetaContainer}>
+          <Text style={styles.itemCategory}>{categoryName}</Text>
+          <ContainerInfo 
+            containerId={item.containerId ?? null} 
+            containers={containers} 
+            style={[styles.itemContainer, !item.containerId && styles.noContainer]}
+          />
+        </View>
+        <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+      </View>
+      <MaterialIcons name="add-circle-outline" size={24} color={theme.colors.success} />
+    </TouchableOpacity>
+  );
+});
 
 const ContainerScreen = () => {
   const dispatch = useDispatch();
+  const queryClient = useQueryClient();
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
   const { searchQuery, setSearchQuery } = useSearchDebounce();
-  const { data: inventoryData, isLoading: isLoadingInventory } = useInventoryData({});
+  const { data: inventoryData, isLoading: isLoadingInventory, refetch } = useInventoryData({ 
+    forceRefresh: refreshing 
+  });
   const initialItems = inventoryData?.items ?? [];
-  const containers = inventoryData?.containers ?? [];
+  const containers = useSelector((state: RootState) => selectAllContainers(state));
   const categories = inventoryData?.categories ?? [];
   const items = useSelector((state: RootState) => selectAllItems(state));
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const router = useRouter();
   const { handleContainerSubmit } = useContainerManagement();
+  const [confirmDialog, setConfirmDialog] = useState<{
+    visible: boolean;
+    containerId: number | null;
+  }>({
+    visible: false,
+    containerId: null
+  });
 
-  // Synchroniser les données de useInventoryData avec Redux
   useEffect(() => {
     if (initialItems?.length > 0) {
       dispatch(setItems(initialItems));
     }
-  }, [initialItems, dispatch]);
+    
+    if (inventoryData?.containers && inventoryData.containers.length > 0 && containers.length === 0) {
+      dispatch(setContainers(inventoryData.containers));
+    }
+  }, [initialItems, inventoryData?.containers, dispatch, containers.length]);
 
-  // Utiliser useMemo pour les items filtrés avec une meilleure logique de filtrage
   const { assignedItems, filteredAvailableItems } = useMemo(() => {
     const assigned = items.filter(item => 
       item.containerId === selectedContainer?.id && 
@@ -91,7 +144,7 @@ const ContainerScreen = () => {
       assignedItems: assigned,
       filteredAvailableItems: filtered
     };
-  }, [items, selectedContainer, searchQuery, selectedCategory]);
+  }, [items, selectedContainer?.id, searchQuery, selectedCategory, forceUpdate]);
 
   const handleContainerPress = useCallback((containerId: number) => {
     const container = containers.find((c: Container) => c.id === containerId);
@@ -112,17 +165,16 @@ const ContainerScreen = () => {
     const itemToUpdate = items.find(item => item.id === itemId);
     if (!itemToUpdate) return;
 
-    // Mise à jour optimiste immédiate avec Redux
     const updatedItemData = {
       ...itemToUpdate,
       containerId: selectedContainer.id,
       updatedAt: new Date().toISOString()
     };
 
-    // Dispatch immédiat pour mise à jour UI
     dispatch(updateItem(updatedItemData));
+    
+    setForceUpdate(prev => prev + 1);
 
-    // Mise à jour Supabase en arrière-plan
     (async () => {
       try {
         const { error } = await supabase
@@ -134,13 +186,15 @@ const ContainerScreen = () => {
           .eq('id', itemId);
 
         if (error) {
-          // En cas d'erreur, on revient à l'état précédent
           dispatch(updateItem(itemToUpdate));
           console.error('Erreur lors de l\'ajout au container:', error);
           Alert.alert(
             'Erreur',
             'Une erreur est survenue lors de l\'ajout de l\'article au container.'
           );
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['items'] });
+          queryClient.invalidateQueries({ queryKey: ['inventory'] });
         }
       } catch (error) {
         dispatch(updateItem(itemToUpdate));
@@ -148,89 +202,130 @@ const ContainerScreen = () => {
       }
     })();
 
-  }, [selectedContainer, items, dispatch]);
+  }, [selectedContainer, items, dispatch, queryClient, forceUpdate]);
 
   const handleDeleteFromContainer = useCallback(async (itemId: number) => {
     const itemToUpdate = items.find(item => item.id === itemId);
     if (!itemToUpdate) return;
 
-    // Mise à jour optimiste immédiate avec Redux
     const updatedItemData = {
       ...itemToUpdate,
       containerId: null,
       updatedAt: new Date().toISOString()
     };
 
-    // Dispatch immédiat pour mise à jour UI
     dispatch(updateItem(updatedItemData));
+    
+    setForceUpdate(prev => prev + 1);
 
-    // Mise à jour Supabase en arrière-plan
-    (async () => {
-      try {
-        const { error } = await supabase
-          .from('items')
-          .update({
-            container_id: null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', itemId);
+    try {
+      const { error } = await supabase
+        .from('items')
+        .update({
+          container_id: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId);
 
-        if (error) {
-          // En cas d'erreur, on revient à l'état précédent
-          dispatch(updateItem(itemToUpdate));
-          console.error('Erreur lors de la suppression du container:', error);
-          Alert.alert(
-            'Erreur',
-            'Une erreur est survenue lors de la suppression de l\'article du container.'
-          );
-        }
-      } catch (error) {
+      if (error) {
         dispatch(updateItem(itemToUpdate));
         console.error('Erreur lors de la suppression du container:', error);
+        Alert.alert(
+          'Erreur',
+          'Une erreur est survenue lors de la suppression de l\'article du container.'
+        );
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['items'] });
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
       }
-    })();
+    } catch (error) {
+      dispatch(updateItem(itemToUpdate));
+      console.error('Erreur lors de la suppression du container:', error);
+    }
+  }, [items, dispatch, queryClient, forceUpdate]);
 
-  }, [items, dispatch]);
+  const handleDeleteContainer = useCallback(async (containerId: number) => {
+    setConfirmDialog({
+      visible: true,
+      containerId: containerId
+    });
+  }, []);
 
-  const handleDeleteContainer = async (containerId: number) => {
-    Alert.alert(
-      'Supprimer le container',
-      'Êtes-vous sûr de vouloir supprimer ce container ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('containers')
-                .delete()
-                .eq('id', containerId);
-
-              if (error) throw error;
-              
-              setSelectedContainer(null);
-              triggerRefresh();
-            } catch (error) {
-              if (error instanceof Error || error instanceof PostgrestError) {
-                handleDatabaseError(error);
-              }
-            }
-          }
+  const handleConfirmDelete = useCallback(async () => {
+    const containerId = confirmDialog.containerId;
+    if (!containerId) return;
+    
+    try {
+      
+      dispatch(removeContainer(containerId));
+      
+      const itemsInContainer = items.filter(item => item.containerId === containerId);
+      itemsInContainer.forEach(item => {
+        if (item.id) {
+          dispatch(updateItem({
+            ...item,
+            containerId: null,
+            updatedAt: new Date().toISOString()
+          }));
         }
-      ]
-    );
-  };
+      });
+      
+      setSelectedContainer(null);
+      
+      const { error } = await supabase
+        .from('containers')
+        .delete()
+        .eq('id', containerId);
 
-  // Optimiser le rendu des listes avec FlashList
+      if (error) {
+        console.error('Erreur lors de la suppression:', error);
+        throw error;
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ['containers'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      
+      triggerRefresh();
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+      if (error instanceof Error || error instanceof PostgrestError) {
+        handleDatabaseError(error);
+      }
+    } finally {
+      setConfirmDialog({ visible: false, containerId: null });
+    }
+  }, [confirmDialog.containerId, dispatch, items, queryClient, triggerRefresh, setSelectedContainer]);
+
+  const handleCancelDelete = useCallback(() => {
+    setConfirmDialog({ visible: false, containerId: null });
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      await refetch();
+      if (inventoryData?.containers) {
+        dispatch(setContainers(inventoryData.containers));
+      }
+      if (inventoryData?.items) {
+        dispatch(setItems(inventoryData.items));
+      }
+      setForceUpdate(prev => prev + 1);
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch, inventoryData, dispatch, setForceUpdate]);
+
   const renderItem = useCallback(({ item }: { item: Item }) => (
     <ItemListItem
       item={item}
       onPress={handleAddToContainer}
       categories={categories}
+      containers={containers}
     />
-  ), [categories, handleAddToContainer]);
+  ), [categories, handleAddToContainer, containers]);
 
   if (isLoadingInventory) {
     return (
@@ -290,7 +385,16 @@ const ContainerScreen = () => {
             
             <View style={styles.formWrapper}>
               <ContainerForm
-                onSubmit={handleContainerSubmit}
+                onSubmit={async (containerData) => {
+                  const result = await handleContainerSubmit(containerData);
+                  if (result.success && result.container) {
+                    dispatch(addContainer(result.container));
+                    
+                    setShowContainerForm(false);
+                    setEditingContainer(null);
+                  }
+                  return result.success;
+                }}
                 onCancel={() => {
                   setShowContainerForm(false);
                   setEditingContainer(null);
@@ -299,6 +403,17 @@ const ContainerScreen = () => {
             </View>
           </SafeAreaView>
         </Modal>
+
+        <ConfirmationDialog
+          visible={confirmDialog.visible}
+          title="Supprimer le container"
+          message="Êtes-vous sûr de vouloir supprimer ce container ? Les articles qu'il contient ne seront pas supprimés mais seront détachés du container."
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          confirmButtonStyle="destructive"
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+        />
       </SafeAreaView>
     );
   }
@@ -328,6 +443,7 @@ const ContainerScreen = () => {
           containers={containers}
           items={items}
           onContainerPress={handleContainerPress}
+          onRetry={handleRefresh}
         />
 
         <Modal
@@ -358,7 +474,20 @@ const ContainerScreen = () => {
             <View style={styles.formWrapper}>
               <ContainerForm
                 initialData={editingContainer}
-                onSubmit={handleContainerSubmit}
+                onSubmit={async (containerData) => {
+                  const result = await handleContainerSubmit(containerData);
+                  if (result.success && result.container) {
+                    if (editingContainer?.id) {
+                      dispatch(updateContainer(result.container));
+                    } else {
+                      dispatch(addContainer(result.container));
+                    }
+                    
+                    setShowContainerForm(false);
+                    setEditingContainer(null);
+                  }
+                  return result.success;
+                }}
                 onCancel={() => {
                   setShowContainerForm(false);
                   setEditingContainer(null);
@@ -466,24 +595,43 @@ const ContainerScreen = () => {
                       <Text style={styles.sectionTitle}>
                         Articles assignés ({assignedItems.length})
                       </Text>
-                      <ScrollView style={styles.itemsList}>
+                      <ScrollView 
+                        style={styles.itemsList}
+                        contentContainerStyle={assignedItems.length === 0 ? { flex: 1, justifyContent: 'center', alignItems: 'center' } : undefined}
+                        refreshControl={
+                          <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                          />
+                        }
+                      >
                         {assignedItems.length > 0 ? (
-                          assignedItems.map(item => (
-                            <TouchableOpacity
-                              key={item.id}
-                              style={styles.itemCard}
-                              onPress={() => handleDeleteFromContainer(item.id!)}
-                            >
-                              <View style={styles.itemInfo}>
-                                <Text style={styles.itemName}>{item.name}</Text>
-                                <Text style={styles.itemCategory}>
-                                  {categories.find((c: Category) => c.id === item.categoryId)?.name}
-                                </Text>
-                                <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
-                              </View>
-                              <MaterialIcons name="remove-circle-outline" size={24} color="#FF3B30" />
-                            </TouchableOpacity>
-                          ))
+                          assignedItems.map(item => {
+                            const categoryName = categories.find((c: Category) => c.id === item.categoryId)?.name || 'Sans catégorie';
+                            return (
+                              <TouchableOpacity
+                                key={item.id}
+                                style={styles.itemCard}
+                                onPress={() => item.id && handleDeleteFromContainer(item.id)}
+                              >
+                                <View style={styles.itemInfo}>
+                                  <Text style={styles.itemName}>{item.name}</Text>
+                                  <View style={styles.itemMetaContainer}>
+                                    <Text style={styles.itemCategory}>
+                                      {categoryName}
+                                    </Text>
+                                    <ContainerInfo 
+                                      containerId={item.containerId ?? null} 
+                                      containers={containers} 
+                                      style={[styles.itemContainer, !item.containerId && styles.noContainer]}
+                                    />
+                                  </View>
+                                  <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
+                                </View>
+                                <MaterialIcons name="remove-circle-outline" size={24} color="#FF3B30" />
+                              </TouchableOpacity>
+                            );
+                          })
                         ) : (
                           <Text style={styles.emptyContentText}>Aucun article dans ce container</Text>
                         )}
@@ -498,9 +646,11 @@ const ContainerScreen = () => {
                         data={filteredAvailableItems}
                         renderItem={renderItem}
                         estimatedItemSize={100}
-                        keyExtractor={item => item.id?.toString() ?? ''}
-                        onEndReachedThreshold={0.5}
+                        keyExtractor={item => String(item.id || '')}
                         showsVerticalScrollIndicator={false}
+                        extraData={`${filteredAvailableItems.length}-${assignedItems.length}-${forceUpdate}`}
+                        onRefresh={handleRefresh}
+                        refreshing={refreshing}
                       />
                     </View>
                   </View>
@@ -509,6 +659,17 @@ const ContainerScreen = () => {
             </ScrollView>
           </SafeAreaView>
         </Modal>
+
+        <ConfirmationDialog
+          visible={confirmDialog.visible}
+          title="Supprimer le container"
+          message="Êtes-vous sûr de vouloir supprimer ce container ? Les articles qu'il contient ne seront pas supprimés mais seront détachés du container."
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          confirmButtonStyle="destructive"
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+        />
       </SafeAreaView>
     </ErrorBoundary>
   );
@@ -760,10 +921,40 @@ const styles = StyleSheet.create({
   categoryChipTextSelected: {
     color: '#fff',
   },
+  itemMetaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    marginTop: 6,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   itemCategory: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 4,
+    backgroundColor: '#e8f4fd',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d0e8f7',
+    overflow: 'hidden',
+  },
+  itemContainer: {
+    fontSize: 12,
+    color: '#666',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#e0f7e0',
+    borderWidth: 1,
+    borderColor: '#cceacc',
+    overflow: 'hidden',
+  },
+  noContainer: {
+    backgroundColor: '#f9e8e8',
+    borderColor: '#eacccc',
+    color: '#af7676',
   },
   containerScrollView: {
     flex: 1,

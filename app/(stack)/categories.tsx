@@ -1,11 +1,10 @@
-import React, { useCallback, type FC } from 'react';
+import React, { useCallback, type FC, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   Platform,
@@ -23,6 +22,7 @@ import { validateCategory } from '../../src/utils/validation';
 import { checkNetworkConnection } from '../../src/utils/networkUtils';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
+import ConfirmationDialog from '../../src/components/ConfirmationDialog';
 
 const FLATLIST_CONFIG = {
   INITIAL_NUM_TO_RENDER: 10,
@@ -118,6 +118,13 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
 const CategoryScreen: FC = () => {
   const router = useRouter();
   const { categories, isLoading, error, handleDeleteCategory } = useCategories();
+  const [confirmDialog, setConfirmDialog] = useState<{
+    visible: boolean;
+    category: Category | null;
+  }>({
+    visible: false,
+    category: null
+  });
 
   const handleAddCategory = useCallback(() => {
     router.push('/(stack)/add-category');
@@ -159,41 +166,43 @@ const CategoryScreen: FC = () => {
       return;
     }
 
-    Alert.alert(
-      'Supprimer la catégorie',
-      `Êtes-vous sûr de vouloir supprimer "${category.name}" ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await handleDeleteCategory(category.id);
-              Toast.show({
-                type: 'success',
-                text1: 'Succès',
-                text2: 'Catégorie supprimée avec succès'
-              });
-            } catch (error) {
-              Sentry.captureException(error, {
-                extra: {
-                  categoryId: category.id,
-                  categoryName: category.name,
-                  action: 'delete_category'
-                }
-              });
-              Toast.show({
-                type: 'error',
-                text1: 'Erreur de suppression',
-                text2: 'Impossible de supprimer la catégorie'
-              });
-            }
-          }
+    setConfirmDialog({
+      visible: true,
+      category: category
+    });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!confirmDialog.category?.id) return;
+    
+    try {
+      await handleDeleteCategory(confirmDialog.category.id);
+      Toast.show({
+        type: 'success',
+        text1: 'Succès',
+        text2: 'Catégorie supprimée avec succès'
+      });
+    } catch (error) {
+      Sentry.captureException(error, {
+        extra: {
+          categoryId: confirmDialog.category.id,
+          categoryName: confirmDialog.category.name,
+          action: 'delete_category'
         }
-      ]
-    );
-  }, [handleDeleteCategory]);
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur de suppression',
+        text2: 'Impossible de supprimer la catégorie'
+      });
+    } finally {
+      setConfirmDialog({ visible: false, category: null });
+    }
+  }, [confirmDialog.category, handleDeleteCategory]);
+
+  const handleCancelDelete = useCallback(() => {
+    setConfirmDialog({ visible: false, category: null });
+  }, []);
 
   const renderItem = useCallback(({ item }: { item: Category }) => (
     <CategoryCard 
@@ -283,6 +292,17 @@ const CategoryScreen: FC = () => {
             })}
           />
         )}
+
+        <ConfirmationDialog
+          visible={confirmDialog.visible}
+          title="Supprimer la catégorie"
+          message={`Êtes-vous sûr de vouloir supprimer "${confirmDialog.category?.name || ''}" ?`}
+          confirmText="Supprimer"
+          cancelText="Annuler"
+          confirmButtonStyle="destructive"
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+        />
       </SafeAreaView>
     </ErrorBoundary>
   );

@@ -9,8 +9,6 @@ import { useSelector } from 'react-redux';
 import { selectAllCategories } from '../store/categorySlice';
 import { selectAllContainers } from '../store/containersSlice';
 import { Skeleton } from './Skeleton';
-import { withPerformanceMonitoring } from '../hoc/withPerformanceMonitoring';
-import { monitoring } from '../services/monitoring';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import ItemCard from './ItemCard';
 
@@ -32,10 +30,22 @@ const ItemListModal: React.FC<{
   selectedItem: Item | null;
   onSuccess: () => void;
   onCancel: () => void;
-}> = ({ selectedItem, onSuccess, onCancel }) => {
-  const categories = useSelector(selectAllCategories);
-  const containers = useSelector(selectAllContainers);
-
+  categories: Category[];
+  containers: Container[];
+}> = ({ selectedItem, onSuccess, onCancel, categories: propCategories, containers: propContainers }) => {
+  // Récupérer les catégories et containers depuis le store Redux
+  const storeCategories = useSelector(selectAllCategories);
+  const storeContainers = useSelector(selectAllContainers);
+  
+  // Utiliser les catégories et containers des props si disponibles, sinon utiliser ceux du store
+  const categories = Array.isArray(propCategories) && propCategories.length > 0 
+    ? propCategories 
+    : Array.isArray(storeCategories) ? storeCategories : [];
+  
+  const containers = Array.isArray(propContainers) && propContainers.length > 0 
+    ? propContainers 
+    : Array.isArray(storeContainers) ? storeContainers : [];
+  
   return (
     <Modal
       visible={!!selectedItem}
@@ -174,7 +184,7 @@ const ItemListItem = memo(ItemListItemComponent, (prevProps, nextProps) => {
   );
 });
 
-const ItemList: React.FC<ItemListProps> = memo(({
+const ItemList: React.FC<ItemListProps> = ({
   items,
   onItemPress,
   onMarkAsSold,
@@ -182,6 +192,7 @@ const ItemList: React.FC<ItemListProps> = memo(({
   categories,
   containers,
   isLoading,
+  error,
   selectedItem,
   onEditSuccess,
   onEditCancel
@@ -191,27 +202,10 @@ const ItemList: React.FC<ItemListProps> = memo(({
   useEffect(() => {
     return () => {
       const renderDuration = Date.now() - renderStartTime.current;
-      monitoring.recordMetric({
-        type: 'RENDER',
-        name: 'ItemList',
-        duration: renderDuration,
-        table_name: 'items',
-        record_id: 0,
-        operation: 'LIST_RENDER',
-        new_data: {
-          itemCount: items.length,
-          isLoading
-        }
-      });
     };
   });
 
   const renderItem = ({ item }: { item: Item }) => {
-    console.log('Rendu de l\'item:', {
-      id: item.id,
-      name: item.name,
-      photo_storage_url: item.photo_storage_url
-    });
     
     return (
       <ItemListItem
@@ -262,10 +256,12 @@ const ItemList: React.FC<ItemListProps> = memo(({
         selectedItem={selectedItem}
         onSuccess={onEditSuccess}
         onCancel={onEditCancel}
+        categories={categories}
+        containers={containers}
       />
     </View>
   );
-});
+};
 
 const ItemListWithErrorBoundary = (props: ItemListProps) => (
   <ErrorBoundary
@@ -634,4 +630,4 @@ ItemList.displayName = 'ItemList';
 ItemRow.displayName = 'ItemRow';
 ItemLoadingSkeleton.displayName = 'ItemLoadingSkeleton';
 
-export default withPerformanceMonitoring(ItemListWithErrorBoundary, 'ItemList');
+export default ItemListWithErrorBoundary;

@@ -25,12 +25,15 @@ export default function EditCategoryScreen() {
     try {
       setLoading(true);
 
+      // Convertir la date en chaîne ISO pour la sérialisation Redux
+      const isoDate = new Date().toISOString();
+
       const payload = {
         id: categoryId,
         name: data.name.trim(),
         description: data.description.trim() || undefined,
         icon: data.icon,
-        updatedAt: new Date()
+        updatedAt: isoDate
       };
 
       await dispatch(editCategory(payload));

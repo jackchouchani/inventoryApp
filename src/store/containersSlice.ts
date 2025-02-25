@@ -40,6 +40,9 @@ const containersSlice = createSlice({
         });
       }
     },
+    removeContainer: (state, action: PayloadAction<number>) => {
+      containersAdapter.removeOne(state, action.payload);
+    },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload;
     },
@@ -125,5 +128,5 @@ export const selectContainersStatus = (state: RootState) => state.containers.sta
 export const selectContainersError = (state: RootState) => state.containers.error;
 export const selectContainersLoading = (state: RootState) => state.containers.loading;
 
-export const { setContainers, addContainer, updateContainer, setLoading, setError, setStatus } = containersSlice.actions;
+export const { setContainers, addContainer, updateContainer, removeContainer, setLoading, setError, setStatus } = containersSlice.actions;
 export default containersSlice.reducer;

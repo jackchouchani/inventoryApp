@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { Text, StyleSheet, TouchableOpacity, ScrollView, useColorScheme } from 'react-native';
+import { Text, StyleSheet, TouchableOpacity, ScrollView, useColorScheme, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { CATEGORY_ICONS } from '../constants/categoryIcons';
@@ -23,7 +23,11 @@ export const IconSelector: React.FC<IconSelectorProps> = React.memo(({
   const styles = useMemo(() => createStyles(isDark), [isDark]);
 
   const handleSelectIcon = useCallback((icon: MaterialIconName) => {
-    Haptics.selectionAsync();
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync().catch(error => {
+        console.warn('Haptics not available:', error);
+      });
+    }
     onSelectIcon(icon);
   }, [onSelectIcon]);
 

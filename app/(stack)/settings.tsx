@@ -8,7 +8,6 @@ import { useRefreshStore } from '../../src/store/refreshStore';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { useQueryClient } from '@tanstack/react-query';
-import PerformanceDashboard from '../../src/components/PerformanceDashboard';
 import { handleError } from '../../src/utils/errorHandler';
 import { theme } from '../../src/utils/theme';
 import * as Sentry from '@sentry/react-native';
@@ -57,7 +56,6 @@ ConfirmationModal.displayName = 'ConfirmationModal';
 
 interface UIState {
   isResetModalVisible: boolean;
-  showPerformance: boolean;
   isLoading: boolean;
 }
 
@@ -69,7 +67,6 @@ const SettingsScreen = () => {
   const queryClient = useQueryClient();
   const [uiState, setUiState] = useState<UIState>({
     isResetModalVisible: false,
-    showPerformance: false,
     isLoading: false
   });
 
@@ -222,37 +219,11 @@ const SettingsScreen = () => {
     }
   }, [triggerRefresh]);
 
-  const handleNavigateToPerformance = useCallback(() => {
-    setUiState(prev => ({ ...prev, showPerformance: true }));
-  }, []);
-
-  const handleBackFromPerformance = useCallback(() => {
-    setUiState(prev => ({ ...prev, showPerformance: false }));
-  }, []);
-
   if (!categories) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Chargement...</Text>
-      </View>
-    );
-  }
-
-  if (uiState.showPerformance) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.topBar}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={handleBackFromPerformance}
-          >
-            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
-            <Text style={styles.backButtonText}>Retour</Text>
-          </TouchableOpacity>
-          <Text style={styles.topBarTitle}>Performance</Text>
-        </View>
-        <PerformanceDashboard />
       </View>
     );
   }
@@ -293,15 +264,6 @@ const SettingsScreen = () => {
       >
         <MaterialIcons name="label" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Générer des étiquettes</Text>
-        <MaterialIcons name="chevron-right" size={24} color="#999" />
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.menuItem}
-        onPress={handleNavigateToPerformance}
-      >
-        <MaterialIcons name="speed" size={24} color="#007AFF" />
-        <Text style={styles.menuText}>Tableau de bord performance</Text>
         <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 

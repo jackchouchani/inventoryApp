@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   ImageStyle,
@@ -41,11 +41,22 @@ export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
   ...props
 }) => {
   const { uri: cachedUri, loading, error, loadImage } = usePhoto();
+  const [isLocalImage, setIsLocalImage] = useState(false);
 
   useEffect(() => {
-    if (uri) {
-      loadImage(uri, cacheKey);
+    if (!uri) return;
+
+    // Vérifier si c'est une image locale (blob ou data URI)
+    const isLocalUri = uri.startsWith('blob:') || uri.startsWith('data:');
+    
+    if (isLocalUri) {
+      setIsLocalImage(true);
+      return;
     }
+    
+    loadImage(uri, cacheKey).catch(err => 
+      console.error("[AdaptiveImage] Erreur de chargement:", err)
+    );
   }, [uri, cacheKey, loadImage]);
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
@@ -66,12 +77,35 @@ export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
   }, [placeholder]);
 
   if (error) {
+    console.error("[AdaptiveImage] Erreur détectée:", error);
     Sentry.addBreadcrumb({
       category: 'image_error',
       message: 'Erreur de chargement d\'image',
       data: { uri, cacheKey },
     });
     onError?.();
+  }
+
+  // Si c'est une image locale (blob ou data URI), l'afficher directement
+  if (isLocalImage && uri) {
+    return (
+      <View style={containerStyle}>
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          resizeMode={resizeMode}
+          onError={(e) => {
+            console.error("[AdaptiveImage] Erreur de rendu d'image locale:", e.nativeEvent.error);
+            Sentry.captureMessage('Erreur de rendu d\'image locale', {
+              level: 'warning',
+              extra: { uri }
+            });
+            onError?.();
+          }}
+          {...props}
+        />
+      </View>
+    );
   }
 
   if (loading) {
@@ -92,7 +126,7 @@ export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
   if (error || !cachedUri) {
     return fallbackSource ? (
       <Image source={fallbackSource} style={style} {...props} />
-    ) : null;
+    ) : placeholder || null;
   }
 
   return (
@@ -101,13 +135,15 @@ export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
         source={{ uri: cachedUri }}
         style={StyleSheet.absoluteFill}
         resizeMode={resizeMode}
-        onError={() => {
+        onError={(e) => {
+          console.error("[AdaptiveImage] Erreur de rendu d'image:", e.nativeEvent.error);
           Sentry.captureMessage('Erreur de rendu d\'image', {
             level: 'warning',
-            extra: { uri: cachedUri }
+            extra: { uri: cachedUri, originalUri: uri }
           });
           onError?.();
         }}
+        {...props}
       />
       {Platform.OS === 'ios' && loading && (
         <View 

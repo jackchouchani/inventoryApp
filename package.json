@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@0no-co/graphql.web": "^1.0.13",
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/s3-request-presigner": "^3.750.0",
     "@eslint/compat": "^1.2.6",
     "@expo/metro-runtime": "~4.0.1",
     "@expo/ngrok": "^4.1.3",

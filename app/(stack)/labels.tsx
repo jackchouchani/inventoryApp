@@ -65,6 +65,7 @@ export default function LabelScreen() {
 
   const items = data?.items || [];
   const containers = data?.containers || [];
+  const categories = data?.categories || [];
 
   const router = useRouter();
 
@@ -173,24 +174,24 @@ export default function LabelScreen() {
   const getItemsToGenerate = () => {
     if (showContainers) {
       return containers
-        ?.filter(container => selectedContainers.has(container.id!) && container.qrCode)
+        ?.filter(container => selectedContainers.has(container.id!))
         .map(container => ({
           id: container.id!,
           name: container.name,
           description: container.description,
           number: container.number?.toString() || '',
-          qrCode: container.qrCode
+          qrCode: container.qrCode || `CONTAINER_${container.id}`
         })) || [];
     }
     
     return filteredItems
-      .filter(item => selectedItems.has(item.id!) && item.qrCode)
+      .filter(item => selectedItems.has(item.id!))
       .map(item => ({
         id: item.id!,
         name: item.name,
         description: item.description,
         sellingPrice: item.sellingPrice,
-        qrCode: item.qrCode
+        qrCode: item.qrCode || `ITEM_${item.id}`
       }));
   };
 
@@ -290,6 +291,8 @@ export default function LabelScreen() {
             onContainerChange={handleContainerChange}
             onStatusChange={handleStatusChange}
             onPriceChange={handlePriceChange}
+            categories={categories}
+            containers={containers}
           />
 
           <View style={styles.dateFilters}>

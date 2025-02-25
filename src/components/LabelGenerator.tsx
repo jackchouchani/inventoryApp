@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { handleLabelGenerationError, handleLabelPrintingError, handleQRCodeError } from '../utils/labelErrorHandler';
+import { handleLabelGenerationError, handleLabelPrintingError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/networkUtils';
 import { useRouter } from 'expo-router';
 import { QRCodeGenerator } from './QRCodeGenerator';
@@ -78,58 +78,23 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     }
   }, [onComplete, router]);
 
-  const generateCode = useCallback(async (data: string): Promise<string> => {
-    if (!html2canvas) {
-      throw new Error('html2canvas not loaded');
-    }
-
-    try {
-      if (!data) {
-        throw new Error('Code data is required');
-      }
-
-      const size = compact ? 150 : 200;
-      
-      return new Promise<string>((resolve, reject) => {
-        setCurrentCode({ data, size });
-
-        setTimeout(async () => {
-          try {
-            if (!codeContainerRef.current) {
-              throw new Error('Code container reference not available');
-            }
-
-            const canvas = await html2canvas(codeContainerRef.current, {
-              backgroundColor: '#ffffff',
-              scale: 2,
-              logging: false,
-              useCORS: true,
-              allowTaint: true,
-              width: size,
-              height: size
-            });
-
-            const dataUrl = canvas.toDataURL('image/png');
-            resolve(dataUrl);
-          } catch (error) {
-            console.error('Erreur lors de la capture du code:', error);
-            captureException(error);
-            reject(error);
-          } finally {
-            setCurrentCode(null);
-          }
-        }, 100);
-      });
-    } catch (error) {
-      throw handleQRCodeError(error as Error, 'LabelGenerator.generateCode');
-    }
-  }, [compact]);
-
   const CodeRenderer = () => {
     if (!currentCode) return null;
 
-    const { type } = parseId(currentCode.data);
-    const CodeComponent = type === 'ITEM' ? DataMatrixGenerator : QRCodeGenerator;
+    // Déterminer le type de code à partir de la donnée
+    let type = 'QR_CODE';
+    try {
+      const parsed = parseId(currentCode.data);
+      type = parsed.type === 'ITEM' ? 'DATAMATRIX' : 'QR_CODE';
+    } catch (error) {
+      console.warn('Erreur lors du parsing de l\'ID:', error);
+      // Par défaut, utiliser QR_CODE si le parsing échoue
+      type = currentCode.data.startsWith('ITEM_') ? 'DATAMATRIX' : 'QR_CODE';
+    }
+
+    // Choisir le composant approprié
+    const CodeComponent = type === 'DATAMATRIX' ? DataMatrixGenerator : QRCodeGenerator;
+
 
     return (
       <div style={{ 
@@ -143,7 +108,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       }}>
         <CodeComponent
           value={currentCode.data}
-          size={currentCode.size}
+          size={currentCode.size * 0.95}
         />
       </div>
     );
@@ -175,38 +140,89 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
       for (let i = 0; i < validItems.length; i++) {
         const item = validItems[i];
+        
+        // Assurer que chaque conteneur a un code QR
         if (!item.qrCode) {
-          throw new Error(`QR code manquant pour le container ${item.name}`);
+          console.warn(`QR code manquant pour le container ${item.name}, génération d'un code par défaut`);
+          item.qrCode = `CONTAINER_${item.id}_${Date.now()}`;
         }
 
         if (i > 0) {
           doc.addPage([labelWidth, labelHeight]);
         }
 
+        // Bordure simple en noir
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+        doc.rect(margin, margin, labelWidth - 2*margin, labelHeight - 2*margin);
+        
         // Titre du container
-        doc.setFontSize(24);
-        doc.text(item.name, labelWidth/2, margin + 20, { align: 'center' });
+        doc.setFontSize(22);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(item.name, labelWidth/2, margin + 15, { align: 'center' });
 
         // Numéro du container
         if (item.number) {
-          doc.setFontSize(36);
-          doc.text(`#${item.number}`, labelWidth/2, margin + 40, { align: 'center' });
+          doc.setFontSize(32);
+          doc.setTextColor(0, 0, 0);
+          doc.text(`#${item.number}`, labelWidth/2, margin + 35, { align: 'center' });
         }
 
-        // QR Code
-        const qrCodeBase64 = await generateCode(item.qrCode);
-        const qrSize = 70;
-        doc.addImage(qrCodeBase64, 'PNG',
-          (labelWidth - qrSize) / 2,
-          margin + 50,
-          qrSize, qrSize
-        );
+        // Ligne séparatrice
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.line(margin + 5, margin + 40, labelWidth - margin - 5, margin + 40);
+
+        // Forcer la génération du QR code
+        setCurrentCode({ data: item.qrCode, size: 200 });
+        
+        // Attendre que le code soit rendu
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        if (!codeContainerRef.current) {
+          console.error('Référence au conteneur de code manquante');
+          doc.setFontSize(12);
+          doc.text('QR code non disponible', labelWidth/2, margin + 75, { align: 'center' });
+        } else {
+          try {
+            const canvas = await html2canvas(codeContainerRef.current, {
+              backgroundColor: '#ffffff',
+              scale: 2,
+              logging: true,
+              useCORS: true,
+              allowTaint: true
+            });
+            
+            const qrCodeBase64 = canvas.toDataURL('image/png');
+            const qrSize = 65;
+            
+            doc.addImage(
+              qrCodeBase64, 
+              'PNG',
+              (labelWidth - qrSize) / 2,
+              margin + 45,
+              qrSize, 
+              qrSize
+            );
+            
+          } catch (qrError) {
+            console.error('Erreur lors de la capture du QR code:', qrError);
+            doc.setFontSize(12);
+            doc.text('QR code non disponible', labelWidth/2, margin + 75, { align: 'center' });
+          }
+        }
+        
+        // Réinitialiser le code courant
+        setCurrentCode(null);
 
         // Description
         if (item.description) {
-          doc.setFontSize(12);
-          const description = doc.splitTextToSize(item.description, labelWidth - (2 * margin));
-          doc.text(description, labelWidth/2, margin + 130, { align: 'center' });
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(0, 0, 0);
+          const description = doc.splitTextToSize(item.description, labelWidth - (2 * margin) - 10);
+          doc.text(description, labelWidth/2, margin + 120, { align: 'center' });
         }
 
         setProgress(((i + 1) / validItems.length) * 100);
@@ -223,7 +239,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       setLoading(false);
       setProgress(0);
     }
-  }, [validItems, generateCode, handleComplete, onError]);
+  }, [validItems, handleComplete, onError, codeContainerRef]);
 
   const generateItemsPDF = useCallback(async () => {
     if (!jsPDF) {
@@ -255,8 +271,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
       for (let i = 0; i < validItems.length; i++) {
         const item = validItems[i];
+        
+        // Assurer que chaque article a un code DataMatrix
         if (!item.qrCode) {
-          throw new Error(`Code DataMatrix manquant pour l'article ${item.name}`);
+          console.warn(`Code DataMatrix manquant pour l'article ${item.name}, génération d'un code par défaut`);
+          item.qrCode = `ITEM_${item.id}_${Date.now()}`;
         }
 
         if (i > 0 && i % totalLabelsPerPage === 0) {
@@ -271,34 +290,86 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         const posY = marginYFixed + (row * labelHeight);
 
         // Cadre de l'étiquette
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.2);
         doc.rect(posX, posY, labelWidth, labelHeight);
         
         // Titre
-        doc.setFontSize(11);
-        doc.text(item.name, posX + labelWidth/2, posY + 5, { align: 'center' });
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(0, 0, 0);
+        const titleMaxWidth = labelWidth - 2;
+        const titleText = doc.splitTextToSize(item.name, titleMaxWidth);
+        doc.text(titleText, posX + labelWidth/2, posY + 4, { align: 'center' });
         
         // Ligne séparatrice
+        doc.setLineWidth(0.2);
+        doc.setDrawColor(0, 0, 0);
         doc.line(posX + 5, posY + 7, posX + labelWidth - 5, posY + 7);
         
         // Description (si présente)
         if (item.description) {
-          doc.setFontSize(8);
-          const description = doc.splitTextToSize(item.description, labelWidth - 20);
-          doc.text(description, posX + 2, posY + 11);
+          doc.setFontSize(7);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(0, 0, 0);
+          const descMaxWidth = labelWidth - 22; // Réservons de l'espace pour le code
+          const description = doc.splitTextToSize(item.description, descMaxWidth);
+          // Limiter à 2 lignes maximum pour la description
+          const limitedDesc = description.slice(0, 2);
+          doc.text(limitedDesc, posX + 2, posY + 11);
         }
         
         // Prix (si présent)
         if (item.sellingPrice !== undefined) {
-          doc.setFontSize(13);
-          doc.text(`${item.sellingPrice}€`, posX + 15, posY + labelHeight - 5, { align: 'center' });
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(0, 0, 0);
+          doc.text(`${item.sellingPrice}€`, posX + 12, posY + labelHeight - 5, { align: 'center' });
         }
         
-        // DataMatrix
-        const codeBase64 = await generateCode(item.qrCode);
-        doc.addImage(codeBase64, 'PNG', 
-          posX + labelWidth - 20,
-          posY + labelHeight - 20,
-          18, 18);
+        // DataMatrix - Génération directe
+        
+        // Forcer la génération du DataMatrix
+        setCurrentCode({ data: item.qrCode, size: 150 });
+        
+        // Attendre que le code soit rendu
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        if (!codeContainerRef.current) {
+          console.error('Référence au conteneur de code manquante');
+          doc.setFontSize(6);
+          doc.text('Code non disponible', posX + labelWidth - 15, posY + labelHeight - 10);
+        } else {
+          try {
+            const canvas = await html2canvas(codeContainerRef.current, {
+              backgroundColor: '#ffffff',
+              scale: 2,
+              logging: false,
+              useCORS: true,
+              allowTaint: true
+            });
+            
+            const codeBase64 = canvas.toDataURL('image/png');
+            const codeSize = 15; // Taille réduite
+            
+            doc.addImage(
+              codeBase64, 
+              'PNG', 
+              posX + labelWidth - 17,
+              posY + labelHeight - 17,
+              codeSize, 
+              codeSize
+            );
+            
+          } catch (codeError) {
+            console.error('Erreur lors de la capture du DataMatrix:', codeError);
+            doc.setFontSize(6);
+            doc.text('Code non disponible', posX + labelWidth - 15, posY + labelHeight - 10);
+          }
+        }
+        
+        // Réinitialiser le code courant
+        setCurrentCode(null);
 
         setProgress(((i + 1) / validItems.length) * 100);
       }
@@ -314,7 +385,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       setLoading(false);
       setProgress(0);
     }
-  }, [validItems, generateCode, handleComplete, onError]);
+  }, [validItems, handleComplete, onError, codeContainerRef]);
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>

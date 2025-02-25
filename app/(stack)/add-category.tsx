@@ -24,12 +24,16 @@ export default function AddCategoryScreen() {
       };
 
       const categoryId = await database.addCategory(categoryInput);
+      
+      // Utiliser des chaînes ISO au lieu d'objets Date pour Redux
+      const now = new Date();
+      const isoDate = now.toISOString();
 
       dispatch(addNewCategory({
         id: categoryId,
         ...categoryInput,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        createdAt: isoDate,
+        updatedAt: isoDate
       }));
 
       Toast.show({

@@ -1,10 +1,15 @@
-import React, { useCallback, useMemo, useEffect } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, ActivityIndicator } from 'react-native';
 import { Item } from '../types/item';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 import { usePhoto } from '../hooks/usePhoto';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
+import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
+
+// Constantes
+const { STORAGE: { BUCKETS: { PHOTOS } } } = SUPABASE_CONFIG;
 
 export interface ItemCardProps {
   item: Item;
@@ -33,7 +38,10 @@ const ItemCard: React.FC<ItemCardProps> = ({
   fadeAnimation,
   scaleAnimation
 }) => {
-  const { uri: photoUri, loading, error, loadImage } = usePhoto();
+  const { uri: photoUri, error } = usePhoto();
+  const [localUri, setLocalUri] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handlePress = useCallback(() => {
     onPress?.(item);
@@ -77,9 +85,82 @@ const ItemCard: React.FC<ItemCardProps> = ({
 
   useEffect(() => {
     if (item.photo_storage_url) {
-      loadImage(item.photo_storage_url);
+      setIsLoading(true);
+      setErrorMessage(null);
+      
+      downloadImageWithS3Auth(item.photo_storage_url)
+        .then(uri => {
+          if (uri) {
+            setLocalUri(uri);
+            setIsLoading(false);
+          } else {
+            throw new Error('Échec de récupération de l\'image');
+          }
+        })
+        .catch(err => {
+          console.error(`Erreur lors du chargement de l'image pour l'article ${item.id}:`, err);
+          
+          // Tentative de fallback: essayer de récupérer juste le nom du fichier
+          const filenameOrEmpty = extractFilenameFromUrl(item.photo_storage_url || '');
+          if (filenameOrEmpty && filenameOrEmpty.length > 0) {
+            // Essayer d'utiliser directement le composant Image avec le nom de fichier
+            // Cela pourrait fonctionner si le bucket est public
+            setLocalUri(`https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/object/public/${PHOTOS}/${filenameOrEmpty}`);
+          } else {
+            setErrorMessage(`Erreur: ${err.message || 'Problème de chargement'}`);
+          }
+          setIsLoading(false);
+        });
+    } else {
+      setLocalUri(null);
     }
-  }, [item.photo_storage_url, loadImage]);
+  }, [item.photo_storage_url, item.id]);
+
+  useEffect(() => {
+    if (error) {
+      console.error(`Erreur de chargement d'image pour l'article ${item.id}:`, error.message);
+    }
+  }, [item.id, photoUri, error]);
+
+  const renderImageContent = () => {
+    if (isLoading) {
+      return (
+        <View style={[styles.image, styles.noImageContainer]}>
+          <ActivityIndicator size="small" color="#2196f3" />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </View>
+      );
+    }
+    
+    if (errorMessage) {
+      return (
+        <View style={[styles.image, styles.noImageContainer]}>
+          <MaterialIcons name="error-outline" size={24} color="#e53935" />
+          <Text style={styles.errorText}>Erreur</Text>
+          <Text style={styles.errorDetail}>{errorMessage.substring(0, 25)}</Text>
+        </View>
+      );
+    }
+    
+    if (localUri) {
+      return (
+        <Image 
+          source={{ uri: localUri }} 
+          style={styles.image}
+          onError={(e) => {
+            console.error(`Erreur de rendu d'image pour l'article ${item.id}:`, e.nativeEvent.error);
+            setErrorMessage(`Erreur de rendu: ${e.nativeEvent.error}`);
+          }}
+        />
+      );
+    }
+    
+    return (
+      <View style={[styles.image, styles.noImageContainer]}>
+        <MaterialIcons name="image-not-supported" size={24} color="#999" />
+      </View>
+    );
+  };
 
   return (
     <Animated.View style={animatedStyle}>
@@ -91,13 +172,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
         activeOpacity={0.7}
       >
         <View style={styles.imageContainer}>
-          {loading ? (
-            <ActivityIndicator size="small" />
-          ) : error || !photoUri ? (
-            <Image source={require('../assets/placeholder.png')} style={styles.image} />
-          ) : (
-            <Image source={{ uri: photoUri }} style={styles.image} />
-          )}
+          {renderImageContent()}
         </View>
 
         <View style={styles.detailsContainer}>
@@ -146,6 +221,10 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   imageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
     marginRight: 12,
   },
   itemImage: {
@@ -230,6 +309,25 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#e53935',
+    marginTop: 4,
+  },
+  errorDetail: {
+    fontSize: 9,
+    color: '#e53935',
+    textAlign: 'center',
+    marginTop: 2,
+    paddingHorizontal: 4,
+  },
+  loadingText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#2196f3',
+    marginTop: 4,
   },
 });
 

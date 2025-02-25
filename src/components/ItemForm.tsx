@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
@@ -8,14 +8,15 @@ import { addItem } from '../store/itemsActions';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { MaterialIconName } from '../types/icons';
-import { ImagePicker } from './ImagePicker';
-import * as Sentry from '@sentry/react-native';
 import AdaptiveImage from './AdaptiveImage';
 import { handleError } from '../utils/errorHandler';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { FallbackProps } from 'react-error-boundary';
 import type { Item, ItemInput } from '../types/item';
 import { usePhoto } from '../hooks/usePhoto';
+import * as ExpoImagePicker from 'expo-image-picker';
+import { checkPhotoPermissions } from '../utils/permissions';
+import { useRouter } from 'expo-router';
 
 const FORM_VALIDATION = {
     NAME_MAX_LENGTH: 100,
@@ -122,10 +123,11 @@ const CategoryOption = memo(({ category, isSelected, onSelect }: CategoryOptionP
 /**
  * Composant de liste de conteneurs mémoïsé
  */
-const ContainerList = memo(({ containers, selectedId, onSelect }: {
+const ContainerList = memo(({ containers, selectedId, onSelect, onAddNew }: {
     containers: Container[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
+    onAddNew: () => void;
 }) => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
         <View style={styles.optionsContainer}>
@@ -137,6 +139,18 @@ const ContainerList = memo(({ containers, selectedId, onSelect }: {
                     onSelect={onSelect}
                 />
             ))}
+            <TouchableOpacity
+                style={styles.addNewOption}
+                onPress={onAddNew}
+            >
+                <MaterialIcons
+                    name="add-circle"
+                    size={20}
+                    color="#007AFF"
+                    style={styles.addIcon}
+                />
+                <Text style={styles.addNewText}>Ajouter un container</Text>
+            </TouchableOpacity>
         </View>
     </ScrollView>
 ));
@@ -144,10 +158,11 @@ const ContainerList = memo(({ containers, selectedId, onSelect }: {
 /**
  * Composant de liste de catégories mémoïsé
  */
-const CategoryList = memo(({ categories, selectedId, onSelect }: {
+const CategoryList = memo(({ categories, selectedId, onSelect, onAddNew }: {
     categories: Category[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
+    onAddNew: () => void;
 }) => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
         <View style={styles.optionsContainer}>
@@ -159,6 +174,18 @@ const CategoryList = memo(({ categories, selectedId, onSelect }: {
                     onSelect={onSelect}
                 />
             ))}
+            <TouchableOpacity
+                style={styles.addNewOption}
+                onPress={onAddNew}
+            >
+                <MaterialIcons
+                    name="add-circle"
+                    size={20}
+                    color="#007AFF"
+                    style={styles.addIcon}
+                />
+                <Text style={styles.addNewText}>Ajouter une catégorie</Text>
+            </TouchableOpacity>
         </View>
     </ScrollView>
 ));
@@ -189,15 +216,24 @@ const ItemFormWithErrorBoundary: React.FC<ItemFormProps> = (props) => (
     </ErrorBoundary>
 );
 
-const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, onCancel }) => {
+const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }) => {
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
-    const { loading, error, uploadPhoto, validatePhoto } = usePhoto();
+    const { uploadPhoto } = usePhoto();
+    const router = useRouter();
+    
+    // État pour suivre l'upload en cours
+    const [isUploading, setIsUploading] = useState(false);
+    
+    // État pour tracker l'image locale sélectionnée mais pas encore uploadée
+    const [localImage, setLocalImage] = useState<{ uri: string; needsUpload: boolean } | null>(null);
 
     const resetForm = useCallback(() => {
         setItem(INITIAL_STATE);
+        setLocalImage(null);
+        setIsUploading(false);
     }, []);
 
     useEffect(() => {
@@ -266,13 +302,15 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
             const qrCode = generateId('ITEM');
             let photoUrl: string | undefined = undefined;
 
-            if (newItem.photo_storage_url) {
-                try {
-                    photoUrl = await uploadPhoto(newItem.photo_storage_url);
-                } catch (error) {
-                    throw new Error('Erreur lors de l\'upload de la photo');
-                }
+            // Si la photo a une URL Supabase, l'utiliser directement sans ré-upload
+            if (newItem.photo_storage_url && (
+                newItem.photo_storage_url.includes('supabase.co') || 
+                !localImage?.needsUpload
+            )) {
+                photoUrl = newItem.photo_storage_url;
             }
+            // Si c'est une autre forme d'URL et qu'un upload est nécessaire, l'upload a déjà dû être fait dans handleSubmit
+            // Nous n'avons plus besoin de faire un upload ici
 
             if (!newItem.categoryId) {
                 throw new Error('La catégorie est requise');
@@ -320,55 +358,98 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
         }
     });
 
-    const handleSave = useCallback(async () => {
-        const errors = validateForm();
-        if (errors.length > 0) {
-            Alert.alert(
-                'Erreurs de validation',
-                errors.map(error => error.message).join('\n')
-            );
-            return;
-        }
-
+    // Ajouter une fonction pour la sélection d'image directement comme dans ItemEditForm
+    const handleImagePreview = useCallback(async () => {
         try {
-            await addItemMutation.mutateAsync(item);
-        } catch (error) {
-            handleError(error, 'Erreur lors de la sauvegarde', {
-                source: 'item_form',
-                message: 'Impossible de sauvegarder l\'article',
-                showAlert: true
-            });
-        }
-    }, [item, validateForm, addItemMutation]);
-
-    const handlePhotoUpload = async (uri: string) => {
-        try {
-            if (!await validatePhoto(uri)) {
-                Alert.alert('Erreur', 'Photo invalide');
+            const hasPermissions = await checkPhotoPermissions();
+            if (!hasPermissions) {
+                console.error("handleImagePreview - Permission refusée");
+                Alert.alert('Erreur', 'Permission d\'accès aux photos refusée');
                 return;
             }
-            const photoUrl = await uploadPhoto(uri);
-            setItem(prev => ({ ...prev, photo_storage_url: photoUrl }));
+            
+            // Utiliser ImagePicker avec la bonne API (MediaTypeOptions est toujours utilisé dans la version actuelle)
+            const result = await ExpoImagePicker.launchImageLibraryAsync({
+                mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.5,
+                base64: true,
+            });
+            
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const selectedAsset = result.assets[0];
+                
+                if (Platform.OS === 'web') {
+                    // Pour le web, toujours privilégier le format base64
+                    if (selectedAsset.base64) {
+                        const mimeType = selectedAsset.mimeType || 'image/jpeg';
+                        const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
+                        
+                        
+                        // Stocker directement l'URI base64 pour la prévisualisation et l'upload
+                        setLocalImage({ uri: base64Uri, needsUpload: true });
+                    } else {
+                        console.error("handleImagePreview - Impossible d'obtenir l'image en base64");
+                        Alert.alert('Erreur', 'Impossible d\'obtenir l\'image en format compatible');
+                    }
+                } else {
+                    // Sur les plateformes natives, on utilise l'URI standard
+                    setLocalImage({ uri: selectedAsset.uri, needsUpload: true });
+                }
+            }
         } catch (error) {
-            handleError(error, 'Erreur lors du téléchargement de la photo', {
-                source: 'item_form',
-                message: 'Impossible de télécharger la photo',
+            console.error("handleImagePreview - Erreur:", error);
+            handleError(error, 'Erreur lors de la prévisualisation de la photo', {
+                source: 'item_form_image_preview',
+                message: 'Échec de la prévisualisation de la photo',
                 showAlert: true
             });
         }
-    };
+    }, []);
 
+    // Modifier la fonction handleSubmit pour éviter les doubles uploads
     const handleSubmit = async () => {
         try {
-            if (!validateForm()) return;
-
+            const errors = validateForm();
+            if (errors.length > 0) {
+                Alert.alert(
+                    'Erreurs de validation',
+                    errors.map(error => error.message).join('\n')
+                );
+                return;
+            }
+            
             let finalFormData = { ...item };
-            if (item.photo_storage_url) {
-                const photoUrl = await uploadPhoto(item.photo_storage_url);
-                finalFormData.photo_storage_url = photoUrl;
+            
+            // Si nous avons une image locale en attente d'upload
+            if (localImage && localImage.needsUpload) {
+                setIsUploading(true);
+                try {
+                    // Ici on upload réellement l'image
+                    const uploadedUrl = await uploadPhoto(localImage.uri);
+                    
+                    // Assurer que l'URL est correctement traitée
+                    if (uploadedUrl) {
+                        finalFormData.photo_storage_url = uploadedUrl;
+                    } else {
+                        finalFormData.photo_storage_url = undefined;
+                    }
+                } catch (uploadError) {
+                    handleError(uploadError, 'Erreur lors de l\'upload de la photo', {
+                        source: 'item_form',
+                        message: 'Impossible d\'uploader la photo',
+                        showAlert: true
+                    });
+                    // Continuer sans photo si l'upload échoue
+                    finalFormData.photo_storage_url = undefined;
+                } finally {
+                    setIsUploading(false);
+                }
             }
 
-            await handleSave();
+            // Utilisation directe de addItemMutation sans passer par handleSave
+            await addItemMutation.mutateAsync(finalFormData);
         } catch (error) {
             handleError(error, 'Erreur lors de la création', {
                 source: 'item_form',
@@ -389,12 +470,78 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
             setItem(prev => ({ ...prev, categoryId }));
         }
     }, []);
+    
+    // Fonction pour supprimer la photo sélectionnée
+    const handlePhotoDelete = useCallback(() => {
+        setLocalImage(null);
+        setItem(prev => ({ ...prev, photo_storage_url: undefined }));
+    }, []);
+
+    // Remplacer les fonctions de gestion modale par la navigation
+    const navigateToAddContainer = useCallback(() => {
+        // Enregistrer l'état actuel du formulaire dans queryClient pour le récupérer ensuite
+        queryClient.setQueryData(['temp_item_form_state'], item);
+        
+        // Naviguer vers la page d'ajout de container
+        router.push('/containers');
+    }, [router, queryClient, item]);
+
+    const navigateToAddCategory = useCallback(() => {
+        // Enregistrer l'état actuel du formulaire dans queryClient pour le récupérer ensuite
+        queryClient.setQueryData(['temp_item_form_state'], item);
+        
+        // Naviguer vers la page d'ajout de catégorie
+        router.push('/add-category');
+    }, [router, queryClient, item]);
+
+    // Ajouter un effet pour rafraîchir les données lorsqu'on revient à cet écran
+    useEffect(() => {
+        // Rafraîchir les données des containers et catégories
+        queryClient.invalidateQueries({ queryKey: ['containers'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
+        
+        // Récupérer le dernier container ajouté
+        const fetchedContainers = queryClient.getQueryData<Container[]>(['containers']);
+        if (fetchedContainers && fetchedContainers.length > 0) {
+            // Trier par date de création pour obtenir le plus récent
+            const sortedContainers = [...fetchedContainers].sort((a, b) => 
+                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+            
+            // Si notre container actuel n'est pas défini, sélectionner automatiquement le plus récent
+            if (!item.containerId) {
+                setItem(prev => ({ ...prev, containerId: sortedContainers[0].id }));
+            }
+        }
+        
+        // Récupérer la dernière catégorie ajoutée
+        const fetchedCategories = queryClient.getQueryData<Category[]>(['categories']);
+        if (fetchedCategories && fetchedCategories.length > 0) {
+            // Trier par date de création pour obtenir la plus récente
+            const sortedCategories = [...fetchedCategories].sort((a, b) => 
+                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+            
+            // Si notre catégorie actuelle n'est pas définie, sélectionner automatiquement la plus récente
+            if (!item.categoryId) {
+                setItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
+            }
+        }
+        
+        // Restaurer l'état du formulaire s'il a été sauvegardé avant de naviguer
+        const savedState = queryClient.getQueryData<ItemFormState>(['temp_item_form_state']);
+        if (savedState) {
+            setItem(savedState);
+            // Supprimer l'état sauvegardé pour éviter de l'utiliser à nouveau
+            queryClient.removeQueries({ queryKey: ['temp_item_form_state'] });
+        }
+    }, [queryClient, item.containerId, item.categoryId]);
 
     return (
         <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Nouvel Article</Text>
-                <TouchableOpacity style={styles.saveButton} onPress={handleSubmit}>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSubmit} disabled={isUploading}>
                     <Text style={styles.saveText}>Enregistrer</Text>
                 </TouchableOpacity>
             </View>
@@ -452,10 +599,12 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
                     <View style={styles.imageContainer}>
-                        {item.photo_storage_url ? (
+                        {(item.photo_storage_url || (localImage && localImage.needsUpload)) ? (
                             <View style={styles.imageWrapper}>
                                 <AdaptiveImage
-                                    uri={item.photo_storage_url}
+                                    uri={localImage && localImage.needsUpload 
+                                        ? localImage.uri 
+                                        : item.photo_storage_url || ''}
                                     style={styles.image}
                                     resizeMode="cover"
                                     placeholder={
@@ -466,21 +615,37 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                                 />
                                 <TouchableOpacity 
                                     style={styles.deletePhotoButton}
-                                    onPress={() => setItem(prev => ({ ...prev, photo_storage_url: undefined }))}
+                                    onPress={handlePhotoDelete}
+                                    disabled={isUploading}
                                 >
                                     <MaterialIcons name="delete" size={24} color="#FF3B30" />
                                 </TouchableOpacity>
+                                
+                                {localImage?.needsUpload && (
+                                    <View style={styles.newImageBadge}>
+                                        <MaterialIcons name="cloud-upload" size={14} color="#FFFFFF" />
+                                        <Text style={styles.newImageText}>En attente d'upload</Text>
+                                    </View>
+                                )}
+                                
+                                {isUploading && (
+                                    <View style={styles.uploadingOverlay}>
+                                        <MaterialIcons name="cloud-upload" size={32} color="#FFFFFF" />
+                                        <Text style={styles.uploadingText}>Upload en cours...</Text>
+                                    </View>
+                                )}
                             </View>
                         ) : (
-                            <ImagePicker
-                                onImageSelected={handlePhotoUpload}
-                                onError={(error) => {
-                                    Sentry.captureException(new Error(error), {
-                                        tags: { context: 'item_form_image_picker' }
-                                    });
-                                    Alert.alert('Erreur', error);
-                                }}
-                            />
+                            <TouchableOpacity 
+                                style={styles.imagePicker}
+                                onPress={handleImagePreview}
+                                disabled={isUploading}
+                            >
+                                <MaterialIcons name="add-photo-alternate" size={48} color={isUploading ? "#cccccc" : "#007AFF"} />
+                                <Text style={[styles.imagePickerText, isUploading && {color: "#cccccc"}]}>
+                                    {isUploading ? "Upload en cours..." : "Sélectionner une image"}
+                                </Text>
+                            </TouchableOpacity>
                         )}
                     </View>
                 </View>
@@ -491,6 +656,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                         containers={containers}
                         selectedId={item.containerId}
                         onSelect={handleContainerSelect}
+                        onAddNew={navigateToAddContainer}
                     />
                 </View>
 
@@ -500,6 +666,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess, 
                         categories={categories}
                         selectedId={item.categoryId}
                         onSelect={handleCategorySelect}
+                        onAddNew={navigateToAddCategory}
                     />
                 </View>
             </ScrollView>
@@ -700,6 +867,152 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    // Nouveaux styles ajoutés inspirés de ItemEditForm
+    newImageBadge: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderTopLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    newImageText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    uploadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 8,
+    },
+    uploadingText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginTop: 8,
+    },
+    imagePicker: {
+        aspectRatio: 4/3,
+        borderRadius: 8,
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: '#007AFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imagePickerText: {
+        marginTop: 8,
+        color: '#007AFF',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    addNewOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: '#e6f2ff',
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: '#007AFF',
+    },
+    addNewText: {
+        fontSize: 14,
+        color: '#007AFF',
+        fontWeight: '500',
+    },
+    addIcon: {
+        marginRight: 8,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 20,
+        width: '100%',
+        maxWidth: 500,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    modalButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 16,
+        gap: 12,
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalButtonSave: {
+        backgroundColor: '#007AFF',
+    },
+    modalButtonCancel: {
+        backgroundColor: '#8E8E93',
+    },
+    modalButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    disabledButton: {
+        opacity: 0.5,
+    },
+    iconSelectorLabel: {
+        marginTop: 16,
+        marginBottom: 8,
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#333',
+    },
+    iconSelector: {
+        maxHeight: 150,
+        marginBottom: 16,
+    },
+    iconSelectorContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingVertical: 8,
+    },
+    iconOption: {
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        margin: 4,
+        borderRadius: 22,
+        backgroundColor: '#f5f5f5',
+    },
+    iconOptionSelected: {
+        backgroundColor: '#007AFF',
     },
 });
 

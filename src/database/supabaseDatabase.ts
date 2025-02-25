@@ -47,7 +47,6 @@ export class SupabaseDatabase implements DatabaseInterface {
       
       // Si erreur ou pas de données, retourner un tableau vide
       if (error || !data) {
-        console.log('Aucun container trouvé ou erreur:', error);
         return [];
       }
       
@@ -97,7 +96,6 @@ export class SupabaseDatabase implements DatabaseInterface {
 
   async getItems(): Promise<Item[]> {
     try {
-      console.log('Champs demandés:', ITEM_LIST_FIELDS);
       
       const { data, error } = await supabase
         .from('items')
@@ -114,8 +112,6 @@ export class SupabaseDatabase implements DatabaseInterface {
         return [];
       }
 
-      console.log('Structure d\'un item brut:', data[0] ? Object.keys(data[0]) : 'Aucun item');
-      
       const mappedItems = data.map(item => ({
         id: item.id,
         name: item.name,
@@ -498,12 +494,54 @@ export class SupabaseDatabase implements DatabaseInterface {
   }
 
   async deleteCategory(id: number): Promise<void> {
-    const { error } = await supabase
-      .from('categories')
-      .delete()
-      .eq('id', id);
+    try {
+      // Vérifier si la catégorie existe
+      const { data: category, error: checkError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', id)
+        .single();
 
-    if (error) throw error;
+      if (checkError || !category) {
+        throw new Error(`Catégorie avec l'ID ${id} n'existe pas`);
+      }
+
+      // Vérifier si la catégorie est utilisée par des éléments
+      const { data: items, error: itemsError } = await supabase
+        .from('items')
+        .select('id')
+        .eq('category_id', id)
+        .is('deleted', false);
+
+      if (itemsError) {
+        throw new Error(`Erreur lors de la vérification des éléments liés: ${itemsError.message}`);
+      }
+
+      // Si des éléments utilisent cette catégorie, mettre à jour leur category_id à null
+      if (items && items.length > 0) {
+        const { error: updateItemsError } = await supabase
+          .from('items')
+          .update({ category_id: null })
+          .eq('category_id', id);
+
+        if (updateItemsError) {
+          throw new Error(`Erreur lors de la mise à jour des éléments liés: ${updateItemsError.message}`);
+        }
+      }
+
+      // Marquer la catégorie comme supprimée plutôt que de la supprimer complètement
+      const { error: deleteError } = await supabase
+        .from('categories')
+        .update({ deleted: true, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (deleteError) {
+        throw new Error(`Erreur lors de la suppression de la catégorie: ${deleteError.message}`);
+      }
+    } catch (error) {
+      console.error('Erreur dans deleteCategory:', error);
+      throw error;
+    }
   }
 
   async storePhotoUri(_uri: string): Promise<void> {

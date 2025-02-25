@@ -169,7 +169,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
     const handleScan = useCallback(async ({ data: scannedData, type: barcodeType }: BarcodeScanningResult) => {
         const now = Date.now();
         if (now - lastScanTime < SCAN_DELAY) {
-            console.log('Scan trop rapide, ignoré');
             return;
         }
         setLastScanTime(now);
@@ -180,7 +179,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
             // Vérifier le cache
             const cachedData = queryClient.getQueryData(['scan', scannedData]);
             if (cachedData) {
-                console.log('Utilisation des données en cache pour:', scannedData);
                 await handleFeedback(true);
                 return cachedData;
             }
@@ -200,7 +198,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
 
             // Vérifie la correspondance entre le type d'identifiant et le type de code-barres
             if ((isContainer && !isQRCode) || (isItem && !isDataMatrix)) {
-                console.log('Type de code-barres incorrect pour cet identifiant');
                 await handleFeedback(false);
                 return;
             }
@@ -243,7 +240,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                     );
 
                     if (isAlreadyScanned) {
-                        console.log('Article déjà scanné:', item.name);
                         await handleFeedback(false);
                         return;
                     }
@@ -274,7 +270,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
 
             return result;
         } catch (error) {
-            console.error('Erreur lors du scan:', error);
             await handleFeedback(false);
         }
     }, [scanState, lastScanTime, handleFeedback, queryClient]);
@@ -335,7 +330,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onClose, onScan, isActive }) =
                 }
             });
         } catch (error) {
-            console.error('Erreur lors de la finalisation:', error);
             const errorDetails = handleScannerError(error instanceof Error ? error : new Error('Erreur inconnue'));
             setScanState(prev => ({
                 ...prev,

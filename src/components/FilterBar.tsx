@@ -1,12 +1,15 @@
 import React, { memo, useCallback } from 'react';
 import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useFilterBar, FilterStatus } from '../hooks/useFilterBar';
+import { useFilterBar } from '../hooks/useFilterBar';
 import { FilterBarProps } from '../types/props';
 import { searchSchema, priceRangeSchema } from '../utils/validation';
 import { handleError } from '../utils/errorHandler';
 import debounce from 'lodash/debounce';
 import { theme } from '../utils/theme';
+import { useSelector } from 'react-redux';
+import { selectAllCategories } from '../store/categorySlice';
+import { selectAllContainers } from '../store/containersSlice';
 
 const FilterChip: React.FC<{
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -39,7 +42,9 @@ export const FilterBar = memo(function FilterBar({
   onCategoryChange,
   onContainerChange,
   onStatusChange,
-  onPriceChange
+  onPriceChange,
+  categories: propCategories,
+  containers: propContainers
 }: FilterBarProps) {
   const {
     showFilters,
@@ -49,18 +54,28 @@ export const FilterBar = memo(function FilterBar({
     selectedStatus,
     minPrice,
     maxPrice,
-    categories,
-    containers,
     handleCategorySelect,
     handleContainerSelect,
     handleStatusChange,
-    handlePriceChange,
   } = useFilterBar({
     onCategoryChange,
     onContainerChange,
     onStatusChange,
     onPriceChange,
   });
+
+  // Récupérer les catégories et containers depuis le store Redux comme fallback
+  const storeCategories = useSelector(selectAllCategories);
+  const storeContainers = useSelector(selectAllContainers);
+  
+  // Utiliser les catégories et containers des props si disponibles, sinon utiliser ceux du store
+  const categories = Array.isArray(propCategories) && propCategories.length > 0 
+    ? propCategories 
+    : Array.isArray(storeCategories) ? storeCategories : [];
+  
+  const containers = Array.isArray(propContainers) && propContainers.length > 0 
+    ? propContainers 
+    : Array.isArray(storeContainers) ? storeContainers : [];
 
   const handleSearchChange = useCallback(
     debounce((text: string) => {
