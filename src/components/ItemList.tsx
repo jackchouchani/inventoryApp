@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { Item } from '../types/item';
 import { Container } from '../types/container';
 import { Category } from '../types/category';
@@ -24,6 +24,8 @@ interface ItemListProps {
   selectedItem: Item | null;
   onEditSuccess: () => void;
   onEditCancel: () => void;
+  onEndReached?: () => void;
+  isLoadingMore?: boolean;
 }
 
 const ItemListModal: React.FC<{
@@ -195,7 +197,9 @@ const ItemList: React.FC<ItemListProps> = ({
   error,
   selectedItem,
   onEditSuccess,
-  onEditCancel
+  onEditCancel,
+  onEndReached,
+  isLoadingMore
 }) => {
   const renderStartTime = useRef(Date.now());
   
@@ -231,6 +235,18 @@ const ItemList: React.FC<ItemListProps> = ({
     );
   }
 
+  // Composant pour l'indicateur de chargement en bas de liste
+  const renderFooter = () => {
+    if (!isLoadingMore) return null;
+    
+    return (
+      <View style={styles.loadingMoreContainer}>
+        <ActivityIndicator size="small" color="#007AFF" />
+        <Text style={styles.loadingMoreText}>Chargement d'articles supplémentaires...</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -249,7 +265,12 @@ const ItemList: React.FC<ItemListProps> = ({
         maintainVisibleContentPosition={{
           minIndexForVisible: 0,
         }}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.3}
+        onEndReached={({ distanceFromEnd }) => {
+          console.log(`[ItemList] End reached, distance from end: ${distanceFromEnd}`);
+          if (onEndReached) onEndReached();
+        }}
+        ListFooterComponent={renderFooter()}
       />
 
       <ItemListModal
@@ -623,6 +644,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
+  },
+  loadingMoreText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 10,
   },
 });
 

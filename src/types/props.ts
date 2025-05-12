@@ -12,4 +12,9 @@ export interface FilterBarProps {
   onPriceChange?: (min?: number, max?: number) => void;
   categories?: Category[];
   containers?: Container[];
+  selectedCategoryId?: number;
+  selectedContainerId?: number | 'none';
+  selectedStatus?: FilterStatus;
+  minPrice?: string | number;
+  maxPrice?: string | number;
 } 

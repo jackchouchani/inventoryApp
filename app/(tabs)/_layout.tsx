@@ -65,6 +65,12 @@ export default function TabLayout() {
           headerRight: () => (
             <View style={{ flexDirection: 'row', marginRight: 15 }}>
               <TouchableOpacity
+                onPress={() => router.push('/(stack)/scanner-info')}
+                style={{ marginRight: 15 }}
+              >
+                <MaterialIcons name="qr-code-scanner" size={24} color="#007AFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => router.push('/(stack)/stats')}
                 style={{ marginRight: 15 }}
               >
@@ -96,7 +102,7 @@ export default function TabLayout() {
         options={{
           title: "Scanner",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="qr-code-scanner" size={size} color={color} />
+            <MaterialIcons name="qr-code" size={size} color={color} />
           ),
         }}
       />

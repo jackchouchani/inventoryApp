@@ -1,55 +1,107 @@
 import 'react-native-get-random-values';
 
-export const ID_TYPES = {
+// Définir les types d'IDs
+const ID_TYPES = {
   ITEM: 'ART',
   CONTAINER: 'CONT'
 } as const;
 
-type IdType = keyof typeof ID_TYPES;
+// Caractères alphanumériques pour générer un ID court (sans les caractères ambigus 0/O, 1/I)
+const ALPHANUM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-// Fonction pour générer un code aléatoire court
-const generateShortCode = (): string => {
-  // Utilise une combinaison de lettres et chiffres (base36) pour avoir des codes courts
-  // Exclut les caractères ambigus (0/O, 1/I/l)
-  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+/**
+ * Génère un code court de 4 caractères alphanumériques
+ * @returns Une chaîne de 4 caractères alphanumériques
+ */
+function generateShortCode(): string {
   let result = '';
-  // 4 caractères donnent 32^4 = 1,048,576 possibilités, largement suffisant pour 1000 articles
   for (let i = 0; i < 4; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += ALPHANUM_CHARS.charAt(Math.floor(Math.random() * ALPHANUM_CHARS.length));
   }
   return result;
-};
+}
 
-// Génère un identifiant court pour un article ou un container
-export const generateId = (type: IdType): string => {
+/**
+ * Génère un identifiant pour un article ou un container
+ * @param type Type d'ID à générer ('ITEM' ou 'CONTAINER')
+ * @returns Un ID au format 'ART_XXXX' pour les articles ou 'CONT_XXXX' pour les containers
+ */
+export function generateId(type: keyof typeof ID_TYPES): string {
   const prefix = ID_TYPES[type];
   const shortCode = generateShortCode();
   return `${prefix}_${shortCode}`;
-};
+}
 
-// Parse un identifiant
-export const parseId = (id: string): { type: IdType | null; value: string | null } => {
-  const regex = /^(ART|CONT)_([23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4})$/;
-  const match = id.match(regex);
-
-  if (!match) {
-    return { type: null, value: null };
+/**
+ * Parse un identifiant et extrait son type et sa valeur
+ * @param id L'identifiant à parser
+ * @returns Un objet contenant le type et la valeur, ou null si le format est invalide
+ */
+export function parseId(id: string): { type: string; value: string } | null {
+  // Format QR code ART_XXXX
+  if (id.startsWith(`${ID_TYPES.ITEM}_`)) {
+    return {
+      type: 'ITEM',
+      value: id.substring(4) // Longueur de 'ART_'
+    };
   }
-
-  try {
-    const prefix = match[1];
-    const value = match[2];
-
-    const type = Object.entries(ID_TYPES).find(([_, p]) => p === prefix)?.[0] as IdType;
-    return { type, value };
-  } catch (error) {
-    console.error('Erreur lors du parsing de l\'identifiant:', error);
-    return { type: null, value: null };
+  
+  // Format QR code CONT_XXXX
+  if (id.startsWith(`${ID_TYPES.CONTAINER}_`)) {
+    return {
+      type: 'CONTAINER',
+      value: id.substring(5) // Longueur de 'CONT_'
+    };
   }
-};
+  
+  console.warn(`Format d'identifiant non reconnu: ${id}`);
+  return null;
+}
 
-// Vérifie si un identifiant est valide
-export const isValidId = (id: string): boolean => {
-  const { type, value } = parseId(id);
-  return type !== null && value !== null;
-}; 
+/**
+ * Vérifie si un identifiant est valide
+ * @param id L'identifiant à vérifier
+ * @returns true si l'identifiant est valide, false sinon
+ */
+export function isValidId(id: string): boolean {
+  return isItemQrCode(id) || isContainerQrCode(id);
+}
+
+/**
+ * Vérifie si un identifiant correspond au format QR code d'un article
+ * @param id L'identifiant à vérifier
+ * @returns true si l'identifiant est au format QR code d'article, false sinon
+ */
+export function isItemQrCode(id: string): boolean {
+  const result = id.startsWith(`${ID_TYPES.ITEM}_`) && id.length >= 8; // ART_ + au moins 4 caractères
+  if (!result && id) {
+    console.log(`QR code article non reconnu: '${id}'`);
+    console.log(`Vérification: commence par '${ID_TYPES.ITEM}_' = ${id.startsWith(`${ID_TYPES.ITEM}_`)}`);
+    console.log(`Vérification: longueur >= 8 = ${id.length >= 8}`);
+  }
+  return result;
+}
+
+/**
+ * Vérifie si un identifiant correspond au format QR code d'un container
+ * @param id L'identifiant à vérifier
+ * @returns true si l'identifiant est au format QR code de container, false sinon
+ */
+export function isContainerQrCode(id: string): boolean {
+  const result = id.startsWith(`${ID_TYPES.CONTAINER}_`) && id.length >= 9; // CONT_ + au moins 4 caractères
+  if (!result && id) {
+    console.log(`QR code container non reconnu: '${id}'`);
+    console.log(`Vérification: commence par '${ID_TYPES.CONTAINER}_' = ${id.startsWith(`${ID_TYPES.CONTAINER}_`)}`);
+    console.log(`Vérification: longueur >= 9 = ${id.length >= 9}`);
+  }
+  return result;
+}
+
+/**
+ * Vérifie si un identifiant est numérique
+ * @param id L'identifiant à vérifier
+ * @returns false (Les identifiants numériques ne sont plus utilisés)
+ */
+export function isNumericId(id: string): boolean {
+  return false; // Les identifiants numériques ne sont plus utilisés
+} 

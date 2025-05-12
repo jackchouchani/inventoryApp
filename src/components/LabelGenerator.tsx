@@ -4,8 +4,6 @@ import { handleLabelGenerationError, handleLabelPrintingError } from '../utils/l
 import { checkNetworkConnection } from '../utils/networkUtils';
 import { useRouter } from 'expo-router';
 import { QRCodeGenerator } from './QRCodeGenerator';
-import { DataMatrixGenerator } from './DataMatrixGenerator';
-import { parseId } from '../utils/identifierManager';
 import { captureException } from '@sentry/react-native';
 import { useTheme } from '../hooks/useTheme';
 
@@ -21,6 +19,24 @@ if (Platform.OS === 'web') {
     jsPDF = module.jsPDF;
   });
 }
+
+// Fonction pour générer un QR code avec validation de format
+const generateQRCode = (value: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
+  // Valeur par défaut en cas de chaîne vide
+  if (!value) {
+    console.error("Valeur de QR code vide");
+    value = "INVALID_CODE";
+  }
+  
+  // QRCodeGenerator gère déjà la validation et correction du format
+  return (
+    <QRCodeGenerator 
+      value={value} 
+      size={size}
+      rotate={rotate}
+    />
+  );
+};
 
 interface Item {
   id: number;
@@ -40,7 +56,7 @@ interface LabelGeneratorProps {
 }
 
 /**
- * Composant pour générer des étiquettes avec codes QR/DataMatrix
+ * Composant pour générer des étiquettes avec codes QR
  * @param props - Les propriétés du composant
  * @returns JSX.Element
  */
@@ -56,7 +72,10 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   const [progress, setProgress] = useState(0);
   const router = useRouter();
   const codeContainerRef = useRef<HTMLDivElement>(null);
-  const [currentCode, setCurrentCode] = useState<{ data: string; size: number } | null>(null);
+  const [currentCode, setCurrentCode] = useState<{ data: string; size: number; rotate?: 'N' | 'R' | 'L' | 'I' } | null>(null);
+  
+  // Cache pour les QR codes générés - optimisation majeure
+  const qrCodeCache = useRef<Map<string, string>>(new Map());
 
   // Validation des items
   const validItems = useMemo(() => {
@@ -81,21 +100,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   const CodeRenderer = () => {
     if (!currentCode) return null;
 
-    // Déterminer le type de code à partir de la donnée
-    let type = 'QR_CODE';
-    try {
-      const parsed = parseId(currentCode.data);
-      type = parsed.type === 'ITEM' ? 'DATAMATRIX' : 'QR_CODE';
-    } catch (error) {
-      console.warn('Erreur lors du parsing de l\'ID:', error);
-      // Par défaut, utiliser QR_CODE si le parsing échoue
-      type = currentCode.data.startsWith('ITEM_') ? 'DATAMATRIX' : 'QR_CODE';
-    }
-
-    // Choisir le composant approprié
-    const CodeComponent = type === 'DATAMATRIX' ? DataMatrixGenerator : QRCodeGenerator;
-
-
+    // QRCodeGenerator fait déjà la validation et correction des formats
     return (
       <div style={{ 
         width: currentCode.size, 
@@ -106,13 +111,60 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         justifyContent: 'center',
         position: 'relative'
       }}>
-        <CodeComponent
-          value={currentCode.data}
-          size={currentCode.size * 0.95}
-        />
+        {generateQRCode(
+          currentCode.data,
+          currentCode.size * 0.95,
+          currentCode.rotate
+        )}
       </div>
     );
   };
+
+  // Fonction pour générer ou récupérer un QR code depuis le cache
+  const getQRCodeImage = useCallback(async (qrValue: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
+    // Créer une clé unique pour ce QR code
+    const cacheKey = `${qrValue}_${size}_${rotate}`;
+    
+    // Vérifier si le QR code est déjà dans le cache
+    if (qrCodeCache.current.has(cacheKey)) {
+      return qrCodeCache.current.get(cacheKey);
+    }
+    
+    // Générer un nouveau QR code
+    setCurrentCode({ data: qrValue, size, rotate });
+    
+    // Attendre que le code soit rendu
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    if (!codeContainerRef.current) {
+      console.error('Référence au conteneur de code manquante');
+      return null;
+    }
+    
+    try {
+      // Utiliser une échelle réduite pour html2canvas
+      const canvas = await html2canvas(codeContainerRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 1.5, // Réduit de 3-4 à 1.5
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+      
+      // Utiliser JPEG avec qualité réduite au lieu de PNG
+      const qrCodeBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      
+      // Ajouter au cache
+      qrCodeCache.current.set(cacheKey, qrCodeBase64);
+      
+      return qrCodeBase64;
+    } catch (qrError) {
+      console.error('Erreur lors de la capture du QR code:', qrError);
+      return null;
+    } finally {
+      setCurrentCode(null);
+    }
+  }, []);
 
   const generateContainerPDF = useCallback(async () => {
     if (!jsPDF) {
@@ -135,7 +187,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [labelWidth, labelHeight]
+        format: [labelWidth, labelHeight],
+        compress: true // Activer la compression du PDF
       });
 
       for (let i = 0; i < validItems.length; i++) {
@@ -144,7 +197,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         // Assurer que chaque conteneur a un code QR
         if (!item.qrCode) {
           console.warn(`QR code manquant pour le container ${item.name}, génération d'un code par défaut`);
-          item.qrCode = `CONTAINER_${item.id}_${Date.now()}`;
+          item.qrCode = `CONT_${item.id}_${Date.now()}`;
         }
 
         if (i > 0) {
@@ -174,55 +227,34 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         doc.setLineWidth(0.3);
         doc.line(margin + 5, margin + 40, labelWidth - margin - 5, margin + 40);
 
-        // Forcer la génération du QR code
-        setCurrentCode({ data: item.qrCode, size: 200 });
+        // Taille optimisée pour les QR codes
+        const qrSize = 70;
+
+        // Récupérer ou générer l'image du QR code
+        const qrCodeBase64 = await getQRCodeImage(item.qrCode, 240);
         
-        // Attendre que le code soit rendu
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        if (!codeContainerRef.current) {
-          console.error('Référence au conteneur de code manquante');
+        if (!qrCodeBase64) {
           doc.setFontSize(12);
           doc.text('QR code non disponible', labelWidth/2, margin + 75, { align: 'center' });
         } else {
-          try {
-            const canvas = await html2canvas(codeContainerRef.current, {
-              backgroundColor: '#ffffff',
-              scale: 2,
-              logging: true,
-              useCORS: true,
-              allowTaint: true
-            });
-            
-            const qrCodeBase64 = canvas.toDataURL('image/png');
-            const qrSize = 65;
-            
-            doc.addImage(
-              qrCodeBase64, 
-              'PNG',
-              (labelWidth - qrSize) / 2,
-              margin + 45,
-              qrSize, 
-              qrSize
-            );
-            
-          } catch (qrError) {
-            console.error('Erreur lors de la capture du QR code:', qrError);
-            doc.setFontSize(12);
-            doc.text('QR code non disponible', labelWidth/2, margin + 75, { align: 'center' });
-          }
+          // Centrer le QR code dans l'étiquette
+          doc.addImage(
+            qrCodeBase64, 
+            'JPEG',
+            (labelWidth - qrSize) / 2,
+            margin + 50,
+            qrSize, 
+            qrSize
+          );
         }
         
-        // Réinitialiser le code courant
-        setCurrentCode(null);
-
         // Description
         if (item.description) {
           doc.setFontSize(10);
           doc.setFont(undefined, 'normal');
           doc.setTextColor(0, 0, 0);
           const description = doc.splitTextToSize(item.description, labelWidth - (2 * margin) - 10);
-          doc.text(description, labelWidth/2, margin + 120, { align: 'center' });
+          doc.text(description, labelWidth/2, margin + 130, { align: 'center' });
         }
 
         setProgress(((i + 1) / validItems.length) * 100);
@@ -238,8 +270,10 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     } finally {
       setLoading(false);
       setProgress(0);
+      // Vider le cache après utilisation
+      qrCodeCache.current.clear();
     }
-  }, [validItems, handleComplete, onError, codeContainerRef]);
+  }, [validItems, handleComplete, onError, getQRCodeImage]);
 
   const generateItemsPDF = useCallback(async () => {
     if (!jsPDF) {
@@ -266,16 +300,17 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: 'a4'
+        format: 'a4',
+        compress: true // Activer la compression du PDF
       });
 
       for (let i = 0; i < validItems.length; i++) {
         const item = validItems[i];
         
-        // Assurer que chaque article a un code DataMatrix
+        // Assurer que chaque article a un code QR
         if (!item.qrCode) {
-          console.warn(`Code DataMatrix manquant pour l'article ${item.name}, génération d'un code par défaut`);
-          item.qrCode = `ITEM_${item.id}_${Date.now()}`;
+          console.warn(`QR code manquant pour l'article ${item.name}, génération d'un code par défaut`);
+          item.qrCode = `ART_${item.id}_${Date.now()}`;
         }
 
         if (i > 0 && i % totalLabelsPerPage === 0) {
@@ -294,82 +329,56 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         doc.setLineWidth(0.2);
         doc.rect(posX, posY, labelWidth, labelHeight);
         
-        // Titre
-        doc.setFontSize(10);
+        // Zone gauche pour le titre et le prix (environ 60% de la largeur)
+        const textZoneWidth = labelWidth * 0.58;
+        const qrZoneWidth = labelWidth - textZoneWidth;
+        const qrSize = 18;
+        const spaceBetween = 1;
+        
+        // Titre en haut à gauche
+        doc.setFontSize(9);
         doc.setFont(undefined, 'bold');
         doc.setTextColor(0, 0, 0);
-        const titleMaxWidth = labelWidth - 2;
+        const titleMaxWidth = textZoneWidth - 2;
         const titleText = doc.splitTextToSize(item.name, titleMaxWidth);
-        doc.text(titleText, posX + labelWidth/2, posY + 4, { align: 'center' });
+        const limitedTitle = titleText.slice(0, 2);
+        doc.text(limitedTitle, posX + textZoneWidth/2, posY + 5, { align: 'center' });
         
-        // Ligne séparatrice
-        doc.setLineWidth(0.2);
-        doc.setDrawColor(0, 0, 0);
-        doc.line(posX + 5, posY + 7, posX + labelWidth - 5, posY + 7);
-        
-        // Description (si présente)
-        if (item.description) {
-          doc.setFontSize(7);
-          doc.setFont(undefined, 'normal');
-          doc.setTextColor(0, 0, 0);
-          const descMaxWidth = labelWidth - 22; // Réservons de l'espace pour le code
-          const description = doc.splitTextToSize(item.description, descMaxWidth);
-          // Limiter à 2 lignes maximum pour la description
-          const limitedDesc = description.slice(0, 2);
-          doc.text(limitedDesc, posX + 2, posY + 11);
-        }
-        
-        // Prix (si présent)
+        // Prix (si présent) - centré dans la zone de texte, plus gros
         if (item.sellingPrice !== undefined) {
           doc.setFontSize(14);
           doc.setFont(undefined, 'bold');
           doc.setTextColor(0, 0, 0);
-          doc.text(`${item.sellingPrice}€`, posX + 12, posY + labelHeight - 5, { align: 'center' });
+          doc.text(`${item.sellingPrice}€`, posX + textZoneWidth/2, posY + 15, { align: 'center' });
         }
         
-        // DataMatrix - Génération directe
-        
-        // Forcer la génération du DataMatrix
-        setCurrentCode({ data: item.qrCode, size: 150 });
-        
-        // Attendre que le code soit rendu
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        if (!codeContainerRef.current) {
-          console.error('Référence au conteneur de code manquante');
+        // Description brève (si présente) - sous le prix 
+        if (item.description) {
           doc.setFontSize(6);
-          doc.text('Code non disponible', posX + labelWidth - 15, posY + labelHeight - 10);
-        } else {
-          try {
-            const canvas = await html2canvas(codeContainerRef.current, {
-              backgroundColor: '#ffffff',
-              scale: 2,
-              logging: false,
-              useCORS: true,
-              allowTaint: true
-            });
-            
-            const codeBase64 = canvas.toDataURL('image/png');
-            const codeSize = 15; // Taille réduite
-            
-            doc.addImage(
-              codeBase64, 
-              'PNG', 
-              posX + labelWidth - 17,
-              posY + labelHeight - 17,
-              codeSize, 
-              codeSize
-            );
-            
-          } catch (codeError) {
-            console.error('Erreur lors de la capture du DataMatrix:', codeError);
-            doc.setFontSize(6);
-            doc.text('Code non disponible', posX + labelWidth - 15, posY + labelHeight - 10);
-          }
+          doc.setFont(undefined, 'italic');
+          doc.setTextColor(80, 80, 80);
+          const descMaxWidth = textZoneWidth - 4;
+          const description = doc.splitTextToSize(item.description, descMaxWidth);
+          const limitedDesc = description.slice(0, 1);
+          doc.text(limitedDesc, posX + textZoneWidth/2, posY + 19, { align: 'center' });
         }
         
-        // Réinitialiser le code courant
-        setCurrentCode(null);
+        // QR code sur la droite (optimisé pour scanner)
+        const qrCodeBase64 = await getQRCodeImage(item.qrCode, 220, 'N');
+        
+        if (!qrCodeBase64) {
+          doc.setFontSize(6);
+          doc.text('QR code non disponible', posX + labelWidth - textZoneWidth/2, posY + labelHeight/2, { align: 'center' });
+        } else {
+          doc.addImage(
+            qrCodeBase64, 
+            'JPEG', 
+            posX + textZoneWidth + spaceBetween + (qrZoneWidth - spaceBetween - qrSize)/2,
+            posY + (labelHeight - qrSize)/2,
+            qrSize, 
+            qrSize
+          );
+        }
 
         setProgress(((i + 1) / validItems.length) * 100);
       }
@@ -384,8 +393,10 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     } finally {
       setLoading(false);
       setProgress(0);
+      // Vider le cache après utilisation
+      qrCodeCache.current.clear();
     }
-  }, [validItems, handleComplete, onError, codeContainerRef]);
+  }, [validItems, handleComplete, onError, getQRCodeImage]);
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as Sentry from '@sentry/react-native';
@@ -7,6 +7,8 @@ import { supabase } from '../config/supabase';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { MAX_PHOTO_SIZE, ALLOWED_PHOTO_TYPES, PHOTO_COMPRESSION_OPTIONS } from '../constants/photos';
 import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
+import { decode } from 'base64-arraybuffer';
+import { compressImage as compressImageUtil } from '../utils/imageCompression';
 
 const { STORAGE: { BUCKETS: { PHOTOS } } } = SUPABASE_CONFIG;
 const S3_URL = SUPABASE_CONFIG.S3_URL;
@@ -190,123 +192,178 @@ export const usePhoto = () => {
     }
   }, []);
 
-  // Fonction pour compresser une image
+  // Fonction pour compresser une image avec compression progressive
   const compressImage = useCallback(async (uri: string): Promise<string> => {
-    const { maxWidth, maxHeight, quality } = PHOTO_COMPRESSION_OPTIONS;
-
-    const result = await manipulateAsync(
-      uri,
-      [{ resize: { width: maxWidth, height: maxHeight } }],
-      { compress: quality, format: SaveFormat.JPEG }
-    );
-
-    return result.uri;
+    console.log(`[usePhoto] compressImage - Début de compression: ${uri.substring(0, 50)}...`);
+    try {
+      // Utiliser notre fonction utilitaire de compression
+      return await compressImageUtil(uri);
+    } catch (error) {
+      console.error(`[usePhoto] Erreur lors de la compression:`, error);
+      throw error;
+    }
   }, []);
 
   // Fonction pour charger une image avec cache et authentification Supabase
-  const loadImage = useCallback(async (path: string, cacheKey?: string) => {
-    console.log(`[usePhoto] loadImage - Début pour path: ${path}, cacheKey: ${cacheKey}`);
-    
-    // Si le chemin est vide, ne rien faire
+  const loadImage = useCallback(async (path: string): Promise<string | null> => {
+    try {
     if (!path) {
-      console.log(`[usePhoto] loadImage - Chemin vide, aucune action nécessaire`);
+        console.log(`[usePhoto] loadImage - Chemin vide, impossible de charger l'image`);
       return null;
     }
     
-    // Vérifier si c'est une URL blob ou une URI data (base64)
-    const isBlobUrl = path.startsWith('blob:');
-    const isDataUri = path.startsWith('data:');
-    
-    // Pour les URLs blob ou data URIs, on les utilise directement sans essayer de les télécharger
-    if (isBlobUrl || isDataUri) {
-      console.log(`[usePhoto] loadImage - Détection d'une ${isBlobUrl ? 'URL blob' : 'URI data'}, utilisation directe sans téléchargement`);
-      setState({ uri: path, loading: false, error: null });
-      return path;
-    }
-    
-    // Normaliser le chemin pour déterminer comment le traiter
-    const { normalizedPath, isFullUrl, isSignedUrl, filename } = normalizePath(path);
-    console.log(`[usePhoto] loadImage - Après normalisation: ${JSON.stringify({ normalizedPath, isFullUrl, isSignedUrl, filename })}`);
-    
-    // Vérifier le cache en mémoire pour le web
-    if (Platform.OS === 'web' && cacheKey && memoryCache[cacheKey]) {
-      console.log(`[usePhoto] loadImage - Image trouvée dans le cache mémoire pour la clé: ${cacheKey}`);
-      setState({ uri: memoryCache[cacheKey], loading: false, error: null });
-      return memoryCache[cacheKey];
-    }
-    
-    // Mettre à jour l'état pour indiquer le chargement
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    
-    try {
-      // Essayer de télécharger l'image avec l'authentification S3
-      console.log(`[usePhoto] loadImage - Tentative avec downloadImageWithS3Auth: ${filename}`);
-      const signedUrl = await downloadImageWithS3Auth(normalizedPath);
+      setState({ uri: null, loading: true, error: null });
+      console.log(`[usePhoto] loadImage - Début chargement: ${path.substring(0, 50)}...`);
+
+      // Normaliser le chemin pour les URLs signées
+      const pathInfo = normalizePath(path);
       
-      if (signedUrl) {
-        console.log(`[usePhoto] loadImage - URL signée récupérée (${Platform.OS}): ${signedUrl}`);
+      // Essayer d'abord avec download
+      if (pathInfo.normalizedPath) {
+        console.log(`[usePhoto] loadImage - Tentative avec chemin normalisé: ${pathInfo.normalizedPath}`);
         
-        // Mettre en cache pour le web
-        if (Platform.OS === 'web' && cacheKey) {
-          memoryCache[cacheKey] = signedUrl;
+        try {
+          const localUri = await downloadImageWithS3Auth(pathInfo.normalizedPath);
+          if (localUri) {
+            console.log(`[usePhoto] loadImage - Image téléchargée: ${localUri.substring(0, 50)}...`);
+            setState({ uri: localUri, loading: false, error: null });
+            return localUri;
+          }
+        } catch (downloadError) {
+          console.log(`[usePhoto] loadImage - Échec du téléchargement: ${downloadError}`);
+          // Continuer avec la tentative suivante
         }
-        
-        setState({ uri: signedUrl, loading: false, error: null });
-        return signedUrl;
-      }
-      
-      // Si pas d'URL signée mais que c'est une URL complète, l'utiliser directement
-      if (isFullUrl) {
-        console.log(`[usePhoto] loadImage - Utilisation directe de l'URL complète: ${path}`);
-        setState({ uri: path, loading: false, error: null });
-        return path;
       }
       
       // Sinon, essayer de récupérer l'URL publique
-      console.log(`[usePhoto] loadImage - Tentative avec getPublicUrl: ${normalizedPath}`);
-      const publicUrl = await getPublicUrlInternal(normalizedPath);
+      console.log(`[usePhoto] loadImage - Tentative avec getPublicUrl: ${pathInfo.normalizedPath}`);
+      
+      // Utiliser la fonction importée de imageUtils
+      const { getPublicImageUrl } = require('../utils/imageUtils');
+      const publicUrl = await getPublicImageUrl(pathInfo.normalizedPath);
       
       if (publicUrl) {
         console.log(`[usePhoto] loadImage - URL publique récupérée: ${publicUrl}`);
-        
-        // Mettre en cache pour le web
-        if (Platform.OS === 'web' && cacheKey) {
-          memoryCache[cacheKey] = publicUrl;
-        }
-        
         setState({ uri: publicUrl, loading: false, error: null });
         return publicUrl;
       }
       
-      // Si toutes les tentatives échouent, utiliser l'URI d'origine
-      console.log(`[usePhoto] loadImage - Aucune URL récupérée, utilisation de l'URI d'origine: ${path}`);
-      setState({ uri: path, loading: false, error: null });
-      return path;
+      // Si toutes les tentatives échouent
+      console.error(`[usePhoto] loadImage - Échec de récupération de l'image: ${path}`);
+      setState({ uri: null, loading: false, error: new Error(`Impossible de charger l'image: ${path}`) });
+      return null;
     } catch (error) {
       console.error(`[usePhoto] loadImage - Erreur:`, error);
-      setState(prev => ({ ...prev, loading: false, error: error instanceof Error ? error : new Error('Erreur de chargement') }));
-      throw error;
+      setState({ uri: null, loading: false, error: error as Error });
+      return null;
     }
   }, [normalizePath, downloadImageWithS3Auth]);
+
+  // Fonction pour supprimer une photo de Supabase Storage
+  const deletePhoto = useCallback(async (url: string): Promise<void> => {
+    try {
+      setState({ uri: null, loading: true, error: null });
+      console.log(`[usePhoto] deletePhoto - Début de la suppression pour: ${url.substring(0, 50)}...`);
+      
+      if (!url) {
+        console.warn(`[usePhoto] deletePhoto - URL vide, rien à supprimer`);
+        setState({ uri: null, loading: false, error: null });
+        return;
+      }
+      
+      // Extraire le nom du fichier de l'URL
+      const filename = extractFilenameFromUrl(url);
+      
+      if (!filename) {
+        console.error(`[usePhoto] deletePhoto - Impossible d'extraire le nom de fichier de l'URL: ${url}`);
+        throw new Error(`Impossible d'extraire le nom de fichier`);
+      }
+      
+      console.log(`[usePhoto] deletePhoto - Suppression du fichier: ${filename}`);
+      
+      // Supprimer le fichier via Supabase
+      const { error } = await supabase.storage
+        .from(PHOTOS)
+        .remove([filename]);
+        
+      if (error) {
+        console.error(`[usePhoto] deletePhoto - Erreur lors de la suppression:`, error);
+        setState({ uri: null, loading: false, error });
+        throw error;
+      }
+      
+      console.log(`[usePhoto] deletePhoto - Suppression réussie pour: ${filename}`);
+      setState({ uri: null, loading: false, error: null });
+    } catch (error) {
+      console.error(`[usePhoto] deletePhoto - Erreur:`, error);
+      setState({ 
+        uri: null, 
+        loading: false, 
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+      throw error;
+    }
+  }, []);
 
   // Fonction pour uploader une photo vers Supabase
   const uploadPhoto = useCallback(async (uri: string, shouldCompress = true, customFilename?: string): Promise<string | null> => {
     try {
+      setState({ uri: null, loading: true, error: null });
       console.log(`[usePhoto] uploadPhoto - Début pour URI: ${uri.substring(0, 50)}...`);
       
-      // Valider la photo
-      const isValid = await validatePhoto(uri);
-      if (!isValid) {
-        console.error(`[usePhoto] uploadPhoto - Photo invalide`);
-        throw new Error('Photo invalide');
+      // Détection de Safari iOS pour traitement spécifique
+      const isSafariIOS = Platform.OS === 'web' && 
+        typeof navigator !== 'undefined' && 
+        (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+         (/^((?!chrome|android).)*safari/i.test(navigator.userAgent) && /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)));
+      
+      if (isSafariIOS) {
+        console.log(`[usePhoto] Détection de Safari iOS, traitement spécifique`);
       }
       
+      // Toujours compresser d'abord pour éviter les rejets inutiles
       let processedUri = uri;
-      
-      // Pour les plateformes natives uniquement, compresser si demandé
-      if (shouldCompress && Platform.OS !== 'web') {
-        console.log(`[usePhoto] uploadPhoto - Compression de l'image avant upload (plateformes natives uniquement)`);
-        processedUri = await compressImage(uri);
+      if (shouldCompress) {
+        console.log(`[usePhoto] uploadPhoto - Compression préalable de l'image`);
+        try {
+          processedUri = await compressImage(uri);
+          console.log(`[usePhoto] Compression terminée`);
+          
+          // Vérifier si la compression a fonctionné
+          if (processedUri === uri && isSafariIOS) {
+            console.warn(`[usePhoto] La compression n'a pas changé l'URI sur Safari iOS, réessai avec Canvas`);
+            // Sur Safari iOS, si la compression n'a pas fonctionné, essayer une autre approche
+            if (uri.startsWith('data:')) {
+              try {
+                // Créer une image et un canvas pour forcer une conversion
+                const img = new Image();
+                await new Promise<void>((resolve, reject) => {
+                  img.onload = () => resolve();
+                  img.onerror = (e) => reject(new Error('Échec de chargement de l\'image'));
+                  img.src = uri;
+                });
+                
+                const canvas = document.createElement('canvas');
+                const maxDim = 1200;
+                const ratio = Math.min(maxDim / img.width, maxDim / img.height);
+                canvas.width = img.width * ratio;
+                canvas.height = img.height * ratio;
+                
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  processedUri = canvas.toDataURL('image/jpeg', 0.8);
+                  console.log(`[usePhoto] Conversion forcée via Canvas réussie`);
+                }
+              } catch (canvasError) {
+                console.error(`[usePhoto] Échec de la conversion forcée:`, canvasError);
+              }
+            }
+          }
+        } catch (compressError) {
+          console.error(`[usePhoto] Erreur de compression, utilisation de l'original:`, compressError);
+          // Continuer avec l'URI d'origine
+        }
       }
       
       // Générer un nom de fichier unique
@@ -315,247 +372,262 @@ export const usePhoto = () => {
       
       console.log(`[usePhoto] uploadPhoto - Préparation de l'upload vers ${PHOTOS}/${filename}`);
       
-      // Pour le web, traitement spécial pour les URIs base64 et les URLs blob
-      if (Platform.OS === 'web') {
-        console.log(`[usePhoto] uploadPhoto - Mode d'upload web détecté`);
-        
-        // Vérifier si c'est une URI base64
-        if (processedUri.startsWith('data:')) {
-          console.log(`[usePhoto] uploadPhoto - Upload base64 sur le web`);
+      try {
+        // Cas spécial pour les URI data (base64) sur le web
+        if (Platform.OS === 'web' && processedUri.startsWith('data:')) {
+          console.log(`[usePhoto] Upload base64 sur le web`);
           
-          // Extraire le type MIME et les données base64
+          // Extraire les données base64 et le type MIME
           const matches = processedUri.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-          if (!matches) {
+          
+          if (!matches || matches.length !== 3) {
             throw new Error('Format de données base64 invalide');
           }
           
-          const mimeType = matches[1];
+          const contentType = matches[1];
           const base64Data = matches[2];
           
-          // Convertir les données base64 en ArrayBuffer pour l'upload
-          const binaryString = atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+          // Vérifier la validité du base64 pour Safari iOS
+          if (isSafariIOS) {
+            try {
+              // Vérifier si le base64 est valide en essayant de le décodifier
+              const validCheck = atob(base64Data.trim());
+              console.log(`[usePhoto] Base64 valide sur Safari iOS, longueur: ${validCheck.length}`);
+            } catch (base64Error) {
+              console.error(`[usePhoto] Base64 invalide sur Safari iOS:`, base64Error);
+              throw new Error('Format base64 invalide sur Safari iOS');
+            }
           }
           
-          // Upload avec ArrayBuffer
-          const { data, error } = await supabase
-            .storage
-            .from(PHOTOS)
-            .upload(filename, bytes.buffer, {
-              contentType: mimeType,
-              upsert: true
+          // Créer un blob à partir des données base64
+          const blob = await (async () => {
+            try {
+              const response = await fetch(processedUri);
+              if (!response.ok) {
+                throw new Error(`Échec de récupération de l'image: ${response.status}`);
+              }
+              return response.blob();
+            } catch (blobError) {
+              console.error(`[usePhoto] Erreur de création de blob:`, blobError);
+              
+              // Méthode alternative pour créer un blob à partir de base64
+              if (isSafariIOS) {
+                console.log(`[usePhoto] Tentative de création alternative de blob pour Safari iOS`);
+                try {
+                  const byteCharacters = atob(base64Data);
+                  const byteArrays = [];
+                  
+                  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                    const slice = byteCharacters.slice(offset, offset + 512);
+                    
+                    const byteNumbers = new Array(slice.length);
+                    for (let i = 0; i < slice.length; i++) {
+                      byteNumbers[i] = slice.charCodeAt(i);
+                    }
+                    
+                    const byteArray = new Uint8Array(byteNumbers);
+                    byteArrays.push(byteArray);
+                  }
+                  
+                  return new Blob(byteArrays, { type: contentType });
+                } catch (altBlobError) {
+                  console.error(`[usePhoto] Échec de la méthode alternative:`, altBlobError);
+                  throw blobError; // Réutiliser l'erreur d'origine
+                }
+              } else {
+                throw blobError;
+              }
+            }
+          })();
+          
+          console.log(`[usePhoto] Blob créé: ${blob.size} octets`);
+          
+          // Upload spécifique pour Safari iOS
+          if (isSafariIOS) {
+            console.log(`[usePhoto] Méthode d'upload spécifique pour Safari iOS`);
+            
+            try {
+              // Méthode 1: Upload direct en ArrayBuffer
+              const arrayBuffer = await blob.arrayBuffer();
+              const uint8Array = new Uint8Array(arrayBuffer);
+              
+              console.log(`[usePhoto] Préparation ArrayBuffer: ${uint8Array.length} octets`);
+              
+              const { data, error: uploadError } = await supabase.storage
+                .from(PHOTOS)
+                .upload(filename, uint8Array, {
+                  contentType: 'image/jpeg',
+                  cacheControl: '3600'
+                });
+                
+              if (uploadError) {
+                throw uploadError;
+              }
+              
+              console.log(`[usePhoto] Upload réussi avec ArrayBuffer:`, data);
+              
+              // Récupérer l'URL publique
+              if (data) {
+                const { data: publicUrlData } = supabase.storage
+                .from(PHOTOS)
+                .getPublicUrl(data.path);
+              
+                const publicUrl = publicUrlData?.publicUrl;
+                if (!publicUrl) {
+                  throw new Error('Échec de la génération de l\'URL publique');
+                }
+                
+                setState({ uri: processedUri, loading: false, error: null });
+                return publicUrl;
+              }
+            } catch (directUploadError) {
+              console.error(`[usePhoto] Échec de l'upload direct:`, directUploadError);
+              
+              // Si l'upload direct échoue, essayons une autre méthode
+              console.log(`[usePhoto] Tentative alternative d'upload pour Safari iOS`);
+              
+              try {
+                // Méthode 2: Upload via base64 brut
+                const { data, error: uploadError } = await supabase.storage
+                  .from(PHOTOS)
+                  .upload(filename, decode(base64Data), {
+                    contentType: 'image/jpeg',
+                    cacheControl: '3600'
+                  });
+                  
+                if (uploadError) {
+                  throw uploadError;
+                }
+                
+                console.log(`[usePhoto] Upload réussi avec base64:`, data);
+                
+                // Récupérer l'URL publique
+                if (data) {
+                  const { data: publicUrlData } = supabase.storage
+                  .from(PHOTOS)
+                  .getPublicUrl(data.path);
+                
+                  const publicUrl = publicUrlData?.publicUrl;
+                  if (!publicUrl) {
+                    throw new Error('Échec de la génération de l\'URL publique');
+                  }
+                  
+                  setState({ uri: processedUri, loading: false, error: null });
+                  return publicUrl;
+                }
+              } catch (base64UploadError) {
+                console.error(`[usePhoto] Échec de l'upload base64:`, base64UploadError);
+                throw base64UploadError;
+              }
+            }
+          } else {
+            // Upload standard avec le Blob pour les autres navigateurs
+            const formData = new FormData();
+            formData.append('file', blob, filename);
+            
+            const { data, error: uploadError } = await supabase.storage
+              .from(PHOTOS)
+              .upload(filename, formData, {
+                contentType,
+                cacheControl: '3600'
+              });
+              
+            if (uploadError) {
+              console.error(`[usePhoto] Erreur d'upload Supabase:`, uploadError);
+              setState({ uri: null, loading: false, error: uploadError });
+              throw uploadError;
+            }
+            
+            console.log(`[usePhoto] Upload réussi:`, data);
+            
+            // Récupérer l'URL publique
+            if (data) {
+              const { data: publicUrlData } = supabase.storage
+              .from(PHOTOS)
+              .getPublicUrl(data.path);
+            
+              const publicUrl = publicUrlData?.publicUrl;
+              if (!publicUrl) {
+                throw new Error('Échec de la génération de l\'URL publique');
+              }
+              
+              setState({ uri: processedUri, loading: false, error: null });
+              return publicUrl;
+            }
+          }
+        } 
+        // Pour les autres plateformes
+        else {
+          console.log(`[usePhoto] Upload fichier local`);
+          
+          // Normaliser l'URI pour FileSystem
+          const pathInfo = normalizePath(processedUri);
+          const fileUri = pathInfo.normalizedPath;
+          
+          try {
+            // Lire le fichier en base64 pour l'uploader
+            const base64File = await FileSystem.readAsStringAsync(fileUri, {
+              encoding: FileSystem.EncodingType.Base64,
             });
-          
-          if (error) {
-            console.error(`[usePhoto] uploadPhoto - Erreur Supabase:`, error);
-            throw error;
-          }
-          
-          if (!data) {
-            throw new Error('Aucune donnée retournée par Supabase');
-          }
-          
-          // Obtenir l'URL publique
-          const { data: publicUrlData } = supabase
-            .storage
-            .from(PHOTOS)
-            .getPublicUrl(data.path);
-          
-          console.log(`[usePhoto] uploadPhoto - Upload réussi, URL publique:`, publicUrlData?.publicUrl);
-          return publicUrlData?.publicUrl || null;
-        }
-        
-        // Pour les URLs blob sur le web
-        else if (processedUri.startsWith('blob:')) {
-          console.log(`[usePhoto] uploadPhoto - Upload blob URL sur le web`);
-          
-          // Récupérer le blob
-          const response = await fetch(processedUri);
-          const blob = await response.blob();
-          
-          // Upload avec blob
-          const { data, error } = await supabase
-            .storage
-            .from(PHOTOS)
-            .upload(filename, blob, {
-              contentType: blob.type,
-              upsert: true
-            });
-          
-          if (error) {
-            console.error(`[usePhoto] uploadPhoto - Erreur Supabase:`, error);
-            throw error;
-          }
-          
-          if (!data) {
-            throw new Error('Aucune donnée retournée par Supabase');
-          }
-          
-          // Obtenir l'URL publique
-          const { data: publicUrlData } = supabase
-            .storage
-            .from(PHOTOS)
-            .getPublicUrl(data.path);
-          
-          console.log(`[usePhoto] uploadPhoto - Upload réussi, URL publique:`, publicUrlData?.publicUrl);
-          return publicUrlData?.publicUrl || null;
-        }
-      }
-      
-      // Pour les plateformes natives ou les autres types d'URI sur le web
-      const formData = new FormData();
-      
-      // Préparer le fichier selon la plateforme
-      if (Platform.OS === 'web') {
-        // Sur le web, créer un objet file à partir de l'URI
-        const response = await fetch(processedUri);
-        const blob = await response.blob();
-        const file = new File([blob], filename, { type: blob.type });
-        formData.append('file', file);
-      } else {
-        // Sur mobile, ajouter l'URI directement
-        formData.append('file', {
-          uri: processedUri,
-          name: filename,
-          type: 'image/jpeg'
-        } as any);
-      }
-      
-      console.log(`[usePhoto] uploadPhoto - Début upload vers Supabase, bucket: ${PHOTOS}`);
+            
+            // Upload avec l'API Supabase
       const { data, error: uploadError } = await supabase.storage
         .from(PHOTOS)
-        .upload(filename, formData, {
+              .upload(filename, decode(base64File), {
           contentType: 'image/jpeg',
           cacheControl: '3600'
         });
 
       if (uploadError) {
-        console.error(`[usePhoto] uploadPhoto - Erreur d'upload Supabase:`, uploadError);
-        setState(prev => ({ ...prev, loading: false, error: uploadError }));
+              console.error(`[usePhoto] uploadPhoto - Erreur d'upload Supabase (native):`, uploadError);
+              setState({ uri: null, loading: false, error: uploadError });
         throw uploadError;
       }
-      console.log(`[usePhoto] uploadPhoto - Upload réussi, data:`, data);
 
-      // Si besoin de l'URL publique
+            console.log(`[usePhoto] uploadPhoto - Upload réussi:`, data);
+
       if (data) {
-        console.log(`[usePhoto] uploadPhoto - Génération de l'URL publique`);
         const { data: publicUrlData } = supabase.storage
           .from(PHOTOS)
           .getPublicUrl(data.path);
 
         const publicUrl = publicUrlData?.publicUrl;
         if (!publicUrl) {
-          console.error(`[usePhoto] uploadPhoto - Échec de génération d'URL publique`);
-          setState(prev => ({ ...prev, loading: false, error: new Error('Échec de la génération d\'URL publique') }));
           throw new Error('Échec de la génération de l\'URL publique');
         }
         
-        console.log(`[usePhoto] uploadPhoto - URL publique générée:`, publicUrl);
         setState({ uri: processedUri, loading: false, error: null });
         return publicUrl;
-      }
-
-      // Sinon retourner juste le nom du fichier
-      console.log(`[usePhoto] uploadPhoto - Retour du nom de fichier:`, filename);
+            }
+          } catch (fileError) {
+            console.error(`[usePhoto] Erreur de lecture du fichier:`, fileError);
+            setState({ uri: null, loading: false, error: fileError as Error });
+            throw fileError;
+          }
+        }
+        
       setState({ uri: processedUri, loading: false, error: null });
       return filename;
-    } catch (error) {
-      console.error(`[usePhoto] uploadPhoto - Erreur fatale:`, error);
-      const finalError = error instanceof Error ? error : new Error('Échec de l\'upload');
-      setState(prev => ({ ...prev, loading: false, error: finalError }));
-      throw finalError;
-    }
-  }, [validatePhoto, compressImage, normalizePath]);
-
-  // Fonction pour supprimer une photo
-  const deletePhoto = useCallback(async (path: string): Promise<void> => {
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-
-      // Normaliser le chemin pour obtenir juste le nom de fichier
-      const { normalizedPath, filename, isSignedUrl } = normalizePath(path);
-      
-      // Déterminer le nom de fichier à supprimer
-      let fileToDelete = '';
-      
-      if (isSignedUrl) {
-        fileToDelete = filename;
-      } else if (path.includes('/')) {
-        fileToDelete = path.split('/').pop() || '';
-      } else {
-        fileToDelete = path;
-      }
-      
-      if (!fileToDelete) {
-        throw new Error('URL de photo invalide');
-      }
-      
-      console.log(`Suppression du fichier: ${fileToDelete}`);
-
-      const { error } = await supabase.storage
-        .from(PHOTOS)
-        .remove([fileToDelete]);
-
-      if (error) {
-        console.error('Erreur lors de la suppression:', error);
-        throw error;
-      }
-
-      setState(prev => ({ ...prev, loading: false, error: null }));
-    } catch (error) {
-      const finalError = error instanceof Error ? error : new Error('Échec de la suppression');
-      setState(prev => ({ ...prev, loading: false, error: finalError }));
-      throw finalError;
-    }
-  }, [normalizePath]);
-
-  // Fonction pour récupérer l'URL publique d'une image
-  const getPublicUrlInternal = useCallback(async (path: string): Promise<string | null> => {
-    try {
-      console.log(`[usePhoto] getPublicUrl - Début pour: ${path}`);
-      
-      // Normaliser le chemin
-      let normalizedPath = path;
-      
-      // Si le chemin est une URL complète, extraire le nom du fichier
-      if (path.startsWith('http')) {
-        normalizedPath = extractFilenameFromUrl(path);
-      }
-      
-      // Si le chemin contient déjà le bucket, extraire le chemin relatif
-      if (path.includes(`/${PHOTOS}/`)) {
-        normalizedPath = path.substring(path.indexOf(`${PHOTOS}/`) + PHOTOS.length + 1);
-      }      
-      const { data } = supabase.storage
-        .from(PHOTOS)
-        .getPublicUrl(normalizedPath);
         
-      if (!data?.publicUrl) {
-        console.error(`[usePhoto] getPublicUrl - Échec de récupération de l'URL publique`);
-        return null;
+      } catch (uploadError) {
+        console.error(`[usePhoto] Erreur pendant l'upload:`, uploadError);
+        setState({ 
+          uri: null, 
+          loading: false, 
+          error: uploadError instanceof Error ? uploadError : new Error(String(uploadError))
+        });
+        throw uploadError;
       }
-      
-      console.log(`[usePhoto] getPublicUrl - URL publique récupérée: ${data.publicUrl}`);
-      return data.publicUrl;
     } catch (error) {
-      console.error(`[usePhoto] getPublicUrl - Erreur:`, error);
-      return null;
+      console.error(`[usePhoto] Erreur globale:`, error);
+      setState({ 
+        uri: null, 
+        loading: false, 
+        error: error instanceof Error ? error : new Error(String(error))
+      });
+      throw error;
     }
-  }, []);
+  }, [compressImage, normalizePath]);
 
-  // Fonction publique pour récupérer l'URL publique (pour l'API externe)
-  const getPublicUrl = useCallback(async (path: string): Promise<string | null> => {
-    return getPublicUrlInternal(path);
-  }, [getPublicUrlInternal]);
-
-  return {
-    ...state,
-    loadImage,
-    uploadPhoto,
-    deletePhoto,
-    validatePhoto,
-    getPublicUrl
-  };
+  return { state, loadImage, uploadPhoto, deletePhoto, compressImage };
 }; 

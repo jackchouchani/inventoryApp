@@ -2,7 +2,6 @@ import React from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 
 export default function Index() {
-  
   return (
     <View style={styles.container}>
       <Text style={styles.redirectText}>Chargement de l'application...</Text>

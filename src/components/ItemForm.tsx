@@ -298,63 +298,74 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
      * Mutation pour l'ajout d'un item avec React Query
      */
     const addItemMutation = useMutation({
-        mutationFn: async (newItem: ItemFormState) => {
-            const qrCode = generateId('ITEM');
-            let photoUrl: string | undefined = undefined;
-
-            // Si la photo a une URL Supabase, l'utiliser directement sans ré-upload
-            if (newItem.photo_storage_url && (
-                newItem.photo_storage_url.includes('supabase.co') || 
-                !localImage?.needsUpload
-            )) {
-                photoUrl = newItem.photo_storage_url;
+        mutationFn: async (formData: ItemFormState) => {
+            try {
+                const qrCode = generateId('ITEM');
+                const uploadedUrl = formData.photo_storage_url;
+                
+                // Assurer que categoryId n'est pas null (mais peut être undefined)
+                const categoryId = formData.categoryId || undefined;
+                
+                const data: ItemInput = {
+                    name: formData.name.trim(),
+                    description: formData.description.trim(),
+                    purchasePrice: parseFloat(formData.purchasePrice),
+                    sellingPrice: parseFloat(formData.sellingPrice),
+                    status: formData.status,
+                    photo_storage_url: uploadedUrl,
+                    containerId: formData.containerId || null,
+                    categoryId, // Utilisez la version sans null
+                    qrCode
+                };
+                
+                // Optimistic update
+                queryClient.setQueryData(['items'], (oldData: Item[] = []) => {
+                    const tempItem: Item = {
+                        ...data,
+                        id: Date.now(), // ID temporaire pour l'update optimiste
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    return [...oldData, tempItem];
+                });
+                
+                // Réelle insertion en base de données
+                const itemId = await database.addItem(data);
+                
+                // Mettre à jour le cache avec le vrai ID
+                queryClient.setQueryData(['items'], (oldData: Item[] = []) => {
+                    return oldData.map(item => 
+                        item.id === Date.now() ? { ...item, id: itemId } : item
+                    );
+                });
+                
+                // Rafraîchir les données pour être sûr
+                await queryClient.invalidateQueries({ queryKey: ['items'] });
+                triggerRefresh();
+                
+                // Créer un objet Item à partir de ItemInput pour le dispatch
+                const itemForRedux: Item = {
+                    ...data,
+                    id: itemId,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                // Dispatch pour le store Redux
+                dispatch(addItem(itemForRedux));
+                
+                resetForm();
+                onSuccess?.();
+                
+                return itemId;
+            } catch (error) {
+                console.error('Error in addItemMutation:', error);
+                handleError(error, 'Erreur lors de l\'ajout de l\'article', {
+                    source: 'addItemMutation',
+                    showAlert: true
+                });
+                throw error;
             }
-            // Si c'est une autre forme d'URL et qu'un upload est nécessaire, l'upload a déjà dû être fait dans handleSubmit
-            // Nous n'avons plus besoin de faire un upload ici
-
-            if (!newItem.categoryId) {
-                throw new Error('La catégorie est requise');
-            }
-
-            const itemToAdd: ItemInput = {
-                name: newItem.name.trim(),
-                description: newItem.description.trim(),
-                purchasePrice: parseFloat(newItem.purchasePrice),
-                sellingPrice: parseFloat(newItem.sellingPrice),
-                status: 'available',
-                photo_storage_url: photoUrl,
-                containerId: newItem.containerId || null,
-                categoryId: newItem.categoryId,
-                qrCode
-            };
-
-            // Ajouter l'item et récupérer son ID
-            const itemId = await database.addItem(itemToAdd);
-
-            // Construire l'objet complet pour Redux
-            const completeItem: Item = {
-                id: itemId,
-                ...itemToAdd,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-
-            return completeItem;
-        },
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ['items'] });
-            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-            dispatch(addItem(data));
-            triggerRefresh();
-            resetForm();
-            if (onSuccess) onSuccess();
-        },
-        onError: (error) => {
-            handleError(error, 'Erreur lors de l\'ajout de l\'article', {
-                source: 'item_form',
-                message: 'Impossible d\'ajouter l\'article',
-                showAlert: true
-            });
         }
     });
 

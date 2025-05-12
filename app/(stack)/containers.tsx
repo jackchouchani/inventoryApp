@@ -254,44 +254,87 @@ const ContainerScreen = () => {
   const handleConfirmDelete = useCallback(async () => {
     const containerId = confirmDialog.containerId;
     if (!containerId) return;
-    
+
     try {
-      
+      // Étape 1: Détacher tous les articles associés à ce conteneur dans la base de données
+      // Cela met à jour le champ container_id des articles liés à null.
+      const { error: updateItemsError } = await supabase
+        .from('items')
+        .update({ container_id: null, updated_at: new Date().toISOString() })
+        .eq('container_id', containerId);
+
+      if (updateItemsError) {
+        console.error('Erreur lors du détachement des articles dans Supabase:', updateItemsError);
+        // Si le détachement des articles échoue, on peut choisir d'arrêter ou de continuer.
+        // Pour une soft delete, il pourrait être acceptable de continuer même si le détachement échoue,
+        // mais l'idéal est que les articles ne soient plus liés à un container "supprimé".
+        // Lançons une erreur pour l'instant pour signaler le problème.
+        throw new Error(`Impossible de détacher les articles du container : ${updateItemsError.message}`);
+      }
+
+      console.log(`[Supabase] Articles détachés pour container ${containerId}.`);
+
+      // Étape 2: Effectuer la suppression douce du conteneur dans Supabase
+      // On met à jour le champ 'deleted' à true au lieu de supprimer la ligne.
+      const { error: softDeleteContainerError } = await supabase
+        .from('containers')
+        .update({ deleted: true, updated_at: new Date().toISOString() }) // Assurez-vous que 'deleted' est le bon nom de colonne et qu'elle existe.
+        .eq('id', containerId);
+
+      if (softDeleteContainerError) {
+        console.error('Erreur lors de la suppression douce du conteneur dans Supabase:', softDeleteContainerError);
+        // Si la suppression douce échoue
+        throw new Error(`Impossible de marquer le container comme supprimé : ${softDeleteContainerError.message}`);
+      }
+
+      console.log(`[Supabase] Container ${containerId} marqué comme supprimé.`);
+
+      // Étape 3: Si les opérations Supabase réussissent, mettre à jour l'état local (Redux)
+      // Supprimer le conteneur de l'état Redux (car l'UI ne doit plus l'afficher)
       dispatch(removeContainer(containerId));
-      
+      console.log(`[Redux] Container ${containerId} retiré de l'état local (UI).`);
+
+
+      // Mettre à jour localement les items qui étaient dans ce container pour les "détacher" dans Redux
       const itemsInContainer = items.filter(item => item.containerId === containerId);
+       console.log(`[Redux] Trouvé ${itemsInContainer.length} articles à détacher localement.`);
+
       itemsInContainer.forEach(item => {
         if (item.id) {
           dispatch(updateItem({
             ...item,
             containerId: null,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString() // Mettre à jour la date localement aussi
           }));
+           console.log(`[Redux] Article ${item.id} détaché localement.`);
         }
       });
-      
-      setSelectedContainer(null);
-      
-      const { error } = await supabase
-        .from('containers')
-        .delete()
-        .eq('id', containerId);
 
-      if (error) {
-        console.error('Erreur lors de la suppression:', error);
-        throw error;
-      }
-      
+
+      setSelectedContainer(null); // Fermer la modale du container
+
+      // Invalider les caches React Query pour forcer le rafraîchissement des données
+      // Cela est crucial pour que la liste des containers ne recharge pas le container "supprimé".
       queryClient.invalidateQueries({ queryKey: ['containers'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      
+      queryClient.invalidateQueries({ queryKey: ['inventory'] }); // Souvent l'inventaire inclut les containers et items
+      queryClient.invalidateQueries({ queryKey: ['items'] }); // Invalider aussi les items car certains ont été mis à jour
+
+      console.log('[React Query] Caches invalidés.');
+
+      // Déclencher un rafraîchissement global si nécessaire
       triggerRefresh();
-    } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      if (error instanceof Error || error instanceof PostgrestError) {
-        handleDatabaseError(error);
-      }
+      console.log('[App] Refresh global déclenché.');
+
+
+    } catch (error: any) {
+      console.error('Erreur globale lors de la suppression douce du container:', error);
+      // Afficher une alerte à l'utilisateur
+      Alert.alert('Erreur de suppression', error.message || 'Une erreur inconnue est survenue lors de la suppression du container.');
+
+      // Ne pas modifier l'état local si les opérations BD ont échoué.
+
     } finally {
+      // Quoi qu'il arrive, fermer la boîte de dialogue de confirmation
       setConfirmDialog({ visible: false, containerId: null });
     }
   }, [confirmDialog.containerId, dispatch, items, queryClient, triggerRefresh, setSelectedContainer]);

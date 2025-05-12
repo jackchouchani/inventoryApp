@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Text, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, FlatList } from 'react-native';
 import ItemList from '../../src/components/ItemList';
-import { FilterBar } from '../../src/components/FilterBar';
+// import { FilterBar } from '../../src/components/FilterBar'; // Temporarily remove or replace
 import { useDispatch } from 'react-redux';
-import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { useStockActions } from '../../src/hooks/useStockActions';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import type { Item } from '../../src/types/item';
@@ -16,8 +15,14 @@ import { setContainers } from '../../src/store/containersSlice';
 import * as Sentry from '@sentry/react-native';
 import { useRefreshStore } from '../../src/store/refreshStore';
 
+// Algolia imports
+import { InstantSearch, Configure } from 'react-instantsearch-hooks-web';
+import { searchClient, INDEX_NAME } from '../../src/config/algolia';
+import { useAlgoliaSearch } from '../../src/hooks/useAlgoliaSearch';
+import { useFocusEffect } from '@react-navigation/native';
+
+// Interface pour les filtres de stock - maintenu pour référence future
 interface StockFilters {
-  search?: string;
   categoryId?: number;
   containerId?: number | 'none';
   status?: 'all' | 'available' | 'sold';
@@ -26,15 +31,14 @@ interface StockFilters {
 }
 
 interface StockData {
-  items: Item[];
   categories: Category[];
   containers: Container[];
 }
 
 const QUERY_KEYS = {
-  containers: 'containers',
-  categories: 'categories',
-  items: 'items'
+  allData: 'allData',
+  categoriesOnly: 'categoriesOnly',
+  containersOnly: 'containersOnly',
 } as const;
 
 const CACHE_CONFIG = {
@@ -45,68 +49,138 @@ const CACHE_CONFIG = {
 
 type QueryError = Error;
 
-export default function StockScreen() {
-  const [filter, setFilter] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<number | undefined>(undefined);
-  const [selectedContainer, setSelectedContainer] = useState<number | 'none' | undefined>(undefined);
-  const [selectedStatus, setSelectedStatus] = useState<'all' | 'available' | 'sold'>('all');
-  const [priceRange, setPriceRange] = useState<{ min?: number; max?: number }>({});
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+// Composant de recherche simple pour Algolia
+const AlgoliaSearchBox = () => {
+  const { query, search } = useAlgoliaSearch();
+  const [inputValue, setInputValue] = useState(query || '');
   
+  const onChangeText = (newQuery: string) => {
+    setInputValue(newQuery);
+    search(newQuery);
+  };
+  
+  // Synchroniser l'input avec la query actuelle
+  useEffect(() => {
+    if (query !== inputValue) {
+      setInputValue(query);
+    }
+  }, [query]);
+
+  return (
+    <View style={styles.searchBoxContainer}>
+      <TextInput
+        style={styles.searchBoxInput}
+        value={inputValue}
+        onChangeText={onChangeText}
+        placeholder="Rechercher des articles..."
+        placeholderTextColor="#999"
+        clearButtonMode="always"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
+};
+
+// Helper debounce function n'est plus nécessaire, il est dans useAlgoliaSearch
+
+const MemoizedItemList = React.memo(ItemList);
+
+const StockScreenContent = () => {
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   
-  // Récupérer les catégories depuis la base de données avec React Query
+  // Utiliser notre hook personnalisé
   const { 
-    data: categories = [], 
-    isLoading: categoriesLoading, 
-    error: categoriesError 
+    items: itemsFromAlgolia, 
+    isLoading: isAlgoliaLoading,
+    status: algoliaStatus,
+    isLastPage,
+    loadMore,
+    refresh: refreshAlgolia,
+    nbHits,
+    currentPage
+  } = useAlgoliaSearch();
+
+  // Pour le débogage, surveiller les changements d'items
+  useEffect(() => {
+    console.log(`[Stock] Items count: ${itemsFromAlgolia.length}/${nbHits}, isLastPage: ${isLastPage}, status: ${algoliaStatus}, currentPage: ${currentPage}`);
+  }, [itemsFromAlgolia.length, nbHits, isLastPage, algoliaStatus, currentPage]);
+
+  // Rafraîchir les données quand on revient sur cet écran
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[Stock] Screen focused, refreshing data');
+      refreshAlgolia();
+      return () => {
+        console.log('[Stock] Screen unfocused');
+      };
+    }, [refreshAlgolia])
+  );
+
+  const stableCallbacks = useRef({
+    handleItemPress: (item: Item) => {
+      setSelectedItem(item);
+    },
+    handleEditSuccess: () => {
+      setSelectedItem(null);
+      refreshAlgolia();
+    },
+    handleEditCancel: () => {
+      setSelectedItem(null);
+    },
+    handleLoadMore: () => {
+      console.log(`[Stock] Load more triggered. Current count: ${itemsFromAlgolia.length}/${nbHits}`);
+      loadMore();
+    }
+  }).current;
+
+  // Mettre à jour les références stables quand les dépendances changent
+  useEffect(() => {
+    stableCallbacks.handleLoadMore = () => {
+      console.log(`[Stock] Load more triggered. Current count: ${itemsFromAlgolia.length}/${nbHits}`);
+      loadMore();
+    };
+  }, [loadMore, itemsFromAlgolia.length, nbHits]);
+
+  const { 
+    data: categoriesData, 
+    isLoading: isLoadingCategories, 
+    error: errorCategories 
   } = useQuery<Category[], QueryError>({
-    queryKey: [QUERY_KEYS.categories, refreshTimestamp],
+    queryKey: [QUERY_KEYS.categoriesOnly, refreshTimestamp],
     queryFn: async () => {
       try {
         const data = await database.getCategories();
-        // Mettre à jour le store Redux avec les catégories récupérées
         if (data && data.length > 0) {
           dispatch(setCategories(data));
         }
         return data || [];
       } catch (error) {
-        if (error instanceof Error) {
-          Sentry.captureException(error, {
-            tags: { type: 'categories_fetch_error' }
-          });
-          throw error;
-        }
+        Sentry.captureException(error, { tags: { type: 'categories_fetch_error' } });
         throw new Error('Erreur lors de la récupération des catégories');
       }
     },
     ...CACHE_CONFIG
   });
-  
-  // Récupérer les containers depuis la base de données avec React Query
+
   const { 
-    data: containers = [], 
-    isLoading: containersLoading, 
-    error: containersError 
+    data: containersData, 
+    isLoading: isLoadingContainers, 
+    error: errorContainers 
   } = useQuery<Container[], QueryError>({
-    queryKey: [QUERY_KEYS.containers, refreshTimestamp],
+    queryKey: [QUERY_KEYS.containersOnly, refreshTimestamp],
     queryFn: async () => {
       try {
         const data = await database.getContainers();
-        // Mettre à jour le store Redux avec les containers récupérés
         if (data && data.length > 0) {
           dispatch(setContainers(data));
         }
         return data || [];
       } catch (error) {
-        if (error instanceof Error) {
-          Sentry.captureException(error, {
-            tags: { type: 'containers_fetch_error' }
-          });
-          throw error;
-        }
+        Sentry.captureException(error, { tags: { type: 'containers_fetch_error' } });
         throw new Error('Erreur lors de la récupération des containers');
       }
     },
@@ -115,37 +189,9 @@ export default function StockScreen() {
   
   const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
   
-  const { data, isLoading: itemsLoading, error: itemsError, refetch } = useInventoryData({
-    search: filter,
-    categoryId: selectedCategory,
-    containerId: selectedContainer,
-    status: selectedStatus === 'all' ? undefined : selectedStatus,
-    minPrice: priceRange.min,
-    maxPrice: priceRange.max
-  } as StockFilters);
+  const isLoading = isLoadingCategories || isLoadingContainers || isAlgoliaLoading;
 
-  const items = (data as StockData)?.items || [];
-  const isLoading = categoriesLoading || containersLoading || itemsLoading;
-  const error = categoriesError || containersError || itemsError;
-
-  const handleItemPress = useCallback((item: Item) => {
-    setSelectedItem(item);
-  }, []);
-
-  const handleEditSuccess = useCallback(() => {
-    setSelectedItem(null);
-    refetch();
-    // Invalider les requêtes pour forcer le rechargement des données
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.items] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.categories] });
-    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.containers] });
-  }, [refetch, queryClient]);
-
-  const handleEditCancel = useCallback(() => {
-    setSelectedItem(null);
-  }, []);
-
-  if (isLoading) {
+  if (isLoading && itemsFromAlgolia.length === 0) {
     return (
       <ErrorBoundary>
         <View style={styles.loadingContainer}>
@@ -156,44 +202,69 @@ export default function StockScreen() {
     );
   }
 
-  if (error) {
+  if (errorCategories || errorContainers) {
     return (
       <ErrorBoundary>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Une erreur est survenue lors du chargement des articles</Text>
+          <Text style={styles.errorText}>
+            Une erreur est survenue lors du chargement des données de filtre.
+            {errorCategories?.message} {errorContainers?.message}
+          </Text>
         </View>
       </ErrorBoundary>
     );
   }
 
   return (
-    <ErrorBoundary>
       <View style={styles.container}>
-        <FilterBar
-          value={filter}
-          onChangeText={setFilter}
-          placeholder="Rechercher un article..."
-          onCategoryChange={setSelectedCategory}
-          onContainerChange={setSelectedContainer}
-          onStatusChange={setSelectedStatus}
-          onPriceChange={(min: number | undefined, max: number | undefined) => setPriceRange({ min, max })}
-          categories={categories}
-          containers={containers}
-        />
+      <AlgoliaSearchBox />
+      
+      {!isAlgoliaLoading && itemsFromAlgolia.length === 0 && (
+         <View style={styles.noResultsContainer}>
+           <Text style={styles.noResultsText}>Aucun article trouvé.</Text>
+         </View>
+       )}
         
-        <ItemList
-          items={items}
-          onItemPress={handleItemPress}
-          onMarkAsSold={handleMarkAsSold}
-          onMarkAsAvailable={handleMarkAsAvailable}
-          isLoading={isLoading}
-          categories={categories}
-          containers={containers}
+        <MemoizedItemList
+          items={itemsFromAlgolia}
+          onItemPress={stableCallbacks.handleItemPress}
+          onMarkAsSold={async (itemId) => {
+            await handleMarkAsSold(itemId);
+            refreshAlgolia();
+          }}
+          onMarkAsAvailable={async (itemId) => {
+            await handleMarkAsAvailable(itemId);
+            refreshAlgolia();
+          }}
+          categories={categoriesData || []}
+          containers={containersData || []}
           selectedItem={selectedItem}
-          onEditSuccess={handleEditSuccess}
-          onEditCancel={handleEditCancel}
+          onEditSuccess={stableCallbacks.handleEditSuccess}
+          onEditCancel={stableCallbacks.handleEditCancel}
+          onEndReached={stableCallbacks.handleLoadMore}
+          isLoadingMore={isAlgoliaLoading && itemsFromAlgolia.length > 0}
         />
       </View>
+  );
+}
+
+
+export default function StockScreen() {
+  return (
+    <ErrorBoundary>
+      <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
+        <Configure 
+          {...{ 
+            hitsPerPage: 20, 
+            // Permettre de charger jusqu'à 500 résultats par requête
+            distinct: true,
+            analytics: false,
+            // Assurer que tous les attributs sont retournés
+            attributesToRetrieve: ['*']
+          } as any}
+        />
+        <StockScreenContent />
+      </InstantSearch>
     </ErrorBoundary>
   );
 }
@@ -227,4 +298,34 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
   },
+  searchBoxContainer: {
+    padding: Platform.OS === 'web' ? 12 : 8,
+    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
+    borderBottomWidth: Platform.OS === 'web' ? 1 : 0,
+    borderBottomColor: Platform.OS === 'web' ? '#eee' : 'transparent',
+  },
+  searchBoxInput: {
+    backgroundColor: '#fff',
+    height: 40,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noResultsText: {
+    fontSize: 16,
+    color: '#666',
+  },
 });
+
+// La MemoizedFilterBar originale et ses dépendances (comme StockFilters et les callbacks de filtre)
+// ont été enlevées ou commentées car Algolia gère maintenant la recherche principale.
+// Il faudra réintégrer les filtres (catégorie, statut, etc.) en utilisant les widgets/hooks d'Algolia.
+// Par exemple, useRefinementList pour les catégories/status, useRangeInput pour les prix.

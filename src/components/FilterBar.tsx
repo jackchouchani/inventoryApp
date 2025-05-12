@@ -1,41 +1,49 @@
-import React, { memo, useCallback } from 'react';
-import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { memo, useCallback, useState } from 'react';
+import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useFilterBar } from '../hooks/useFilterBar';
 import { FilterBarProps } from '../types/props';
-import { searchSchema, priceRangeSchema } from '../utils/validation';
-import { handleError } from '../utils/errorHandler';
-import debounce from 'lodash/debounce';
 import { theme } from '../utils/theme';
-import { useSelector } from 'react-redux';
-import { selectAllCategories } from '../store/categorySlice';
-import { selectAllContainers } from '../store/containersSlice';
 
+// Composant FilterChip mémorisé pour éviter les re-rendus inutiles
 const FilterChip: React.FC<{
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
   selected: boolean;
   onPress: () => void;
-}> = memo(({ icon, label, selected, onPress }) => (
-  <TouchableOpacity 
-    style={[styles.filterChip, selected && styles.filterChipSelected]}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityState={{ selected }}
-    accessibilityLabel={`Filtre ${label}`}
-  >
-    <MaterialIcons 
-      name={icon}
-      size={16} 
-      color={selected ? '#fff' : '#666'} 
-    />
-    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>
-      {label}
-    </Text>
-  </TouchableOpacity>
-));
+}> = memo(({ icon, label, selected, onPress }) => {
+  return (
+    <TouchableOpacity 
+      style={[
+        styles.filterChip, 
+        selected ? styles.filterChipSelected : null
+      ]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`Filtre ${label}`}
+    >
+      <MaterialIcons 
+        name={icon}
+        size={18} 
+        color={selected ? theme.colors.text.inverse : theme.colors.text.secondary} 
+      />
+      <Text style={[
+        styles.filterChipText, 
+        selected ? styles.filterChipTextSelected : null
+      ]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}, (prevProps, nextProps) => {
+  // Optimisation supplémentaire pour FilterChip
+  return prevProps.selected === nextProps.selected && 
+         prevProps.label === nextProps.label &&
+         prevProps.icon === nextProps.icon;
+});
 
-export const FilterBar = memo(function FilterBar({
+// Composant FilterBar mémorisé pour éviter les re-rendus inutiles
+const FilterBarComponent = function FilterBar({
   value,
   onChangeText,
   placeholder = "Rechercher...",
@@ -43,69 +51,53 @@ export const FilterBar = memo(function FilterBar({
   onContainerChange,
   onStatusChange,
   onPriceChange,
-  categories: propCategories,
-  containers: propContainers
+  categories = [],
+  containers = [],
+  selectedCategoryId,
+  selectedContainerId,
+  selectedStatus = 'all',
+  minPrice = '',
+  maxPrice = ''
 }: FilterBarProps) {
-  const {
-    showFilters,
-    setShowFilters,
-    selectedCategory,
-    selectedContainer,
-    selectedStatus,
-    minPrice,
-    maxPrice,
-    handleCategorySelect,
-    handleContainerSelect,
-    handleStatusChange,
-  } = useFilterBar({
-    onCategoryChange,
-    onContainerChange,
-    onStatusChange,
-    onPriceChange,
-  });
-
-  // Récupérer les catégories et containers depuis le store Redux comme fallback
-  const storeCategories = useSelector(selectAllCategories);
-  const storeContainers = useSelector(selectAllContainers);
+  // État local uniquement pour l'affichage des filtres
+  const [showFilters, setShowFilters] = useState(false);
   
-  // Utiliser les catégories et containers des props si disponibles, sinon utiliser ceux du store
-  const categories = Array.isArray(propCategories) && propCategories.length > 0 
-    ? propCategories 
-    : Array.isArray(storeCategories) ? storeCategories : [];
-  
-  const containers = Array.isArray(propContainers) && propContainers.length > 0 
-    ? propContainers 
-    : Array.isArray(storeContainers) ? storeContainers : [];
-
-  const handleSearchChange = useCallback(
-    debounce((text: string) => {
-      try {
-        const validatedSearch = searchSchema.parse(text);
-        onChangeText(validatedSearch);
-      } catch (error) {
-        handleError(error, 'Erreur de validation', {
-          source: 'FilterBar',
-          message: 'Erreur lors de la validation de la recherche'
-        });
-      }
-    }, 300),
-    [onChangeText]
-  );
-
-  const handlePriceRangeChange = useCallback((min?: string, max?: string) => {
-    try {
-      const validatedRange = priceRangeSchema.parse({
-        min: min ? Number(min) : undefined,
-        max: max ? Number(max) : undefined
-      });
-      onPriceChange?.(validatedRange.min, validatedRange.max);
-    } catch (error) {
-      handleError(error, 'Erreur de validation', {
-        source: 'FilterBar',
-        message: 'Erreur lors de la validation du prix'
-      });
+  // Gestionnaires d'événements avec useCallback pour éviter les recréations inutiles
+  const handleCategorySelect = useCallback((categoryId: number) => {
+    if (onCategoryChange) {
+      onCategoryChange(selectedCategoryId === categoryId ? undefined : categoryId);
     }
-  }, [onPriceChange]);
+  }, [selectedCategoryId, onCategoryChange]);
+  
+  const handleContainerSelect = useCallback((containerId: number) => {
+    if (onContainerChange) {
+      onContainerChange(selectedContainerId === containerId ? undefined : containerId);
+    }
+  }, [selectedContainerId, onContainerChange]);
+  
+  const handleStatusChange = useCallback((status: 'all' | 'available' | 'sold') => {
+    if (onStatusChange) {
+      onStatusChange(status);
+    }
+  }, [onStatusChange, selectedStatus]);
+  
+  const handleMinPriceChange = useCallback((text: string) => {
+    if (onPriceChange) {
+      onPriceChange(
+        text ? Number(text) : undefined,
+        maxPrice ? Number(maxPrice) : undefined
+      );
+    }
+  }, [maxPrice, onPriceChange, minPrice]);
+  
+  const handleMaxPriceChange = useCallback((text: string) => {
+    if (onPriceChange) {
+      onPriceChange(
+        minPrice ? Number(minPrice) : undefined,
+        text ? Number(text) : undefined
+      );
+    }
+  }, [minPrice, onPriceChange, maxPrice]);
 
   return (
     <View style={styles.container}>
@@ -113,13 +105,13 @@ export const FilterBar = memo(function FilterBar({
         <MaterialIcons 
           name="search" 
           size={24} 
-          color="#999" 
+          color={theme.colors.text.secondary} 
           style={styles.searchIcon} 
         />
         <TextInput
           style={styles.input}
           value={value}
-          onChangeText={handleSearchChange}
+          onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor="#999"
           accessibilityLabel="Barre de recherche"
@@ -135,7 +127,7 @@ export const FilterBar = memo(function FilterBar({
           <MaterialIcons 
             name={showFilters ? "filter-list-off" : "filter-list"} 
             size={24} 
-            color="#007AFF" 
+            color={theme.colors.text.secondary} 
           />
         </TouchableOpacity>
       </View>
@@ -156,7 +148,7 @@ export const FilterBar = memo(function FilterBar({
                     key={category.id}
                     icon={category.icon as keyof typeof MaterialIcons.glyphMap || 'folder'}
                     label={category.name}
-                    selected={selectedCategory === category.id}
+                    selected={category.id === selectedCategoryId}
                     onPress={() => handleCategorySelect(category.id)}
                   />
                 ))}
@@ -178,7 +170,7 @@ export const FilterBar = memo(function FilterBar({
                     key={container.id}
                     icon="inbox"
                     label={container.name}
-                    selected={selectedContainer === container.id}
+                    selected={container.id === selectedContainerId}
                     onPress={() => handleContainerSelect(container.id)}
                   />
                 ))}
@@ -211,8 +203,8 @@ export const FilterBar = memo(function FilterBar({
               <TextInput
                 style={styles.priceInput}
                 placeholder="Min"
-                value={minPrice}
-                onChangeText={(text) => handlePriceRangeChange(text, maxPrice)}
+                value={minPrice.toString()}
+                onChangeText={handleMinPriceChange}
                 keyboardType="numeric"
                 accessibilityLabel="Prix minimum"
                 accessibilityHint="Entrez le prix minimum"
@@ -221,23 +213,51 @@ export const FilterBar = memo(function FilterBar({
               <TextInput
                 style={styles.priceInput}
                 placeholder="Max"
-                value={maxPrice}
-                onChangeText={(text) => handlePriceRangeChange(minPrice, text)}
+                value={maxPrice.toString()}
+                onChangeText={handleMaxPriceChange}
                 keyboardType="numeric"
                 accessibilityLabel="Prix maximum"
                 accessibilityHint="Entrez le prix maximum"
               />
             </View>
           </View>
+
+          <TouchableOpacity 
+            style={styles.resetButton}
+            onPress={() => {
+              if (onCategoryChange) onCategoryChange(undefined);
+              if (onContainerChange) onContainerChange(undefined);
+              if (onStatusChange) onStatusChange('all');
+              if (onPriceChange) onPriceChange(undefined, undefined);
+              if (onChangeText) onChangeText('');
+            }}
+          >
+            <Text style={styles.resetButtonText}>
+              Réinitialiser les filtres
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.value === nextProps.value &&
-    prevProps.placeholder === nextProps.placeholder
-  );
+};
+
+// Utiliser React.memo avec une fonction de comparaison personnalisée
+export const FilterBar = memo(FilterBarComponent, (prevProps, nextProps) => {
+  // Comparer les props importantes pour éviter les re-rendus inutiles
+  return prevProps.value === nextProps.value &&
+         prevProps.selectedCategoryId === nextProps.selectedCategoryId &&
+         prevProps.selectedContainerId === nextProps.selectedContainerId &&
+         prevProps.selectedStatus === nextProps.selectedStatus &&
+         prevProps.minPrice === nextProps.minPrice &&
+         prevProps.maxPrice === nextProps.maxPrice &&
+         prevProps.categories === nextProps.categories &&
+         prevProps.containers === nextProps.containers &&
+         prevProps.onChangeText === nextProps.onChangeText &&
+         prevProps.onCategoryChange === nextProps.onCategoryChange &&
+         prevProps.onContainerChange === nextProps.onContainerChange &&
+         prevProps.onStatusChange === nextProps.onStatusChange &&
+         prevProps.onPriceChange === nextProps.onPriceChange;
 });
 
 const styles = StyleSheet.create({
@@ -321,5 +341,16 @@ const styles = StyleSheet.create({
   priceSeparator: {
     marginHorizontal: theme.spacing.sm,
     color: theme.colors.text.secondary,
+  },
+  resetButton: {
+    backgroundColor: theme.colors.primary,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+    marginTop: theme.spacing.md,
+  },
+  resetButtonText: {
+    color: theme.colors.text.inverse,
+    fontWeight: 'bold',
   },
 }); 

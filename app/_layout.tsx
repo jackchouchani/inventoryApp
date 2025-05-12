@@ -38,6 +38,18 @@ const toastConfig = {
 
 // Root Layout avec providers essentiels
 export default function RootLayout() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  // Attendre que l'application soit montée avant de faire quoi que ce soit
+  useEffect(() => {
+    // Marquer l'application comme prête après le premier rendu
+    const timeout = setTimeout(() => {
+      setAppIsReady(true);
+    }, 100);
+    
+    return () => clearTimeout(timeout);
+  }, []);
+
   return (
     <ErrorBoundary
       onReset={() => {
@@ -48,12 +60,21 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <Provider store={store}>
           <AuthProvider>
-            <RootLayoutContent />
+            {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
             <Toast config={toastConfig} />
           </AuthProvider>
         </Provider>
       </QueryClientProvider>
     </ErrorBoundary>
+  );
+}
+
+// Écran de chargement initial
+function InitialLoadingScreen() {
+  return (
+    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color="#007AFF" />
+    </View>
   );
 }
 
@@ -63,6 +84,7 @@ type PrevStateRefType = {
   segment: string | null;
   isRedirecting: boolean;
   initialCheckDone: boolean;
+  mounted: boolean;
 };
 
 // Composant interne pour la logique d'authentification
@@ -76,67 +98,59 @@ function RootLayoutContent() {
     user: null, 
     segment: null,
     isRedirecting: false,
-    initialCheckDone: false
+    initialCheckDone: false,
+    mounted: false
   });
+  
+  // Marquer le composant comme monté
+  useEffect(() => {
+    prevStateRef.current.mounted = true;
+    
+    return () => {
+      prevStateRef.current.mounted = false;
+    };
+  }, []);
 
   // Fonction de redirection sécurisée
   const safeNavigate = useCallback((route: string) => {
-    if (prevStateRef.current.isRedirecting) return;
+    // Ne pas naviguer si le composant n'est pas monté
+    if (!prevStateRef.current.mounted) {
+      console.log('Tentative de navigation avant montage, annulée');
+      return;
+    }
     
+    // Protection contre les redirections multiples
+    if (prevStateRef.current.isRedirecting) {
+      console.log('Déjà en redirection, requête ignorée');
+      return;
+    }
+    
+    // Protection contre les redirections vers la route actuelle
+    const currentPath = router.canGoBack() ? segments.join('/') : '';
+    if (currentPath === route.replace(/^\//, '')) {
+      console.log('Déjà sur la route demandée:', route);
+      return;
+    }
+    
+    console.log('Navigation vers:', route);
     prevStateRef.current.isRedirecting = true;
     
     // Exécuter la navigation après un court délai pour éviter les conflits
     setTimeout(() => {
-      router.replace(route);
+      try {
+        router.replace(route);
+      } catch (error) {
+        console.error('Erreur de navigation:', error);
+      }
       
       // Réinitialiser le flag après la navigation
       setTimeout(() => {
         prevStateRef.current.isRedirecting = false;
       }, 500);
-    }, 50);
-  }, []);
+    }, 150); // Légère augmentation du délai
+  }, [segments]);
 
-  // Vérification unique à l'initialisation et sur les changements importants
-  useEffect(() => {
-    // Ne rien faire si en cours de chargement ou de redirection
-    if (isLoading || !isReady || prevStateRef.current.isRedirecting) {
-      return;
-    }
-    
-    // Mettre à jour les valeurs de référence
-    const currentSegment = segments[0];
-    const userChanged = prevStateRef.current.user !== user;
-    const segmentChanged = prevStateRef.current.segment !== currentSegment;
-    const initialCheck = !prevStateRef.current.initialCheckDone;
-    
-    // Enregistrer l'état actuel
-    prevStateRef.current.user = user;
-    prevStateRef.current.segment = currentSegment;
-    
-    // Si c'est la vérification initiale, marquer comme fait
-    if (initialCheck) {
-      prevStateRef.current.initialCheckDone = true;
-    }
-    
-    // Ne continuer que si l'état a changé ou c'est la vérification initiale
-    if (!initialCheck && !userChanged && !segmentChanged) {
-      return;
-    }
-    
-    // Obtenir le groupe de navigation actuel
-    const inAuthGroup = currentSegment === '(auth)';
-    
-    // Logique de redirection
-    if (!user && !inAuthGroup) {
-      // Rediriger vers login si non connecté et pas déjà sur une page d'auth
-      safeNavigate('/(auth)/login');
-    } else if (user && inAuthGroup) {
-      // Rediriger vers l'app si connecté et sur une page d'auth
-      safeNavigate('/(tabs)/stock');
-    }
-  }, [user, segments, isLoading, isReady, safeNavigate]);
-
-  // Masquer le splash screen une fois le chargement terminé
+  // Masquer le splash screen une fois prêt
   useEffect(() => {
     if (!isLoading) {
       // Masquer le splash screen immédiatement
@@ -147,14 +161,83 @@ function RootLayoutContent() {
           console.error("Erreur lors du masquage du splash screen:", err);
           Sentry.captureException(err);
         } finally {
-          // Toujours marquer comme prêt, même en cas d'erreur
-          setIsReady(true);
+          // Attendre un court instant avant de marquer comme prêt
+          setTimeout(() => {
+            setIsReady(true);
+          }, 100);
         }
       };
       
       hideSplash();
     }
   }, [isLoading]);
+
+  // Gérer les redirections uniquement quand tout est prêt
+  useEffect(() => {
+    // Ne rien faire si pas prêt
+    if (isLoading || !isReady || !prevStateRef.current.mounted) {
+      return;
+    }
+    
+    // Timeout pour laisser le temps au montage complet
+    const timeoutId = setTimeout(() => {
+      // Mettre à jour les valeurs de référence
+      const currentSegment = segments[0];
+      const userChanged = prevStateRef.current.user !== user;
+      const segmentChanged = prevStateRef.current.segment !== currentSegment;
+      const initialCheck = !prevStateRef.current.initialCheckDone;
+      
+      // Enregistrer l'état actuel
+      prevStateRef.current.user = user;
+      prevStateRef.current.segment = currentSegment;
+      
+      // Si c'est la vérification initiale, marquer comme fait
+      if (initialCheck) {
+        prevStateRef.current.initialCheckDone = true;
+        
+        // Forcer une redirection initiale selon la connexion
+        if (!user) {
+          console.log('Redirection initiale vers login');
+          safeNavigate('/(auth)/login');
+          return;
+        } else {
+          console.log('Redirection initiale vers stock');
+          safeNavigate('/(tabs)/stock');
+          return;
+        }
+      }
+      
+      // Ne continuer que si l'état a changé
+      if (!userChanged && !segmentChanged) {
+        return;
+      }
+      
+      // Obtenir le groupe de navigation actuel
+      const inAuthGroup = currentSegment === '(auth)';
+      const inStackGroup = currentSegment === '(stack)';
+      const inTabsGroup = currentSegment === '(tabs)';
+      const inRootRoute = !currentSegment || currentSegment === '';
+      
+      console.log('État changé - Segment:', currentSegment, 'User:', !!user);
+      
+      // Logique de redirection
+      if (!user) {
+        // Non connecté
+        if (inRootRoute || inTabsGroup || inStackGroup) {
+          console.log('Non connecté, redirection vers login');
+          safeNavigate('/(auth)/login');
+        }
+      } else {
+        // Connecté
+        if (inAuthGroup || inRootRoute) {
+          console.log('Connecté, redirection vers stock');
+          safeNavigate('/(tabs)/stock');
+        }
+      }
+    }, 300); // Attendre 300ms pour être sûr que tout est bien monté
+    
+    return () => clearTimeout(timeoutId);
+  }, [user, segments, isLoading, isReady, safeNavigate]);
 
   // Afficher un loader pendant le chargement initial
   if (isLoading || !isReady) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -13,10 +13,15 @@ import { handleError } from '../utils/errorHandler';
 import { checkPhotoPermissions } from '../utils/permissions';
 import { usePhoto } from '../hooks/usePhoto';
 import { supabase } from '../config/supabase';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as ExpoImagePicker from 'expo-image-picker';
 import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
+import { theme } from '../utils/theme';
+import { useForm, Controller } from 'react-hook-form';
+import { z } from 'zod';
+import { ImagePicker } from './ImagePicker';
+import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 
 interface ItemEditFormProps {
     item: Item;
@@ -159,16 +164,19 @@ const CategoryList = memo(({
     </ScrollView>
 ));
 
+// Fonction pour comparer les props et éviter les re-renders inutiles
 const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProps) => {
     return (
         prevProps.item.id === nextProps.item.id &&
+        prevProps.item.description === nextProps.item.description &&
         prevProps.item.updatedAt === nextProps.item.updatedAt &&
         prevProps.categories.length === nextProps.categories.length &&
         prevProps.containers.length === nextProps.containers.length
     );
 };
 
-export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
+export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
+    // console.log("[ItemEditForm] Received item prop:", JSON.stringify(item, null, 2)); // <-- RETRAIT DU DIAGNOSTIC
     
     // S'assurer que les containers et catégories sont des tableaux valides
     const containers = Array.isArray(propContainers) ? propContainers : [];
@@ -176,13 +184,19 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
     
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
-    const { uploadPhoto, deletePhoto } = usePhoto();
+    const { uploadPhoto, deletePhoto, compressImage } = usePhoto();
     const router = useRouter();
 
     // État pour tracker si l'image a été modifiée et doit être uploadée
     const [localImage, setLocalImage] = useState<{ uri: string; needsUpload: boolean } | null>(null);
     // Ajout d'un état pour suivre l'upload en cours
     const [isUploading, setIsUploading] = useState(false);
+    // Nouvel état pour gérer l'URL directe de l'image pour l'affichage
+    const [displayImageUri, setDisplayImageUri] = useState<string | null>(null);
+    // État pour gérer les erreurs d'image
+    const [imageError, setImageError] = useState<string | null>(null);
+    // État pour le chargement de l'image
+    const [isImageLoading, setIsImageLoading] = useState(false);
 
     // État pour la boîte de dialogue de confirmation de suppression
     const [confirmDialog, setConfirmDialog] = useState<{
@@ -207,7 +221,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
 
     const initialFormState = useMemo(() => ({
         name: item.name,
-        description: item.description,
+        description: item.description || '',
         purchasePrice: item.purchasePrice.toString(),
         sellingPrice: item.sellingPrice.toString(),
         status: item.status,
@@ -257,7 +271,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         }
     }, [editedItem, item.id]);
 
-    // Modification de la fonction handleImagePreview pour éviter toute conversion
+    // Modification de la fonction handleImagePreview pour gérer spécifiquement Safari iOS
     const handleImagePreview = useCallback(async () => {
         try {
             const hasPermissions = await checkPhotoPermissions();
@@ -272,8 +286,9 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.5,
+                quality: 0.7, // Augmenter légèrement la qualité pour Safari iOS
                 base64: true, // Toujours demander le base64
+                exif: false, // Ignorer les métadonnées EXIF pour réduire la taille
             });
             
             if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -284,6 +299,31 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                     if (selectedAsset.base64) {
                         const mimeType = selectedAsset.mimeType || 'image/jpeg';
                         const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
+                        
+                        // Vérifier la taille approximative
+                        const base64Size = (selectedAsset.base64.length * 3) / 4;
+                        console.log(`handleImagePreview - Taille approximative: ${(base64Size/1024/1024).toFixed(2)}MB`);
+                        
+                        // Toujours compresser les images sur Safari iOS pour éviter les problèmes
+                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                        
+                        if (isSafari || isIOS || base64Size > (512 * 1024)) { // Compresser systématiquement sur Safari/iOS ou si > 512KB
+                            console.log("handleImagePreview - Safari iOS détecté ou image large, compression en cours");
+                            try {
+                                const compressedUri = await compressImage(base64Uri);
+                                console.log("handleImagePreview - Compression réussie");
+                                setLocalImage({ uri: compressedUri, needsUpload: true });
+                                return;
+                            } catch (compressError) {
+                                console.error("handleImagePreview - Erreur de compression:", compressError);
+                                // En cas d'échec, continuer avec l'URI original tout en notifiant l'utilisateur
+                                Alert.alert(
+                                    'Avertissement', 
+                                    'La compression de l\'image a échoué, ce qui pourrait causer des problèmes lors de l\'enregistrement. Essayez avec une image plus petite.'
+                                );
+                            }
+                        }
                         
                         // Stocker directement l'URI base64 pour la prévisualisation et l'upload
                         setLocalImage({ uri: base64Uri, needsUpload: true });
@@ -304,233 +344,29 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 showAlert: true
             });
         }
-    }, [item.id]);
+    }, [item.id, compressImage]);
 
-    // Amélioration de la fonction compressImage pour garantir une taille < 1MB
-    const compressImage = async (uri: string): Promise<string> => {
-        try {
-            
-            // Sur web, si c'est une image base64, la compresser
-            if (Platform.OS === 'web' && uri.startsWith('data:')) {
-                
-                // Extraire le type MIME et les données base64
-                const matches = uri.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-                if (!matches || matches.length !== 3) {
-                    throw new Error('Format de données base64 invalide');
-                }
-                
-                const mimeType = matches[1];
-                const base64Data = matches[2];
-                
-                // Vérifier la taille approximative (en octets)
-                const approximateSize = (base64Data.length * 3) / 4;
-                
-                // Si l'image est déjà petite, on peut la retourner directement
-                if (approximateSize < 500000) { // 500KB
-                    return uri;
-                }
-                
-                // Compression pour le web en utilisant un canvas
-                return new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        // Calculer les dimensions réduites tout en conservant les proportions
-                        let width = img.width;
-                        let height = img.height;
-                        const MAX_WIDTH = 1200;
-                        const MAX_HEIGHT = 1200;
-                        
-                        if (width > height) {
-                            if (width > MAX_WIDTH) {
-                                height = Math.round(height * (MAX_WIDTH / width));
-                                width = MAX_WIDTH;
-                            }
-                        } else {
-                            if (height > MAX_HEIGHT) {
-                                width = Math.round(width * (MAX_HEIGHT / height));
-                                height = MAX_HEIGHT;
-                            }
-                        }
-                        
-                        // Créer un canvas pour la compression
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        
-                        // Dessiner l'image redimensionnée sur le canvas
-                        const ctx = canvas.getContext('2d');
-                        if (!ctx) {
-                            reject(new Error('Impossible de créer le contexte 2D du canvas'));
-                            return;
-                        }
-                        
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // Essayer différents niveaux de qualité si nécessaire
-                        let quality = 0.8;
-                        let compressedUri = canvas.toDataURL(mimeType, quality);
-                        let compressedData = compressedUri.split(',')[1];
-                        let newSize = (compressedData.length * 3) / 4;
-                        
-                        // Si encore trop grand, réduire davantage la qualité
-                        if (newSize > 1000000) { // 1MB
-                            quality = 0.6;
-                            compressedUri = canvas.toDataURL(mimeType, quality);
-                            compressedData = compressedUri.split(',')[1];
-                            newSize = (compressedData.length * 3) / 4;
-                            
-                            // Si toujours trop grand, réduire encore
-                            if (newSize > 1000000) {
-                                quality = 0.4;
-                                compressedUri = canvas.toDataURL(mimeType, quality);
-                                compressedData = compressedUri.split(',')[1];
-                                newSize = (compressedData.length * 3) / 4;
-                            }
-                        }
-                        
-                        resolve(compressedUri);
-                    };
-                    
-                    img.onerror = () => {
-                        reject(new Error('Erreur lors du chargement de l\'image pour compression'));
-                    };
-                    
-                    img.src = uri;
-                });
-            }
-            
-            // Sur plateformes natives, compresser l'image
-            if (Platform.OS !== 'web') {
-                const result = await manipulateAsync(
-                    uri,
-                    [{ resize: { width: 1200, height: 1200 } }],
-                    { compress: 0.6, format: SaveFormat.JPEG }
-                );
-                return result.uri;
-            }
-            
-            // Dans tous les autres cas, retourner l'URI d'origine
-            return uri;
-        } catch (error) {
-            console.error("compressImage - Erreur:", error);
-            throw error;
-        }
-    };
-
-    // Modification de handlePhotoUpload pour toujours compresser avant l'upload
+    // Mise à jour pour utiliser usePhoto au lieu de faire notre propre compression/upload
     const handlePhotoUpload = async (uri: string): Promise<string | null> => {
         try {
             setIsUploading(true);
             
-            // Validation simplifiée
-            if (!uri) {
-                console.error("handlePhotoUpload - URI d'image invalide ou vide");
-                Alert.alert('Erreur', 'Image invalide');
-                setIsUploading(false);
-                return null;
-            }
-            
-            // Compresser l'image avant l'upload (même sur le web)
-            const compressedUri = await compressImage(uri);
-            
-            // Générer un nom de fichier unique avec l'ID de l'article
+            // Créer un nom de fichier identifiant qui inclut l'ID de l'article
             const timestamp = Date.now();
             const randomId = Math.random().toString(36).substring(2, 8);
             const fileName = `item_${item.id}_${timestamp}_${randomId}.jpg`;
             
-            let uploadedUrl: string | null = null;
-            
-            // Sur le web, traitement spécial pour base64
-            if (Platform.OS === 'web' && compressedUri.startsWith('data:')) {
-                // ⚠️ Méthode directe pour les données base64 sur le web
-                try {
-                    // Upload direct de l'image base64 sans manipulation intermédiaire
-                    
-                    // Extraire le type MIME et les données base64 de l'URI
-                    const matches = compressedUri.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-                    
-                    if (!matches || matches.length !== 3) {
-                        throw new Error('Format de données base64 invalide');
-                    }
-                    
-                    const mimeType = matches[1];
-                    const base64Data = matches[2];
-                    
-                    // Vérifier la taille approximative après compression
-                    const approximateSize = (base64Data.length * 3) / 4;
-                    
-                    // Si toujours trop grand, alerter l'utilisateur
-                    if (approximateSize > 1000000) { // 1MB
-                        console.warn(`handlePhotoUpload - Image toujours trop volumineuse après compression: ${Math.round(approximateSize/1024/1024)}MB`);
-                        Alert.alert('Attention', 'L\'image est trop volumineuse même après compression. Essayez avec une image plus petite.');
-                        setIsUploading(false);
-                        return null;
-                    }
-                    
-                    
-                    // ⚠️ CORRECTION: Convertir directement base64 en ArrayBuffer au lieu d'utiliser Blob
-                    const binaryString = atob(base64Data);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                    }
-                    
-                    
-                    // Upload direct vers Supabase avec ArrayBuffer et contentType explicite
-                    const { data, error } = await supabase
-                        .storage
-                        .from('images')
-                        .upload(fileName, bytes.buffer, {
-                            contentType: mimeType,
-                            upsert: true
-                        });
-                    
-                    if (error) {
-                        console.error("handlePhotoUpload - Erreur Supabase:", error);
-                        throw error;
-                    }
-                    
-                    if (!data) {
-                        throw new Error('Aucune donnée retournée par Supabase après upload');
-                    }
-                    
-                    // Obtenir l'URL publique
-                    const { data: publicUrlData } = supabase
-                        .storage
-                        .from('images')
-                        .getPublicUrl(data.path);
-                    
-                    if (!publicUrlData || !publicUrlData.publicUrl) {
-                        throw new Error('Impossible d\'obtenir l\'URL publique');
-                    }
-                    
-                    uploadedUrl = publicUrlData.publicUrl;
-                } catch (directUploadError) {
-                    console.error("handlePhotoUpload - Échec de l'upload direct:", directUploadError);
-                    throw directUploadError;
-                }
-            } else {
-                // Pour les plateformes natives ou les URI qui ne sont pas en base64
-                uploadedUrl = await uploadPhoto(compressedUri, true, fileName);
-            }
-            
-            if (!uploadedUrl) {
-                console.error("handlePhotoUpload - Échec de l'upload");
-                Alert.alert('Erreur', 'Échec de l\'upload de l\'image');
-                setIsUploading(false);
-                return null;
-            }
+            // Uploader avec notre système qui compresse déjà automatiquement
+            const uploadedUrl = await uploadPhoto(uri, true, fileName);
             
             setIsUploading(false);
             return uploadedUrl;
         } catch (error) {
             console.error("handlePhotoUpload - Erreur:", error);
-            handleError(error, 'Erreur lors du téléchargement de l\'image', {
-                source: 'item_edit_form_upload',
-                message: `Erreur lors du téléchargement de l'image pour l'article ${item.id}`
-            });
-            
-            Alert.alert('Échec du téléchargement', 'Impossible de télécharger l\'image');
+            Alert.alert(
+                'Erreur',
+                error instanceof Error ? error.message : 'Erreur lors de l\'upload de la photo'
+            );
             setIsUploading(false);
             return null;
         }
@@ -556,34 +392,91 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
         return imageChanged || otherFieldsChanged;
     }, [initialFormState, editedItem, localImage]);
 
+    // Nouvelle fonction pour charger l'image depuis Supabase
+    useEffect(() => {
+        if (editedItem.photo_storage_url && !localImage) {
+            setIsImageLoading(true);
+            setImageError(null);
+            
+            console.log(`[ItemEditForm] Chargement de l'image: ${editedItem.photo_storage_url}`);
+            
+            downloadImageWithS3Auth(editedItem.photo_storage_url)
+                .then(uri => {
+                    if (uri) {
+                        console.log(`[ItemEditForm] Image chargée avec succès: ${uri.substring(0, 50)}...`);
+                        setDisplayImageUri(uri);
+                    } else {
+                        throw new Error('Échec de récupération de l\'image');
+                    }
+                })
+                .catch(err => {
+                    console.error(`[ItemEditForm] Erreur lors du chargement de l'image:`, err);
+                    
+                    // Tentative de fallback: essayer de récupérer juste le nom du fichier
+                    const filenameOrEmpty = extractFilenameFromUrl(editedItem.photo_storage_url || '');
+                    if (filenameOrEmpty && filenameOrEmpty.length > 0) {
+                        // Essayer d'utiliser directement l'URL publique
+                        const publicUrl = `https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/object/public/${SUPABASE_CONFIG.STORAGE.BUCKETS.PHOTOS}/${filenameOrEmpty}`;
+                        console.log(`[ItemEditForm] Tentative avec URL publique: ${publicUrl.substring(0, 50)}...`);
+                        setDisplayImageUri(publicUrl);
+                    } else {
+                        setImageError(`Erreur: ${err.message || 'Problème de chargement'}`);
+                    }
+                })
+                .finally(() => {
+                    setIsImageLoading(false);
+                });
+        } else if (localImage) {
+            // Si nous avons une image locale, l'utiliser pour l'affichage
+            setDisplayImageUri(localImage.uri);
+            setImageError(null);
+        } else {
+            // Pas d'image à afficher
+            setDisplayImageUri(null);
+            setImageError(null);
+        }
+    }, [editedItem.photo_storage_url, localImage]);
+
     // Modification du handleSubmit pour vérifier l'accessibilité des images
     const handleSubmit = useCallback(async () => {
         try {
+            console.log("[ItemEditForm] handleSubmit - Début de la sauvegarde");
+            
             // Vérifier si le formulaire a été modifié
             if (!hasFormChanged) {
+                console.log("[ItemEditForm] handleSubmit - Aucune modification détectée");
                 Alert.alert('Information', 'Aucune modification à enregistrer');
                 return;
             }
             
+            console.log("[ItemEditForm] handleSubmit - Formulaire modifié, validation en cours");
+            
             if (!validateForm()) {
+                console.log("[ItemEditForm] handleSubmit - Échec de la validation du formulaire");
                 return;
             }
 
             if (!item.id) {
+                console.error("[ItemEditForm] handleSubmit - ID de l'article manquant");
                 throw new Error('ID de l\'article manquant');
             }
+
+            console.log(`[ItemEditForm] handleSubmit - Validation OK, traitement de l'article ${item.id}`);
 
             // Si nous avons une image locale qui doit être uploadée
             let photoStorageUrl = editedItem.photo_storage_url;
             
             if (localImage && localImage.needsUpload) {
+                console.log("[ItemEditForm] handleSubmit - Upload d'image nécessaire");
                 
                 // Afficher un indicateur de chargement
                 setIsUploading(true);
                 
+                console.log(`[ItemEditForm] handleSubmit - Début de l'upload de l'image: ${localImage.uri.substring(0, 50)}...`);
                 const uploadedUrl = await handlePhotoUpload(localImage.uri);
                 
                 if (uploadedUrl) {
+                    console.log(`[ItemEditForm] handleSubmit - Upload réussi: ${uploadedUrl.substring(0, 50)}...`);
                     photoStorageUrl = uploadedUrl;
                     
                     // Vérifier immédiatement si l'URL est accessible
@@ -591,34 +484,40 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                         try {
                             const response = await fetch(uploadedUrl, { method: 'HEAD' });
                             if (response.ok) {
+                                console.log(`[ItemEditForm] handleSubmit - L'URL d'image est accessible`);
                             } else {
-                                console.warn(`handleSubmit - L'URL d'image n'est pas accessible: ${response.status} ${response.statusText}`);
+                                console.warn(`[ItemEditForm] handleSubmit - L'URL d'image n'est pas accessible: ${response.status} ${response.statusText}`);
                                 // Continuer quand même, car l'URL peut devenir accessible plus tard
                             }
                         } catch (verifyError) {
-                            console.warn("handleSubmit - Impossible de vérifier l'accessibilité de l'URL:", verifyError);
+                            console.warn("[ItemEditForm] handleSubmit - Impossible de vérifier l'accessibilité de l'URL:", verifyError);
                             // Continuer malgré l'erreur
                         }
                     }
                 } else {
-                    console.error("handleSubmit - Échec de l'upload de l'image pendant la sauvegarde");
+                    console.error("[ItemEditForm] handleSubmit - Échec de l'upload de l'image pendant la sauvegarde");
                     Alert.alert('Attention', "L'article sera sauvegardé sans l'image");
                     // En cas d'échec, on garde l'ancienne URL si elle existe
                     photoStorageUrl = item.photo_storage_url;
                 }
+            } else {
+                console.log("[ItemEditForm] handleSubmit - Pas d'upload d'image nécessaire");
             }
 
             // Vérifiez si l'image a été supprimée dans l'interface
             const imageWasDeleted = item.photo_storage_url && photoStorageUrl === null;
             
             if (imageWasDeleted && item.photo_storage_url) {
+                console.log(`[ItemEditForm] handleSubmit - Suppression de l'ancienne image: ${item.photo_storage_url.substring(0, 50)}...`);
                 try {
                     await deletePhoto(item.photo_storage_url);
+                    console.log("[ItemEditForm] handleSubmit - Suppression de l'image réussie");
                 } catch (photoError) {
-                    console.error('handleSubmit - Échec de la suppression de l\'image du stockage:', photoError);
+                    console.error('[ItemEditForm] handleSubmit - Échec de la suppression de l\'image du stockage:', photoError);
                 }
             }
 
+            console.log("[ItemEditForm] handleSubmit - Préparation des données pour la mise à jour");
             const purchasePrice = parseFloat(editedItem.purchasePrice);
             const sellingPrice = parseFloat(editedItem.sellingPrice);
 
@@ -634,9 +533,12 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 categoryId: editedItem.categoryId
             };
 
+            console.log("[ItemEditForm] handleSubmit - Données prêtes", JSON.stringify(itemToUpdate, null, 2));
+
             try {
                 // Mise à jour explicite pour NULL si l'image a été supprimée
                 if (imageWasDeleted) {
+                    console.log("[ItemEditForm] handleSubmit - Mise à jour explicite à NULL pour l'image supprimée");
                     
                     const { error: explicitUpdateError } = await supabase
                         .from('items')
@@ -644,13 +546,16 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                         .eq('id', item.id);
                     
                     if (explicitUpdateError) {
+                        console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour explicite:", explicitUpdateError);
                         throw explicitUpdateError;
                     }
                 }
                 
+                console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${item.id} dans la base de données`);
                 // Mise à jour normale pour tous les autres cas
                 await database.updateItem(item.id, itemToUpdate);
                 
+                console.log("[ItemEditForm] handleSubmit - Mise à jour optimiste dans Redux");
                 // Mise à jour optimiste
                 const updatedItem: Item = {
                     ...item,
@@ -660,6 +565,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 
                 dispatch(updateItem(updatedItem));
                 
+                console.log("[ItemEditForm] handleSubmit - Invalidation des queries");
                 // Mise à jour des queries
                 queryClient.invalidateQueries({ queryKey: ['items'] });
                 queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -668,8 +574,13 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 setLocalImage(null);
                 setIsUploading(false);
 
-                if (onSuccess) onSuccess();
+                console.log("[ItemEditForm] handleSubmit - Sauvegarde terminée avec succès");
+                if (onSuccess) {
+                    console.log("[ItemEditForm] handleSubmit - Appel du callback onSuccess");
+                    onSuccess();
+                }
             } catch (error) {
+                console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour de la base de données:", error);
                 handleError(error, 'Erreur lors de la mise à jour', {
                     source: 'item_edit_form_update',
                     message: `Échec de la mise à jour de l'article ${item.id}`,
@@ -678,6 +589,7 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 setIsUploading(false);
             }
         } catch (error) {
+            console.error("[ItemEditForm] handleSubmit - Erreur générale:", error);
             handleError(error, 'Erreur lors de la mise à jour', {
                 source: 'item_edit_form_update',
                 message: `Erreur générale lors de la mise à jour de l'article ${item.id}`,
@@ -874,31 +786,29 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
                     <View style={styles.imageContainer}>
-                        {editedItem.photo_storage_url || (localImage && localImage.needsUpload) ? (
+                        {displayImageUri || isImageLoading ? (
                             <View style={styles.imageWrapper}>
-                                <AdaptiveImage 
-                                    uri={localImage && localImage.needsUpload 
-                                        ? localImage.uri 
-                                        : editedItem.photo_storage_url || ''}
-                                    style={styles.image}
-                                    resizeMode="cover"
-                                    placeholder={
-                                        <View style={styles.placeholderContainer}>
-                                            <MaterialIcons name="image" size={24} color="#ccc" />
-                                        </View>
-                                    }
-                                    // Correction du typage pour la fonction onError
-                                    onError={() => {
-                                        console.error("Erreur d'affichage d'image");
-                                        // En cas d'erreur, afficher un fallback
-                                        return (
-                                            <View style={[styles.placeholderContainer, {backgroundColor: '#ffeeee'}]}>
-                                                <MaterialIcons name="broken-image" size={24} color="#ff6666" />
-                                                <Text style={{color: '#ff6666', marginTop: 8}}>Erreur d'image</Text>
-                                            </View>
-                                        );
-                                    }}
-                                />
+                                {isImageLoading ? (
+                                    <View style={[styles.image, styles.imagePlaceholder]}>
+                                        <ActivityIndicator size="small" color="#007AFF" />
+                                        <Text style={styles.loadingText}>Chargement...</Text>
+                                    </View>
+                                ) : imageError ? (
+                                    <View style={[styles.image, styles.errorImagePlaceholder]}>
+                                        <MaterialIcons name="error-outline" size={24} color="#e53935" />
+                                        <Text style={styles.errorText}>Erreur de chargement</Text>
+                                    </View>
+                                ) : (
+                                    <Image 
+                                        source={{ uri: displayImageUri! }}
+                                        style={styles.image}
+                                        resizeMode="cover"
+                                        onError={(e) => {
+                                            console.error(`[ItemEditForm] Erreur de rendu d'image:`, e.nativeEvent.error);
+                                            setImageError(`Erreur de rendu: ${e.nativeEvent.error}`);
+                                        }}
+                                    />
+                                )}
                                 <View style={styles.imageActions}>
                                     <TouchableOpacity 
                                         style={styles.imageActionButton}
@@ -985,7 +895,10 @@ export const ItemEditForm: React.FC<ItemEditFormProps> = memo(({ item, container
                             !hasFormChanged || isUploading ? styles.disabledButton : null,
                             localImage?.needsUpload && !isUploading ? styles.uploadButton : null
                         ]} 
-                        onPress={handleSubmit}
+                        onPress={() => {
+                            console.log("[ItemEditForm] Bouton de sauvegarde cliqué");
+                            handleSubmit();
+                        }}
                         disabled={!hasFormChanged || isUploading}
                     >
                         {localImage?.needsUpload && !isUploading ? (
@@ -1093,7 +1006,7 @@ const styles = StyleSheet.create({
     image: {
         width: '100%',
         height: '100%',
-        resizeMode: 'cover',
+        borderRadius: 8,
     },
     sectionContainer: {
         marginBottom: 16,
@@ -1361,5 +1274,27 @@ const styles = StyleSheet.create({
     },
     iconOptionSelected: {
         backgroundColor: '#007AFF',
+    },
+    imagePlaceholder: {
+        backgroundColor: '#f8f9fa',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        color: '#007AFF',
+        fontSize: 14,
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    errorImagePlaceholder: {
+        backgroundColor: '#ffeeee',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    errorText: {
+        color: '#e53935',
+        fontSize: 14,
+        marginTop: 4,
+        textAlign: 'center',
     },
 });

@@ -1,11 +1,15 @@
 export const theme = {
   colors: {
     primary: '#007AFF',
+    primaryLight: '#B3DBFF',
     secondary: '#5856D6',
     background: '#F5F5F5',
+    backgroundSecondary: '#EFEFEF',
     surface: '#FFFFFF',
+    card: '#FFFFFF',
     error: '#FF3B30',
     success: '#4CAF50',
+    successLight: '#E8F5E9',
     warning: '#FF9500',
     text: {
       primary: '#000000',

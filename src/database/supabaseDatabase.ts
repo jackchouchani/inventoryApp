@@ -10,6 +10,7 @@ import { PostgrestError } from '@supabase/supabase-js';
 const ITEM_LIST_FIELDS = `
   id,
   name,
+  description,
   status,
   selling_price,
   category_id,
@@ -115,7 +116,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       const mappedItems = data.map(item => ({
         id: item.id,
         name: item.name,
-        description: '', // Champ non nécessaire dans la liste
+        description: item.description || '',
         purchasePrice: item.purchase_price,
         sellingPrice: item.selling_price,
         status: item.status,
@@ -185,6 +186,14 @@ export class SupabaseDatabase implements DatabaseInterface {
       const userId = authData.user.id;
       console.log('ID de l\'utilisateur récupéré:', userId);
 
+      // S'assurer que le QR code est au bon format
+      if (!item.qrCode || !item.qrCode.startsWith('ART_')) {
+        console.error('QR code invalide ou manquant, génération d\'un nouveau code');
+        // Import la fonction generateId si nécessaire
+        const { generateId } = await import('../utils/identifierManager');
+        item.qrCode = generateId('ITEM');
+      }
+
       // Préparer les données de l'item
       const itemData = {
         name: item.name,
@@ -195,7 +204,7 @@ export class SupabaseDatabase implements DatabaseInterface {
         photo_storage_url: item.photo_storage_url || null,
         container_id: item.containerId || null,
         category_id: item.categoryId || null,
-        qr_code: item.qrCode || null,
+        qr_code: item.qrCode,  // Utilisation explicite du code QR de l'objet item
         user_id: userId,
         deleted: false,
         created_at: new Date().toISOString(),
@@ -204,6 +213,7 @@ export class SupabaseDatabase implements DatabaseInterface {
 
       console.log('Données de l\'item à créer:', itemData);
       console.log('URL de la photo à sauvegarder:', item.photo_storage_url);
+      console.log('QR code utilisé:', item.qrCode);
 
       // Insérer l'item dans la base de données
       const { data, error } = await supabase
@@ -240,11 +250,19 @@ export class SupabaseDatabase implements DatabaseInterface {
       if (userError) throw userError;
       if (!user) throw new Error('Utilisateur non connecté');
 
+      // S'assurer que le QR code est au bon format
+      if (!container.qrCode || !container.qrCode.startsWith('CONT_')) {
+        console.error('QR code container invalide ou manquant, génération d\'un nouveau code');
+        // Import la fonction generateId si nécessaire
+        const { generateId } = await import('../utils/identifierManager');
+        container.qrCode = generateId('CONTAINER');
+      }
+      
       const supabaseContainer = {
         name: container.name,
         description: container.description || '',
         number: container.number || null,
-        qr_code: container.qrCode || null,
+        qr_code: container.qrCode,
         user_id: user.id,
         deleted: false,
         created_at: new Date().toISOString(),
@@ -252,6 +270,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       };
 
       console.log('Données du container à créer:', supabaseContainer);
+      console.log('QR code container utilisé:', container.qrCode);
 
       const { data, error } = await supabase
         .from('containers')
@@ -649,7 +668,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
-        description: '', // Champ non nécessaire dans la recherche
+        description: item.description || '',
         purchasePrice: item.purchase_price,
         sellingPrice: item.selling_price,
         status: item.status,
