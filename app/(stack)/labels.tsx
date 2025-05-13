@@ -8,7 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
-  ScrollView
+  ScrollView,
+  Switch
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -26,7 +27,7 @@ import { database } from '../../src/database/database';
 import * as Sentry from '@sentry/react-native';
 
 // Algolia imports
-import { InstantSearch, useSearchBox, useHits, useInstantSearch, Configure } from 'react-instantsearch-hooks-web';
+import { InstantSearch, useSearchBox, useHits, useInstantSearch, Configure, useRefinementList, useToggleRefinement } from 'react-instantsearch-hooks-web';
 import { searchClient, INDEX_NAME, algoliaConfig } from '../../src/config/algolia';
 
 interface Filters {
@@ -61,6 +62,7 @@ const LabelScreenContent = () => {
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [selectedContainers, setSelectedContainers] = useState<Set<number>>(new Set());
   const [showContainers, setShowContainers] = useState(false);
+  const [showAlgoliaFilters, setShowAlgoliaFilters] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState<'start' | 'end' | null>(null);
   
   const [filters, setFilters] = useState<Filters>({
@@ -401,6 +403,16 @@ const LabelScreenContent = () => {
 
       <View style={styles.filterSection}>
         <AlgoliaSearchBox />
+        <TouchableOpacity style={styles.filtersToggleHeaderAlgolia} onPress={() => setShowAlgoliaFilters(!showAlgoliaFilters)}>
+          <Text style={styles.filtersToggleHeaderTextAlgolia}>Filtrer par attributs</Text>
+        </TouchableOpacity>
+        {showAlgoliaFilters && (
+          <View style={styles.filtersContainerAlgolia}>
+            <RefinementListFilter attribute="category_name" title="Catégorie" />
+            <RefinementListFilter attribute="container_reference" title="Container" />
+            <RefinementListFilter attribute="status" title="Disponibilité" />
+          </View>
+        )}
         <View style={styles.dateFilters}>
           {Platform.OS === 'web' && isWebComponentMounted ? (
             <>
@@ -823,6 +835,70 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
+  filtersToggleHeaderAlgolia: {
+    padding: Platform.OS === 'web' ? 12 : 8,
+    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 0,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+  },
+  filtersToggleHeaderTextAlgolia: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  filtersContainerAlgolia: {
+    paddingVertical: 8,
+    paddingHorizontal: Platform.OS === 'web' ? 0 : 0,
+    backgroundColor: Platform.OS === 'web' ? 'transparent' : 'transparent',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  filterSectionAlgolia: {
+    marginBottom: 8,
+  },
+  filterTitleAlgolia: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+  },
+  filterOptionsContainerAlgolia: {
+    paddingVertical: 4,
+  },
+  filterButtonAlgolia: {
+    backgroundColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterButtonActiveAlgolia: {
+    backgroundColor: '#007AFF',
+    borderColor: '#005ecb',
+  },
+  filterButtonTextAlgolia: {
+    fontSize: 13,
+    color: '#333',
+  },
+  filterButtonTextActiveAlgolia: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  toggleFilterContainerAlgolia: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
 });
 
 function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
@@ -872,6 +948,58 @@ const AlgoliaSearchBox = () => {
         clearButtonMode="always"
         autoCapitalize="none"
         autoCorrect={false}
+      />
+    </View>
+  );
+};
+
+const RefinementListFilter = ({ attribute, title }: { attribute: string; title: string }) => {
+  const { items, refine, canRefine } = useRefinementList({ attribute });
+
+  useEffect(() => {
+    console.log(`[RefinementListFilter] ${title} - canRefine: ${canRefine}, items:`, items);
+  }, [canRefine, items, title]);
+
+  if (!canRefine) {
+    return null;
+  }
+
+  return (
+    <View style={styles.filterSectionAlgolia}>
+      <Text style={styles.filterTitleAlgolia}>{title}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainerAlgolia}>
+        {items.map((item) => (
+          <TouchableOpacity
+            key={item.value}
+            style={[styles.filterButtonAlgolia, item.isRefined && styles.filterButtonActiveAlgolia]}
+            onPress={() => refine(item.value)}
+          >
+            <Text style={[styles.filterButtonTextAlgolia, item.isRefined && styles.filterButtonTextActiveAlgolia]}>
+              {item.label} ({item.count})
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+const PriceMatchFilter = ({ attribute, title }: { attribute: string; title: string }) => {
+  const { value, refine, canRefine } = useToggleRefinement({ attribute, on: true });
+
+  if (!canRefine) {
+    return null;
+  }
+
+  return (
+    <View style={[styles.filterSectionAlgolia, styles.toggleFilterContainerAlgolia]}>
+      <Text style={styles.filterTitleAlgolia}>{title}</Text>
+      <Switch
+        value={value.isRefined}
+        onValueChange={() => refine({ isRefined: !value.isRefined })}
+        trackColor={{ false: "#767577", true: "#81b0ff" }}
+        thumbColor={value.isRefined ? "#007AFF" : "#f4f3f4"}
+        ios_backgroundColor="#3e3e3e"
       />
     </View>
   );
