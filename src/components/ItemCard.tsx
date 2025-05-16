@@ -4,7 +4,6 @@ import { Item } from '../types/item';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
-import { usePhoto } from '../hooks/usePhoto';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
 
@@ -14,8 +13,8 @@ const { STORAGE: { BUCKETS: { PHOTOS } } } = SUPABASE_CONFIG;
 export interface ItemCardProps {
   item: Item;
   onPress?: (item: Item) => void;
-  onMarkAsSold?: (itemId: number) => void;
-  onMarkAsAvailable?: (itemId: number) => void;
+  onMarkAsSold?: (item: Item) => void;
+  onMarkAsAvailable?: (item: Item) => void;
   fadeAnimation?: {
     opacity: SharedValue<number>;
     fadeIn: (config?: AnimationConfig) => void;
@@ -38,7 +37,6 @@ const ItemCard: React.FC<ItemCardProps> = ({
   fadeAnimation,
   scaleAnimation
 }) => {
-  const { uri: photoUri, error } = usePhoto();
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -56,12 +54,14 @@ const ItemCard: React.FC<ItemCardProps> = ({
   }, [scaleAnimation]);
 
   const handleMarkAsSold = useCallback(() => {
-    onMarkAsSold?.(item.id);
-  }, [item.id, onMarkAsSold]);
+    console.log('[ItemCard] handleMarkAsSold called for item:', item.id);
+    onMarkAsSold?.(item);
+  }, [item, onMarkAsSold]);
 
   const handleMarkAsAvailable = useCallback(() => {
-    onMarkAsAvailable?.(item.id);
-  }, [item.id, onMarkAsAvailable]);
+    console.log('[ItemCard] handleMarkAsAvailable called for item:', item.id);
+    onMarkAsAvailable?.(item);
+  }, [item, onMarkAsAvailable]);
 
   const animatedStyle = useMemo(() => [
     styles.container,
@@ -115,12 +115,6 @@ const ItemCard: React.FC<ItemCardProps> = ({
       setLocalUri(null);
     }
   }, [item.photo_storage_url, item.id]);
-
-  useEffect(() => {
-    if (error) {
-      console.error(`Erreur de chargement d'image pour l'article ${item.id}:`, error.message);
-    }
-  }, [item.id, photoUri, error]);
 
   const renderImageContent = () => {
     if (isLoading) {

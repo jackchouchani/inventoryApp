@@ -1,8 +1,8 @@
 import algoliasearch from 'algoliasearch/lite';
 
 // Définition des constantes pour l'API Algolia
-const ALGOLIA_APP_ID = 'XA2OW9WJL0';
-const ALGOLIA_SEARCH_API_KEY = '7c9ddbf79d9c19d60d7ce4d18c353f3a';
+export const ALGOLIA_APP_ID = 'XA2OW9WJL0';
+export const ALGOLIA_SEARCH_API_KEY = '7c9ddbf79d9c19d60d7ce4d18c353f3a';
 export const INDEX_NAME = 'data'; // Ou le nom de votre index principal si différent
 
 // Vérification de la présence des clés API

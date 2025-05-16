@@ -426,24 +426,26 @@ const ContainerScreen = () => {
               <View style={styles.headerSpacer} />
             </View>
             
-            <View style={styles.formWrapper}>
-              <ContainerForm
-                onSubmit={async (containerData) => {
-                  const result = await handleContainerSubmit(containerData);
-                  if (result.success && result.container) {
-                    dispatch(addContainer(result.container));
-                    
+            <ScrollView contentContainerStyle={styles.formScrollContent}>
+              <View style={styles.formWrapper}>
+                <ContainerForm
+                  onSubmit={async (containerData) => {
+                    const result = await handleContainerSubmit(containerData);
+                    if (result.success && result.container) {
+                      dispatch(addContainer(result.container));
+                      
+                      setShowContainerForm(false);
+                      setEditingContainer(null);
+                    }
+                    return result.success;
+                  }}
+                  onCancel={() => {
                     setShowContainerForm(false);
                     setEditingContainer(null);
-                  }
-                  return result.success;
-                }}
-                onCancel={() => {
-                  setShowContainerForm(false);
-                  setEditingContainer(null);
-                }}
-              />
-            </View>
+                  }}
+                />
+              </View>
+            </ScrollView>
           </SafeAreaView>
         </Modal>
 
@@ -514,29 +516,31 @@ const ContainerScreen = () => {
               <View style={styles.headerSpacer} />
             </View>
             
-            <View style={styles.formWrapper}>
-              <ContainerForm
-                initialData={editingContainer}
-                onSubmit={async (containerData) => {
-                  const result = await handleContainerSubmit(containerData);
-                  if (result.success && result.container) {
-                    if (editingContainer?.id) {
-                      dispatch(updateContainer(result.container));
-                    } else {
-                      dispatch(addContainer(result.container));
+            <ScrollView contentContainerStyle={styles.formScrollContent}>
+              <View style={styles.formWrapper}>
+                <ContainerForm
+                  initialData={editingContainer}
+                  onSubmit={async (containerData) => {
+                    const result = await handleContainerSubmit(containerData);
+                    if (result.success && result.container) {
+                      if (editingContainer?.id) {
+                        dispatch(updateContainer(result.container));
+                      } else {
+                        dispatch(addContainer(result.container));
+                      }
+                      
+                      setShowContainerForm(false);
+                      setEditingContainer(null);
                     }
-                    
+                    return result.success;
+                  }}
+                  onCancel={() => {
                     setShowContainerForm(false);
                     setEditingContainer(null);
-                  }
-                  return result.success;
-                }}
-                onCancel={() => {
-                  setShowContainerForm(false);
-                  setEditingContainer(null);
-                }}
-              />
-            </View>
+                  }}
+                />
+              </View>
+            </ScrollView>
           </SafeAreaView>
         </Modal>
 
@@ -1013,6 +1017,9 @@ const styles = StyleSheet.create({
     color: '#FF9500',
     marginBottom: 4,
     fontStyle: 'italic'
+  },
+  formScrollContent: {
+    flexGrow: 1,
   },
 });
 

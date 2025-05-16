@@ -217,9 +217,18 @@ const LabelScreenContent = () => {
     },
     handleToggleItem: (itemId: number) => {
       if (showContainers) {
+        console.log("LABELS DEBUG - handleToggleItem (Containers) - ID clicked:", itemId);
         setSelectedContainers(prev => {
           const newSelected = new Set(prev);
-          if (newSelected.has(itemId)) newSelected.delete(itemId); else newSelected.add(itemId);
+          const isCurrentlySelected = newSelected.has(itemId);
+          if (isCurrentlySelected) {
+            newSelected.delete(itemId);
+            console.log("LABELS DEBUG - handleToggleItem (Containers) - Désélection de l'ID:", itemId);
+          } else {
+            newSelected.add(itemId);
+            console.log("LABELS DEBUG - handleToggleItem (Containers) - Sélection de l'ID:", itemId);
+          }
+          console.log("LABELS DEBUG - handleToggleItem (Containers) - Nouveau state selectedContainers (size):", newSelected.size);
           return newSelected;
         });
       } else {
@@ -251,6 +260,32 @@ const LabelScreenContent = () => {
       setFilters(prev => ({ ...prev, [type === 'start' ? 'startDate' : 'endDate']: null }));
     },
   }).current;
+
+  // Définir la fonction handleToggleItem en dehors du useRef
+  const handleToggleItem = useCallback((itemId: number) => {
+    if (showContainers) {
+      console.log("LABELS DEBUG - handleToggleItem (Containers) - ID clicked:", itemId);
+      setSelectedContainers(prev => {
+        const newSelected = new Set(prev);
+        const isCurrentlySelected = newSelected.has(itemId);
+        if (isCurrentlySelected) {
+          newSelected.delete(itemId);
+          console.log("LABELS DEBUG - handleToggleItem (Containers) - Désélection de l'ID:", itemId);
+        } else {
+          newSelected.add(itemId);
+          console.log("LABELS DEBUG - handleToggleItem (Containers) - Sélection de l'ID:", itemId);
+        }
+        console.log("LABELS DEBUG - handleToggleItem (Containers) - Nouveau state selectedContainers (size):", newSelected.size);
+        return newSelected;
+      });
+    } else {
+      setSelectedItems(prev => {
+        const newSelected = new Set(prev);
+        if (newSelected.has(itemId)) newSelected.delete(itemId); else newSelected.add(itemId);
+        return newSelected;
+      });
+    }
+  }, [showContainers, setSelectedContainers, setSelectedItems]);
 
   // Définir la fonction handleSelectAll en dehors du useRef pour avoir accès aux dernières valeurs de hits
   const handleSelectAll = useCallback(() => {
@@ -504,7 +539,10 @@ const LabelScreenContent = () => {
               styles.itemRow,
               (showContainers ? selectedContainers : selectedItems).has(item.id!) && styles.itemRowSelected
             ]}
-            onPress={() => stableCallbacks.handleToggleItem(item.id!)}
+            onPress={() => {
+              console.log("LABELS DEBUG - TouchableOpacity pressed for ID:", item.id!);
+              handleToggleItem(item.id!);
+            }}
           >
             <View style={styles.itemInfo}>
               <Text style={[
