@@ -3,7 +3,6 @@ import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Pla
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSelector } from 'react-redux';
-import { database, createContainer, createItem } from '../../src/database/database';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
@@ -15,7 +14,8 @@ import { clearImageCache } from '../../src/utils/s3AuthClient';
 
 const SettingsScreen = () => {
   const router = useRouter();
-  const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
+  // Store access for potentially triggering refreshes
+  useRefreshStore();
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -129,6 +129,15 @@ const SettingsScreen = () => {
       >
         <MaterialIcons name="label" size={24} color="#007AFF" />
         <Text style={styles.menuText}>Générer des étiquettes</Text>
+        <MaterialIcons name="chevron-right" size={24} color="#999" />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.menuItem}
+        onPress={() => router.push('/(stack)/multi-receipt')}
+      >
+        <MaterialIcons name="receipt" size={24} color="#007AFF" />
+        <Text style={styles.menuText}>Facture multi-articles</Text>
         <MaterialIcons name="chevron-right" size={24} color="#999" />
       </TouchableOpacity>
 

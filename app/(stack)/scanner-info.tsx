@@ -11,6 +11,8 @@ import algoliasearch from 'algoliasearch';
 import { ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY, INDEX_NAME } from '../../src/config/algolia';
 // Importation de la fonction parseId
 import { parseId } from '../../src/utils/identifierManager';
+// Importation du composant ReceiptGenerator
+import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
 
 // Placeholder - L'utilisateur doit s'assurer que cela correspond à sa définition réelle
 // et que l'import @/types/types fonctionne.
@@ -77,6 +79,7 @@ export default function ScannerInfoScreen() {
   const [isMarkSoldModalVisible, setIsMarkSoldModalVisible] = useState(false);
   const [salePrice, setSalePrice] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isReceiptGeneratorVisible, setIsReceiptGeneratorVisible] = useState(false);
 
   const loadingTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -642,16 +645,26 @@ export default function ScannerInfoScreen() {
               )}
 
               {scannedItem?.status === 'available' && (
-                <TouchableOpacity
-                  style={[styles.button, styles.sellButton]}
-                  onPress={() => {
-                    setSalePrice(scannedItem.selling_price); // Initialiser avec le prix actuel
-                    setIsMarkSoldModalVisible(true);
-                  }}
-                >
-                  <MaterialIcons name="shopping-cart" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>Marquer comme vendu</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[styles.button, styles.sellButton]}
+                    onPress={() => {
+                      setSalePrice(scannedItem.selling_price); // Initialiser avec le prix actuel
+                      setIsMarkSoldModalVisible(true);
+                    }}
+                  >
+                    <MaterialIcons name="shopping-cart" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Marquer comme vendu</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.button, styles.receiptButton]}
+                    onPress={() => setIsReceiptGeneratorVisible(true)}
+                  >
+                    <MaterialIcons name="receipt" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Générer un ticket de caisse</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           ) : ( 
@@ -707,6 +720,51 @@ export default function ScannerInfoScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Modal pour le générateur de tickets */}
+      <Modal
+        visible={isReceiptGeneratorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsReceiptGeneratorVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Générer un ticket de caisse</Text>
+            
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsReceiptGeneratorVisible(false)}
+            >
+              <MaterialIcons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+            
+            {scannedItem && (
+              <ReceiptGenerator
+                items={[{
+                  id: Number(scannedItem.id),
+                  name: scannedItem.name,
+                  qrCode: scannedItem.qr_code,
+                  description: scannedItem.description || "",
+                  sellingPrice: scannedItem.selling_price,
+                  purchasePrice: scannedItem.purchase_price,
+                  image: imageUrl || undefined,
+                  actualSellingPrice: scannedItem.selling_price // Ajout du prix de vente actuel
+                }]}
+                onComplete={() => {
+                  setIsReceiptGeneratorVisible(false);
+                  // Optionally go back to the scanner
+                  // handleGoBack();
+                }}
+                onError={(error) => {
+                  setIsReceiptGeneratorVisible(false);
+                  Alert.alert('Erreur', `Erreur lors de la génération du reçu: ${error.message}`);
+                }}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -1016,5 +1074,16 @@ const styles = StyleSheet.create({
   sellButton: {
     backgroundColor: '#4CAF50',
     marginTop: 10,
+  },
+  receiptButton: {
+    backgroundColor: '#FF9800',
+    marginTop: 10,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    zIndex: 1,
+    padding: 5,
   },
 }); 

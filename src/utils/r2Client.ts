@@ -38,12 +38,6 @@ export async function uploadToR2Worker(localUri: string, filename: string): Prom
     body = Buffer.from(fileBuffer, 'base64');
   }
 
-  console.log("--- DEBUG R2 Client ---");
-  console.log("WORKER_URL:", WORKER_URL);
-  console.log("API_KEY being sent:", API_KEY);
-  console.log("Filename:", filename);
-  console.log("--- END DEBUG ---");
-
   const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'x-filename': filename, 'x-api-key': API_KEY },
