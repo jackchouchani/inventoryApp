@@ -80,6 +80,8 @@ export default function ScannerInfoScreen() {
   const [salePrice, setSalePrice] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isReceiptGeneratorVisible, setIsReceiptGeneratorVisible] = useState(false);
+  const [showMarkAsSoldConfirmation, setShowMarkAsSoldConfirmation] = useState(false);
+  const [isConfirmingAfterReceipt, setIsConfirmingAfterReceipt] = useState(false);
 
   const loadingTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -756,8 +758,9 @@ export default function ScannerInfoScreen() {
                 }]}
                 onComplete={() => {
                   setIsReceiptGeneratorVisible(false);
-                  // Optionally go back to the scanner
-                  // handleGoBack();
+                  // Demander à l'utilisateur s'il souhaite marquer l'article comme vendu
+                  setIsConfirmingAfterReceipt(true);
+                  setShowMarkAsSoldConfirmation(true);
                 }}
                 onError={(error) => {
                   setIsReceiptGeneratorVisible(false);
@@ -768,6 +771,72 @@ export default function ScannerInfoScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Confirmation pour marquer l'article comme vendu après génération de facture */}
+      {showMarkAsSoldConfirmation && scannedItem && (
+        <Modal
+          visible={showMarkAsSoldConfirmation}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowMarkAsSoldConfirmation(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Marquer comme vendu ?</Text>
+              <Text style={styles.priceLabel}>
+                Souhaitez-vous marquer l'article "{scannedItem.name}" comme vendu ?
+              </Text>
+              
+              {isConfirmingAfterReceipt && (
+                <View style={styles.priceInputContainer}>
+                  <Text style={styles.priceLabel}>Prix de vente :</Text>
+                  <TextInput
+                    style={styles.priceInput}
+                    value={String(salePrice || scannedItem.selling_price)}
+                    onChangeText={(text) => setSalePrice(parseFloat(text.replace(',', '.')) || 0)}
+                    keyboardType="numeric"
+                    placeholder="Prix de vente"
+                  />
+                </View>
+              )}
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => {
+                    setShowMarkAsSoldConfirmation(false);
+                    setIsConfirmingAfterReceipt(false);
+                  }}
+                  disabled={isUpdating}
+                >
+                  <Text style={styles.buttonText}>Non</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton]}
+                  onPress={async () => {
+                    if (isConfirmingAfterReceipt) {
+                      // Si la confirmation vient après génération d'un reçu
+                      await handleMarkAsSold();
+                      setIsConfirmingAfterReceipt(false);
+                    } else {
+                      setIsMarkSoldModalVisible(true);
+                      setShowMarkAsSoldConfirmation(false);
+                    }
+                  }}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Oui</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }

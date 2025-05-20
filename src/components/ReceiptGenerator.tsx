@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, TextInput, ScrollView } from 'react-native';
 import logoAsset from '../../assets/Logo.png';
+import { uploadInvoiceToR2 } from '../utils/r2Client';
 
 let jsPDF: any;
 
@@ -491,6 +492,26 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       setProgress(90);
 
       const fileName = `Facture-${COMPANY_INFO.name.replace(/\s+/g, '_')}-${invoiceRef}.pdf`;
+      
+      // Convertir le PDF en Blob pour l'upload
+      const pdfBlob = doc.output('blob');
+      
+      try {
+        // Uploader la facture vers R2 en arrière-plan
+        uploadInvoiceToR2(pdfBlob, fileName)
+          .then(invoiceUrl => {
+            console.log('Facture téléchargée avec succès:', invoiceUrl);
+          })
+          .catch(error => {
+            console.error('Erreur lors du téléchargement de la facture:', error);
+            // Ne pas bloquer l'utilisateur en cas d'échec de l'upload
+          });
+      } catch (error) {
+        console.error('Erreur lors de la préparation de l\'upload de la facture:', error);
+        // Continuer même en cas d'erreur
+      }
+      
+      // Télécharger le fichier localement
       doc.save(fileName);
 
       setProgress(100);

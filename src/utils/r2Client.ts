@@ -61,3 +61,24 @@ export function getImageUrl(filename: string): string {
   if (!filename) return '';
   return `https://images.comptoirvintage.com/${filename}`;
 }
+
+export async function uploadInvoiceToR2(pdfBlob: Blob, filename: string): Promise<string> {
+  const response = await fetch('https://r2-invoice-worker.jack-chouchani.workers.dev', {
+    method: 'POST',
+    headers: {
+      'x-filename': filename,
+      'x-api-key': API_KEY,
+      'Content-Type': 'application/pdf'
+    },
+    body: pdfBlob
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[uploadInvoiceToR2] Erreur réponse R2: ${response.status} ${response.statusText} - ${errorText}`);
+    throw new Error(`Erreur upload facture R2: ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  return data.url || `https://invoices.comptoirvintage.com/${data.filename}`;
+}

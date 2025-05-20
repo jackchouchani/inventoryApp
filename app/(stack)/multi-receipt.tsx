@@ -21,6 +21,7 @@ import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
 import { getImageUrl } from '../../src/utils/r2Client';
 import { theme } from '../../src/utils/theme';
 import { formatCurrency } from '../../src/utils/format';
+import { supabase } from '../../src/config/supabase';
 
 // Types
 // Import the Item type from the types directory
@@ -29,6 +30,7 @@ import type { Item } from '../../src/types/item';
 // Define type for items with added properties for receipt generation
 interface ReceiptItem extends Item {
   actualSellingPrice?: number;
+  quantity?: number;
 }
 
 interface Category {
@@ -80,6 +82,8 @@ const MultiReceiptScreen = () => {
   const [itemsForReceipt, setItemsForReceipt] = useState<ReceiptItem[]>([]);
   const [totalDiscount, setTotalDiscount] = useState<number>(0);
   const [discountPercentage, setDiscountPercentage] = useState<number>(0);
+  const [showMarkAsSoldConfirmation, setShowMarkAsSoldConfirmation] = useState(false);
+  const [isUpdatingItems, setIsUpdatingItems] = useState(false);
   
   // Fetch categories and containers for filters (if needed)
   useQuery<MultiReceiptData>({
@@ -217,14 +221,107 @@ const MultiReceiptScreen = () => {
   // Handle receipt completion
   const handleReceiptComplete = () => {
     setShowReceiptGenerator(false);
-    // Optionally clear selections
-    // setSelectedItems(new Map());
+    
+    // Demander à l'utilisateur s'il souhaite marquer les articles comme vendus
+    setShowMarkAsSoldConfirmation(true);
   };
 
   // Handle receipt error
   const handleReceiptError = (error: Error) => {
     Alert.alert('Erreur', `Erreur lors de la génération de la facture: ${error.message}`);
     setShowReceiptGenerator(false);
+  };
+  
+  // Marquer les articles comme vendus dans Supabase
+  const markItemsAsSold = async () => {
+    if (itemsForReceipt.length === 0) return;
+    
+    setIsUpdatingItems(true);
+    try {
+      // Traiter chaque article un par un pour mettre à jour son statut et son prix de vente
+      const updatePromises = itemsForReceipt.map(async (item) => {
+        // Obtenir le prix de vente réel (possiblement modifié par l'utilisateur)
+        const actualSalePrice = item.actualSellingPrice ?? item.sellingPrice ?? 0;
+        
+        // Mettre à jour l'article dans Supabase
+        const { error } = await supabase
+          .from('items')
+          .update({
+            status: 'sold',
+            selling_price: actualSalePrice,
+            sold_at: new Date().toISOString() // Enregistrer la date de vente
+          })
+          .eq('id', item.id);
+          
+        if (error) {
+          console.error(`Erreur lors de la mise à jour de l'article ${item.id}:`, error);
+          throw error;
+        }
+      });
+      
+      // Attendre que toutes les mises à jour soient terminées
+      await Promise.all(updatePromises);
+      
+      // Notification de succès
+      Alert.alert(
+        'Succès', 
+        `${itemsForReceipt.length} article(s) marqué(s) comme vendu(s) avec succès`
+      );
+      
+      // Vider la sélection puisque les articles sont maintenant vendus
+      setSelectedItems(new Map());
+      setItemsForReceipt([]);
+      
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des articles:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de la mise à jour des articles');
+    } finally {
+      setIsUpdatingItems(false);
+      setShowMarkAsSoldConfirmation(false);
+    }
+  };
+  
+  // Annuler le marquage comme vendu
+  const cancelMarkAsSold = () => {
+    setShowMarkAsSoldConfirmation(false);
+  };
+
+  // Confirmation pour marquer comme vendus ou non
+  const renderMarkAsSoldConfirmation = () => {
+    if (!showMarkAsSoldConfirmation) return null;
+    
+    return (
+      <View style={styles.confirmationOverlay}>
+        <View style={styles.confirmationDialog}>
+          <Text style={styles.confirmationTitle}>Marquer comme vendus ?</Text>
+          <Text style={styles.confirmationText}>
+            Souhaitez-vous marquer tous les articles de cette facture comme vendus ?
+          </Text>
+          
+          <View style={styles.confirmationButtons}>
+            <TouchableOpacity 
+              style={[styles.confirmationButton, styles.cancelButton]}
+              onPress={cancelMarkAsSold}
+              disabled={isUpdatingItems}
+            >
+              <Text style={styles.confirmationButtonText}>Non</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.confirmationButton, styles.confirmButton]}
+              onPress={markItemsAsSold}
+              disabled={isUpdatingItems}
+            >
+              {isUpdatingItems ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.confirmationButtonText}>Oui</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   // Render item in search results
@@ -323,16 +420,18 @@ const MultiReceiptScreen = () => {
         <Text style={styles.topBarTitle}>Facture Multiple</Text>
       </View>
 
+      {showMarkAsSoldConfirmation && renderMarkAsSoldConfirmation()}
+
       {showReceiptGenerator ? (
         <ReceiptGenerator 
           items={itemsForReceipt.map(item => ({
             ...item,
-            image: item.photo_storage_url, // Map photo_storage_url to image for compatibility
-            qrCode: item.qrCode || '', // Ensure qrCode is never undefined
-          })) as any[]}
+            qrCode: item.qrCode || '', // Assurer que qrCode n'est jamais undefined
+            quantity: item.quantity || 1
+          }))}
           onComplete={handleReceiptComplete}
           onError={handleReceiptError}
-          multiPage={itemsForReceipt.length > 3} // Enable multi-page for more than 5 items
+          multiPage={itemsForReceipt.length > 3} // Enable multi-page pour plus de 3 articles
         />
       ) : (
         <>
@@ -664,6 +763,67 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  confirmationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  confirmationDialog: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '85%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  confirmationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+  },
+  confirmationText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#555',
+    lineHeight: 22,
+  },
+  confirmationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  confirmationButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  confirmButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  cancelButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  confirmationButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   searchResultsContainer: {
     flex: 1,

@@ -1,0 +1,14 @@
+name = "r2-invoice-worker"
+main = "src/worker.js"
+workers_dev = true
+compatibility_date = "2025-05-20"
+
+[observability]
+enabled = true
+
+[vars]
+SECRET_KEY = "82d54aaff9422fc3f6392d07c0bf4e90b61dc26e4b20bd93eb50e1a81164c8c3"
+
+[[r2_buckets]]
+binding = "INVOICES_BUCKET"
+bucket_name = "invoices"
