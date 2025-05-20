@@ -16,14 +16,14 @@ export const useAlgoliaSearch = () => {
     mountCount.current += 1;
     console.log(`[Algolia Debug] Component mounted ${mountCount.current} times. Status: ${status}, Query: ${query}`);
     
-    if (!isInitialized) {
-      console.log(`[Algolia Debug] Initializing search with empty query`);
-      // Forcer une recherche initiale sans filtre pour charger tous les résultats
-      refinePage(0); // Commencer à la page 0
-      refineSearch('');
-      refresh();
-      setIsInitialized(true);
-    }
+    // if (!isInitialized) {
+    //   console.log(`[Algolia Debug] Initializing search with empty query`);
+    //   // Forcer une recherche initiale sans filtre pour charger tous les résultats
+    //   refinePage(0); // Commencer à la page 0
+    //   refineSearch('');
+    //   refresh();
+    //   setIsInitialized(true);
+    // }
     
     return () => {
       console.log(`[Algolia Debug] Component will unmount`);
@@ -77,7 +77,7 @@ export const useAlgoliaSearch = () => {
       setAllItems([]); // Vider les résultats existants
       refinePage(0);
       refineSearch(searchTerm);
-    }, 300),
+    }, 900),
     [refineSearch, refinePage]
   );
 

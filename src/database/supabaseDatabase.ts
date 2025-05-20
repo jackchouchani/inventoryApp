@@ -19,6 +19,7 @@ const ITEM_LIST_FIELDS = `
   qr_code,
   created_at,
   updated_at,
+  sold_at,
   purchase_price
 `;
 
@@ -125,7 +126,8 @@ export class SupabaseDatabase implements DatabaseInterface {
         categoryId: item.category_id,
         qrCode: item.qr_code,
         createdAt: item.created_at,
-        updatedAt: item.updated_at
+        updatedAt: item.updated_at,
+        soldAt: item.sold_at
       }));
       
       return mappedItems;

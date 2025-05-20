@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { supabase } from '../../src/config/supabase';
 import { formatCurrency } from '../../src/utils/format';
+import { getImageUrl } from '../../src/utils/r2Client';
 // Importation de la librairie algoliasearch
 import algoliasearch from 'algoliasearch';
 import { ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY, INDEX_NAME } from '../../src/config/algolia';
-// Importation de la configuration Supabase
-import { SUPABASE_CONFIG } from '../../src/config/supabaseConfig'; 
 // Importation de la fonction parseId
 import { parseId } from '../../src/utils/identifierManager';
 
@@ -75,6 +74,9 @@ export default function ScannerInfoScreen() {
   const [containerName, setContainerName] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState<string | null>(null);
   const [algoliaObjectID, setAlgoliaObjectID] = useState<string | null>(null); // Nouvel état
+  const [isMarkSoldModalVisible, setIsMarkSoldModalVisible] = useState(false);
+  const [salePrice, setSalePrice] = useState(0);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const loadingTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -132,78 +134,6 @@ export default function ScannerInfoScreen() {
     }
   };
 
-  const fetchImageUrl = useCallback(async (photoUrl: string | null | undefined) => {
-    if (!photoUrl) {
-      setImageUrl(FALLBACK_IMAGE_URL || null);
-      return;
-    }
-    setImageLoading(true);
-    setImageError(false);
-    try {
-      // Extrait le chemin relatif si une URL complète est fournie
-      let relativePath = photoUrl;
-      // Vérifier si photoUrl est une URL HTTP(S) complète. Si oui, il s'agit peut-être déjà d'une URL signée ou publique.
-      if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
-          // Si elle vient de notre propre bucket Supabase S3 et que ce n'est pas déjà une URL signée (difficile à vérifier sans plus d'infos)
-          // on pourrait vouloir extraire le chemin. Mais pour l'instant, on suppose qu'une URL complète est utilisable directement
-          // ou qu'elle provient d'Algolia (photo_storage_url) qui est déjà une URL complète.
-          // Si elle vient de Supabase (photo_url) et que c'est un chemin relatif, la logique ci-dessous s'applique.
-          // Le problème est que photo_url de Supabase est un chemin relatif.
-          // Et photo_storage_url d'Algolia est une URL complète.
-          // Cette fonction est appelée avec photo_url (relatif) ou photo_storage_url (complet).
-
-          if (photoUrl.startsWith(SUPABASE_CONFIG.S3_URL)) {
-             // C'est une URL de notre bucket, extrayons le chemin pour créer une URL signée
-             relativePath = photoUrl.substring(SUPABASE_CONFIG.S3_URL.length);
-             if (relativePath.startsWith(SUPABASE_CONFIG.STORAGE.BUCKETS.PHOTOS)) { // Ex: /bucket-name/path/to/file.jpg
-                relativePath = relativePath.substring(SUPABASE_CONFIG.STORAGE.BUCKETS.PHOTOS.length + 1); // +1 pour le / après le nom du bucket
-             }
-             // S'assurer qu'il n'y a pas de slash au début pour createSignedUrl
-             if (relativePath.startsWith('/')) {
-               relativePath = relativePath.substring(1);
-             }
-             console.log('Chemin relatif extrait pour Supabase Storage (depuis URL S3 complète):', relativePath);
-          } else if (!photoUrl.includes('/')) {
-            //  Si ce n'est pas une URL http et ne contient pas de '/', on suppose que c'est un chemin relatif simple pour Supabase
-            console.log('Utilisation de photoUrl comme chemin relatif direct pour Supabase Storage:', relativePath);
-          } else if (photoUrl.startsWith('http')) {
-             // Si c'est une URL complète (ex: Algolia photo_storage_url ou URL déjà signée/publique)
-             console.log("Utilisation de l'URL complète directement (présumée Algolia ou déjà signée):", photoUrl);
-             setImageUrl(photoUrl);
-             setImageLoading(false);
-             return; // Utiliser directement
-          }
-          // Si ce n'est aucun des cas ci-dessus, la logique de signature s'appliquera avec 'relativePath' tel quel.
-      }
-      // Si relativePath est toujours une URL http(s) ici, c'est qu'on n'a pas pu l'interpréter comme chemin pour Supabase
-      // Ce cas ne devrait pas arriver si la logique précédente est correcte.
-      if (relativePath.startsWith('http')) {
-          console.warn("Tentative de créer une URL signée pour une URL déjà complète:", relativePath, " - utilisation directe à la place.");
-          setImageUrl(relativePath);
-          setImageLoading(false);
-          return;
-      }
-
-
-      console.log('Chemin final pour Supabase Storage createSignedUrl:', relativePath);
-
-      const { data, error: RLSerror } = await supabase.storage
-        .from(SUPABASE_CONFIG.STORAGE.BUCKETS.PHOTOS) // Assurez-vous que S3_BUCKET_NAME est défini dans SUPABASE_CONFIG
-        .createSignedUrl(relativePath, 600); // 10 minutes
-
-      if (RLSerror) {
-        throw RLSerror;
-      }
-      setImageUrl(data?.signedUrl || FALLBACK_IMAGE_URL || null);
-    } catch (e) {
-      console.error("Erreur lors de la récupération de l'URL signée:", e);
-      setImageError(true);
-      setImageUrl(FALLBACK_IMAGE_URL || null);
-    } finally {
-      setImageLoading(false);
-    }
-  }, []);
-
   const handleBarCodeScanned = useCallback(async ({ data: qrCodeValue }: { data: string }) => {
     if (loading) return;
     setLoading(true);
@@ -213,35 +143,33 @@ export default function ScannerInfoScreen() {
     setSimilarItems([]);
     setContainerName(null);
     setCategoryName(null);
-    setIsScanning(false); // Arrêter le scan une fois qu'un code est traité
-    setAlgoliaObjectID(null); // Réinitialiser l'objectID
+    setIsScanning(false);
+    setAlgoliaObjectID(null);
 
     console.log('QR Code Scanné:', qrCodeValue);
-
     const parsedIdentifier = parseId(qrCodeValue);
     console.log('Identifiant analysé:', parsedIdentifier);
 
     if (!parsedIdentifier || parsedIdentifier.type !== 'ITEM') {
       setError('Format de code QR invalide ou non supporté pour un article.');
       setLoading(false);
-      setIsScanning(true); // Permettre un nouveau scan
+      setIsScanning(true);
       return;
     }
 
-    if (!itemsIndex) { // Vérification cruciale ici
+    if (!itemsIndex) {
       console.error("handleBarCodeScanned: itemsIndex n'est pas initialisé.");
       setError("Erreur de configuration: Client de recherche non initialisé.");
       setLoading(false);
-      setIsScanning(true); // Permettre un nouveau scan ou afficher un message d'erreur permanent
+      setIsScanning(true);
       return;
     }
 
     try {
-      // 1. Récupérer l'article depuis Supabase par qr_code
       const { data: supabaseItem, error: supabaseError } = await supabase
         .from('items')
         .select('*, containers(name), categories(name)')
-        .eq('qr_code', qrCodeValue) // Recherche par qr_code exact
+        .eq('qr_code', qrCodeValue)
         .single();
 
       if (supabaseError || !supabaseItem) {
@@ -252,29 +180,23 @@ export default function ScannerInfoScreen() {
         return;
       }
 
-      console.log('Article trouvé dans Supabase:', supabaseItem);
       const itemWithRelations = {
         ...supabaseItem,
         container_name: (supabaseItem.containers as { name: string })?.name || 'N/A',
         category_name: (supabaseItem.categories as { name: string })?.name || 'N/A',
       };
 
-      // L'ID de Supabase EST l'objectID d'Algolia
-      const objectID = supabaseItem.id.toString(); // Assurer que objectID est une string
+      const objectID = supabaseItem.id.toString();
       setAlgoliaObjectID(objectID);
       console.log("Utilisation de supabaseItem.id comme objectID Algolia:", objectID);
 
-      // Mettre à jour scannedItem avec l'objectID
-      // photo_storage_url sera ajouté après la récupération depuis Algolia
       let updatedScannedItem: ScannedItemWithAlgolia = { 
         ...itemWithRelations, 
         objectID 
       };
       setScannedItem(updatedScannedItem);
 
-      // 2. Récupérer photo_storage_url (et d'autres infos si besoin) de l'article depuis Algolia via son objectID
       try {
-        console.log("Récupération des détails de l'article depuis Algolia avec objectID:", objectID);
         const algoliaItem = await itemsIndex.getObject(objectID, {
           attributesToRetrieve: ['photo_storage_url', 'name'],
         });
@@ -283,39 +205,41 @@ export default function ScannerInfoScreen() {
 
         if (algoliaItem && algoliaItem.photo_storage_url) {
           console.log("Utilisation de photo_storage_url d'Algolia:", algoliaItem.photo_storage_url);
-          setImageUrl(algoliaItem.photo_storage_url);
-          setImageLoading(false); // L'URL est directe, pas de chargement supplémentaire pour l'URL elle-même
+          const imageUrl = getImageUrl(algoliaItem.photo_storage_url);
+          console.log("URL générée pour l'image:", imageUrl); // Debug
+          setImageUrl(imageUrl);
+          setImageLoading(false);
           setImageError(false);
-          // Mettre à jour scannedItem avec l'URL de la photo d'Algolia
           updatedScannedItem = { ...updatedScannedItem, photo_storage_url: algoliaItem.photo_storage_url };
           setScannedItem(updatedScannedItem);
         } else if (supabaseItem.photo_url) {
-          console.log("photo_storage_url non trouvée dans Algolia ou article Algolia incomplet, tentative avec Supabase photo_url:", supabaseItem.photo_url);
-          await fetchImageUrl(supabaseItem.photo_url); // fetchImageUrl va gérer le loading/error pour l'image
+          console.log("photo_storage_url non trouvée dans Algolia, utilisation de Supabase photo_url:", supabaseItem.photo_url);
+          setImageUrl(getImageUrl(supabaseItem.photo_url));
+          setImageLoading(false);
+          setImageError(false);
         } else {
-          console.log("Aucune URL d'image trouvée ni dans Algolia (getObject) ni dans Supabase.");
+          console.log("Aucune URL d'image trouvée.");
           setImageUrl(FALLBACK_IMAGE_URL || null);
         }
       } catch (algoliaGetError) {
-        console.error("Erreur lors de la récupération de l'article depuis Algolia (getObject):", algoliaGetError);
-        // Continuer avec les données Supabase pour l'image si Algolia échoue
+        console.error("Erreur lors de la récupération de l'article depuis Algolia:", algoliaGetError);
         if (supabaseItem.photo_url) {
-          console.log("Erreur getObject Algolia, tentative avec Supabase photo_url:", supabaseItem.photo_url);
-          await fetchImageUrl(supabaseItem.photo_url);
+          console.log("Erreur getObject Algolia, utilisation de Supabase photo_url:", supabaseItem.photo_url);
+          setImageUrl(getImageUrl(supabaseItem.photo_url));
+          setImageLoading(false);
+          setImageError(false);
         } else {
           console.log("Erreur getObject Algolia et pas de photo_url Supabase.");
           setImageUrl(FALLBACK_IMAGE_URL || null);
         }
       }
-
     } catch (e: any) {
       console.error('Erreur globale dans handleBarCodeScanned:', e);
       setError(e.message || 'Une erreur est survenue.');
     } finally {
       setLoading(false);
-      // Ne pas remettre isScanning à true ici, car on veut afficher les infos
     }
-  }, [loading, fetchImageUrl]);
+  }, [loading]);
 
   // Effet pour récupérer les articles similaires une fois que l'objectID est connu
   useEffect(() => {
@@ -371,40 +295,28 @@ export default function ScannerInfoScreen() {
 
   // Effet pour charger l'image de l'article scanné si elle n'a pas été définie par la logique getObject/photo_storage_url
   useEffect(() => {
-    // Cette logique est maintenant principalement gérée dans handleBarCodeScanned après getObject
-    // Ce useEffect sert de fallback ou si scannedItem est mis à jour autrement.
     if (scannedItem) {
       if (scannedItem.photo_storage_url) {
-        // Si photo_storage_url est déjà là (normalement mis par getObject) et imageUrl n'est pas encore défini (ou différent)
-        if (imageUrl !== scannedItem.photo_storage_url) {
-           console.log("useEffect image: photo_storage_url présent, mise à jour de imageUrl:", scannedItem.photo_storage_url);
-           setImageUrl(scannedItem.photo_storage_url);
-           setImageLoading(false);
-           setImageError(false);
+        if (imageUrl !== getImageUrl(scannedItem.photo_storage_url)) {
+          const newImageUrl = getImageUrl(scannedItem.photo_storage_url);
+          console.log("Mise à jour de l'URL de l'image principale:", newImageUrl);
+          setImageUrl(newImageUrl);
+          setImageLoading(false);
+          setImageError(false);
         }
       } else if (scannedItem.photo_url) {
-        // Si pas de photo_storage_url mais on a photo_url de Supabase
-        // Et que fetchImageUrl n'a pas déjà été appelé ou que l'URL n'est pas déjà là
-        // Pour éviter des appels multiples, on pourrait vérifier si imageUrl est déjà le fallback ou null
-        // ou si imageLoading est en cours.
-        // La logique dans handleBarCodeScanned devrait déjà appeler fetchImageUrl.
-        // Cet appel est une sécurité.
         console.log("useEffect image: photo_storage_url absent, photo_url présent. Appel fetchImageUrl si nécessaire:", scannedItem.photo_url);
-        // Pour éviter boucle infinie si fetchImageUrl échoue et remet imageUrl à null/fallback,
-        // on ne rappelle que si imageUrl est explicitement null (pas encore tenté ou en attente de fallback)
         if (imageUrl === null && !imageLoading) { 
-            fetchImageUrl(scannedItem.photo_url);
+            setImageUrl(getImageUrl(scannedItem.photo_url));
         } else if (!imageUrl && !imageLoading && !imageError && !FALLBACK_IMAGE_URL){
-            // Cas où il n'y a pas de fallback et rien n'a été chargé, on tente.
-             fetchImageUrl(scannedItem.photo_url);
+            setImageUrl(getImageUrl(scannedItem.photo_url));
         }
-
-      } else if (!imageLoading && !imageUrl) { // Si aucune URL (ni Algolia, ni Supabase) et pas en chargement
+      } else if (!imageLoading && !imageUrl) {
         console.log("useEffect image: Ni photo_storage_url ni photo_url. Utilisation du fallback.");
         setImageUrl(FALLBACK_IMAGE_URL || null);
       }
     }
-  }, [scannedItem, fetchImageUrl, imageUrl, imageLoading, imageError]); // Ajout de imageUrl, imageLoading, imageError aux dépendances
+  }, [scannedItem, imageUrl, imageLoading, imageError]);
 
   // Effet pour mettre à jour les noms de conteneur et catégorie
   useEffect(() => {
@@ -442,37 +354,32 @@ export default function ScannerInfoScreen() {
   };
 
   const handleSimilarItemPress = async (item: any) => {
-    console.log('Article similaire sélectionné, isScanning = false, loading = false');
+    console.log('Article similaire sélectionné');
     setIsScanning(false);
-    // Attention: item ici est un hit Algolia, il faut peut-être le remapper sur ScannedItemWithAlgolia
-    // ou s'assurer qu'il a tous les champs nécessaires.
-    // Pour l'instant, on suppose qu'il a au moins objectID, name, photo_storage_url
-    // et qu'on va re-déclencher la logique d'affichage/fetch de détails si nécessaire.
-    // Le plus simple est de traiter cet item comme le nouveau 'scannedItem'.
-    
-    // Transformer l'item similaire en un format compatible avec ScannedItemWithAlgolia
-    // Ce mapping est une supposition et doit être ajusté selon la structure réelle des hits de recommandation
     const newScannedItem: ScannedItemWithAlgolia = {
-        id: item.objectID, // Utiliser objectID comme id
-        qr_code: item.qr_code || '', // Peut être manquant pour les recommandations
+        id: item.objectID,
+        qr_code: item.qr_code || '',
         name: item.name,
         purchase_price: item.purchase_price || 0,
         selling_price: item.selling_price || 0,
         container_id: item.container_id || '',
         category_id: item.category_id || '',
-        status: item.status || 'available', // Fournir un statut par défaut
+        status: item.status || 'available',
         description: item.description,
-        photo_storage_url: item.photo_storage_url, // L'URL d'Algolia
+        photo_storage_url: item.photo_storage_url,
         objectID: item.objectID,
-        // Les relations containers(name), categories(name) ne seront pas là,
-        // donc fetchContainerName/fetchCategoryName seront appelés.
     };
 
-    setScannedItem(newScannedItem); // Ceci va déclencher les useEffect pour l'image et les noms
-    setAlgoliaObjectID(item.objectID); // Mettre à jour l'objectID pour les prochaines recommandations (si pertinent)
-    setSimilarItems([]); // Cacher la liste des articles similaires
+    setScannedItem(newScannedItem);
+    setAlgoliaObjectID(item.objectID);
+    setSimilarItems([]);
     setError(null);
     setLoading(false);
+    if (item.photo_storage_url) {
+      setImageUrl(getImageUrl(item.photo_storage_url));
+    } else {
+      setImageUrl(FALLBACK_IMAGE_URL || null);
+    }
     if (loadingTimeout.current) clearTimeout(loadingTimeout.current);
   };
 
@@ -482,7 +389,7 @@ export default function ScannerInfoScreen() {
       onPress={() => handleSimilarItemPress(item)}
     >
       <Image
-        source={{ uri: item.photo_storage_url || FALLBACK_IMAGE_URL }}
+        source={{ uri: item.photo_storage_url ? getImageUrl(item.photo_storage_url) : FALLBACK_IMAGE_URL }}
         style={styles.similarItemImage}
         resizeMode="cover"
       />
@@ -491,6 +398,34 @@ export default function ScannerInfoScreen() {
       </Text>
     </TouchableOpacity>
   );
+
+  const handleMarkAsSold = async () => {
+    if (!scannedItem) return;
+    
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('items')
+        .update({ 
+          status: 'sold',
+          selling_price: salePrice,
+          sold_at: new Date().toISOString() // Optionnel: enregistrer la date de vente
+        })
+        .eq('id', scannedItem.id);
+
+      if (error) throw error;
+
+      // Mettre à jour l'état local
+      setScannedItem(prev => prev ? { ...prev, status: 'sold', selling_price: salePrice } : null);
+      Alert.alert('Succès', 'Article marqué comme vendu avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de la mise à jour');
+    } finally {
+      setIsUpdating(false);
+      setIsMarkSoldModalVisible(false);
+    }
+  };
 
   if (!permission) {
     return (
@@ -614,7 +549,15 @@ export default function ScannerInfoScreen() {
                     <Text style={styles.errorText}>Erreur de chargement</Text>
                   </View>
                 ) : imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={styles.itemImage} resizeMode="cover" />
+                  <Image
+                    source={{ uri: imageUrl || FALLBACK_IMAGE_URL }}
+                    style={styles.itemImage}
+                    resizeMode="cover"
+                    onError={() => {
+                      console.log("Erreur de chargement de l'image:", imageUrl);
+                      setImageError(true);
+                    }}
+                  />
                 ) : (
                   <View style={styles.noImageContainer}>
                     <MaterialIcons name="image-not-supported" size={80} color="#cccccc" />
@@ -697,6 +640,19 @@ export default function ScannerInfoScreen() {
                   />
                 </View>
               )}
+
+              {scannedItem?.status === 'available' && (
+                <TouchableOpacity
+                  style={[styles.button, styles.sellButton]}
+                  onPress={() => {
+                    setSalePrice(scannedItem.selling_price); // Initialiser avec le prix actuel
+                    setIsMarkSoldModalVisible(true);
+                  }}
+                >
+                  <MaterialIcons name="shopping-cart" size={24} color="#fff" />
+                  <Text style={styles.buttonText}>Marquer comme vendu</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : ( 
             // Ce cas (pas de loading, pas d'erreur, pas d'item) ne devrait plus être atteint si le loading initial est bien géré
@@ -708,6 +664,52 @@ export default function ScannerInfoScreen() {
           )}
         </ScrollView>
       )}
+
+      <Modal
+        visible={isMarkSoldModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsMarkSoldModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Marquer comme vendu</Text>
+            
+            <View style={styles.priceInputContainer}>
+              <Text style={styles.priceLabel}>Prix de vente:</Text>
+              <TextInput
+                style={styles.priceInput}
+                keyboardType="numeric"
+                value={salePrice.toString()}
+                onChangeText={(text) => setSalePrice(Number(text) || 0)}
+                placeholder="Prix de vente"
+              />
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setIsMarkSoldModalVisible(false)}
+                disabled={isUpdating}
+              >
+                <Text style={styles.buttonText}>Annuler</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleMarkAsSold}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Confirmer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -964,5 +966,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#c62828',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  priceInputContainer: {
+    marginBottom: 20,
+  },
+  priceLabel: {
+    marginBottom: 8,
+    fontSize: 16,
+  },
+  priceInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    fontSize: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginHorizontal: 5,
+  },
+  confirmButton: {
+    backgroundColor: '#2196F3',
+  },
+  sellButton: {
+    backgroundColor: '#4CAF50',
+    marginTop: 10,
   },
 }); 

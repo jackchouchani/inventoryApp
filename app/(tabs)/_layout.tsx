@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { TouchableOpacity, View, Platform } from "react-native";
+import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
@@ -19,12 +19,39 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: true,
-        headerTitle: "Comptoir Vintage",
-        headerTitleStyle: {
-          fontSize: 20,
-          fontWeight: '700',
-        },
+        headerTitle: 'Comptoir Vintage',
+        headerTitleStyle: styles.headerTitle,
         headerTitleAlign: 'center',
+        headerLeft: () => (
+          <View style={styles.headerButtonsContainer}>
+            <TouchableOpacity
+              onPress={() => router.push('/(stack)/scanner-info')}
+              style={styles.headerButton}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="qr-code-scanner" size={22} color="#007AFF" />
+            </TouchableOpacity>
+            <View style={styles.separator} />
+            <TouchableOpacity
+              onPress={() => router.push('/(stack)/stats')}
+              style={styles.headerButton}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="bar-chart" size={22} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        ),
+        headerRight: () => (
+          <View style={styles.rightButtonContainer}>
+            <TouchableOpacity
+              onPress={() => router.push('/(stack)/settings')}
+              style={styles.headerButton}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="settings" size={24} color="#007AFF" />
+            </TouchableOpacity>
+          </View>
+        ),
         headerStyle: {
           height: 60,
         },
@@ -62,28 +89,7 @@ export default function TabLayout() {
           headerStyle: {
             backgroundColor: '#f5f5f5',
           },
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', marginRight: 15 }}>
-              <TouchableOpacity
-                onPress={() => router.push('/(stack)/scanner-info')}
-                style={{ marginRight: 15 }}
-              >
-                <MaterialIcons name="qr-code-scanner" size={24} color="#007AFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => router.push('/(stack)/stats')}
-                style={{ marginRight: 15 }}
-              >
-                <MaterialIcons name="bar-chart" size={24} color="#007AFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => router.push('/(stack)/settings')}
-              >
-                <MaterialIcons name="settings" size={24} color="#007AFF" />
-              </TouchableOpacity>
-            </View>
-          ),
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, size }: { color: string, size: number }) => (
             <MaterialIcons name="inventory" size={size} color={color} />
           ),
         }}
@@ -109,3 +115,35 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+  },
+  rightButtonContainer: {
+    marginRight: 15,
+  },
+  headerButtonsContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 122, 255, 0.08)',
+    borderRadius: 20,
+    padding: 4,
+    marginLeft: 15,
+  },
+  headerButton: {
+    padding: 8,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 36,
+  },
+  separator: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(0, 122, 255, 0.2)',
+    marginVertical: 2,
+  },
+
+});

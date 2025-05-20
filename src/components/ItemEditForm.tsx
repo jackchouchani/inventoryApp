@@ -7,7 +7,6 @@ import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
 import type { Item, ItemUpdate } from '../types/item';
-import AdaptiveImage from './AdaptiveImage';
 import { validatePrice, validateItemName } from '../utils/validation';
 import { handleError } from '../utils/errorHandler';
 import { checkPhotoPermissions } from '../utils/permissions';
@@ -15,9 +14,8 @@ import { usePhoto } from '../hooks/usePhoto';
 import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
 import { theme } from '../utils/theme';
-import { useForm, Controller } from 'react-hook-form';
-import { z } from 'zod';
 import * as ExpoImagePicker from 'expo-image-picker';
+import { LabelGenerator } from './LabelGenerator';
 
 interface ItemEditFormProps {
     item: Item;
@@ -208,6 +206,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         itemId: null
     });
 
+    const [showLabelGenerator, setShowLabelGenerator] = useState(false);
+
     useEffect(() => {
         console.log("[ItemEditForm] useEffect - Initializing form with item:", item.id);
         setEditedItem(initialItemState);
@@ -349,8 +349,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             return;
         }
 
-        console.log("[ItemEditForm] handleSubmit - Formulaire modifié, validation en cours");
-
         if (!validateForm()) {
             console.log("[ItemEditForm] handleSubmit - Échec de la validation du formulaire.");
             return;
@@ -362,24 +360,38 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             return;
         }
 
-        console.log(`[ItemEditForm] handleSubmit - Validation OK pour l'article ${item.id}`);
-
         let finalPhotoStorageUrl = editedItem.photo_storage_url;
 
-        if (localImageUri && localImageNeedsUpload) {
+        // Cas 1: Suppression d'une image existante (bouton "Supprimer" cliqué)
+        if (item.photo_storage_url && editedItem.photo_storage_url === null) {
+            console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${item.photo_storage_url} demandée.`);
+            try {
+                await deletePhoto(item.photo_storage_url);
+                console.log(`[ItemEditForm] handleSubmit - Image R2 ${item.photo_storage_url} supprimée.`);
+                finalPhotoStorageUrl = null;
+            } catch (deleteError) {
+                console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${item.photo_storage_url}:`, deleteError);
+                handleError(deleteError, 'Avertissement Suppression Image', {
+                    source: 'item_edit_form_delete_existing_r2_onsave',
+                    message: `Échec de la suppression de l'image existante. L'article sera mis à jour sans l'image.`,
+                    showAlert: true
+                });
+                // On force la suppression de l'image dans la base même si la suppression R2 a échoué
+                finalPhotoStorageUrl = null;
+            }
+        }
+        // Cas 2: Upload d'une nouvelle image
+        else if (localImageUri && localImageNeedsUpload) {
             console.log("[ItemEditForm] handleSubmit - Upload d'une nouvelle image nécessaire.");
-
-            console.log("[ItemEditForm] handleSubmit - Début de l'upload de la nouvelle image vers R2");
             try {
                 const uploadedFilename = await uploadPhoto(localImageUri, true, item.photo_storage_url || undefined);
-
                 if (uploadedFilename) {
                     console.log(`[ItemEditForm] handleSubmit - Nouvelle image R2 uploadée: ${uploadedFilename}`);
                     finalPhotoStorageUrl = uploadedFilename;
                     setLocalImageNeedsUpload(false);
                     setLocalImageUri(null);
                 } else {
-                    console.warn("[ItemEditForm] handleSubmit - Échec de l'upload de la nouvelle image, continuation sans cette image.");
+                    console.warn("[ItemEditForm] handleSubmit - Échec de l'upload de la nouvelle image.");
                     finalPhotoStorageUrl = undefined;
                 }
             } catch (uploadError) {
@@ -389,91 +401,46 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     message: `Échec de l'upload de la nouvelle image.`,
                     showAlert: true
                 });
-                 finalPhotoStorageUrl = undefined;
+                finalPhotoStorageUrl = undefined;
             }
-        } else if (item.photo_storage_url && editedItem.photo_storage_url === null) {
-             console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${item.photo_storage_url} demandée.`);
-             try {
-                await deletePhoto(item.photo_storage_url);
-                console.log(`[ItemEditForm] handleSubmit - Image R2 ${item.photo_storage_url} supprimée.`);
-                finalPhotoStorageUrl = null;
-             } catch (deleteError) {
-                console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${item.photo_storage_url} lors de la sauvegarde:`, deleteError);
-                 handleError(deleteError, 'Avertissement Suppression Image', {
-                    source: 'item_edit_form_delete_existing_r2_onsave',
-                     message: `Échec de la suppression de l'image existante.`,
-                     showAlert: true
-                 });
-                  finalPhotoStorageUrl = item.photo_storage_url;
-             }
-        } else {
-            console.log("[ItemEditForm] handleSubmit - Pas d'upload ou suppression d'image nécessaire (juste mise à jour des métadonnées).");
-             finalPhotoStorageUrl = editedItem.photo_storage_url;
         }
 
-        console.log("[ItemEditForm] handleSubmit - Préparation des données pour la mise à jour de la base de données");
-        const purchasePrice = parseFloat(editedItem.purchasePrice);
-        const sellingPrice = parseFloat(editedItem.sellingPrice);
-
-        const itemToUpdate: ItemUpdate = {
+        // Préparation des données pour la mise à jour de la base de données
+        const itemToUpdateToSendToDB: any = {
             name: editedItem.name,
             description: editedItem.description,
-            purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
-            sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+            purchasePrice: parseFloat(editedItem.purchasePrice) || 0,
+            sellingPrice: parseFloat(editedItem.sellingPrice) || 0,
             status: editedItem.status,
-            photo_storage_url: finalPhotoStorageUrl === null ? undefined : finalPhotoStorageUrl,
             containerId: editedItem.containerId,
             categoryId: editedItem.categoryId
         };
 
-         const itemToUpdateToSendToDB: any = {
-            name: editedItem.name,
-            description: editedItem.description,
-            purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
-            sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
-            status: editedItem.status,
-            containerId: editedItem.containerId,
-            categoryId: editedItem.categoryId
-         };
-
-         if (finalPhotoStorageUrl !== undefined) {
-              itemToUpdateToSendToDB.photo_storage_url = finalPhotoStorageUrl;
-         }
-
-        console.log("[ItemEditForm] handleSubmit - Données prêtes pour DB:", JSON.stringify(itemToUpdateToSendToDB, null, 2));
+        if (finalPhotoStorageUrl !== undefined) {
+            itemToUpdateToSendToDB.photo_storage_url = finalPhotoStorageUrl;
+        }
 
         try {
             console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${item.id} dans la base de données`);
             await database.updateItem(item.id, itemToUpdateToSendToDB);
-            console.log("[ItemEditForm] handleSubmit - Mise à jour DB réussie.");
 
-            console.log("[ItemEditForm] handleSubmit - Mise à jour optimiste dans Redux");
             const updatedItem: Item = {
                 ...item,
                 ...itemToUpdateToSendToDB,
-                photo_storage_url: itemToUpdateToSendToDB.photo_storage_url === null || itemToUpdateToSendToDB.photo_storage_url === undefined ? undefined : itemToUpdateToSendToDB.photo_storage_url,
                 updatedAt: new Date().toISOString()
             };
 
-             console.log("[ItemEditForm] Redux updatedItem:", JSON.stringify(updatedItem, null, 2));
-
             dispatch(updateItem(updatedItem));
-
-            console.log("[ItemEditForm] handleSubmit - Invalidation des queries React Query");
             queryClient.invalidateQueries({ queryKey: ['items'] });
             queryClient.invalidateQueries({ queryKey: ['inventory'] });
             if (item.photo_storage_url) {
                 queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
             }
             if (finalPhotoStorageUrl && typeof finalPhotoStorageUrl === 'string') {
-                 queryClient.invalidateQueries({ queryKey: ['photo', finalPhotoStorageUrl] });
+                queryClient.invalidateQueries({ queryKey: ['photo', finalPhotoStorageUrl] });
             }
 
-            console.log("[ItemEditForm] handleSubmit - Sauvegarde terminée avec succès");
-            if (onSuccess) {
-                console.log("[ItemEditForm] handleSubmit - Appel du callback onSuccess");
-                onSuccess();
-            }
+            if (onSuccess) onSuccess();
         } catch (error) {
             console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour finale de la base de données:", error);
             handleError(error, 'Erreur lors de la mise à jour', {
@@ -481,7 +448,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 message: `Échec de la mise à jour de l'article ${item.id}.`,
                 showAlert: true
             });
-        } finally {
         }
     }, [editedItem, item, validateForm, deletePhoto, uploadPhoto, dispatch, onSuccess, queryClient, localImageUri, localImageNeedsUpload, hasFormChanged]);
 
@@ -558,23 +524,55 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         setConfirmDialog({ visible: false, itemId: null });
     }, []);
 
-    const handlePhotoDelete = useCallback(() => {
+    const handlePhotoDelete = useCallback(async () => {
         console.log("[ItemEditForm] handlePhotoDelete - Suppression de la photo demandée via UI");
-        try {
+        if (!item.photo_storage_url) {
+            console.log("[ItemEditForm] handlePhotoDelete - Aucune photo existante à supprimer.");
             setLocalImageUri(null);
             setLocalImageNeedsUpload(false);
+            setEditedItem(prev => ({ ...prev, photo_storage_url: null }));
+            return;
+        }
 
+        try {
+            console.log(`[ItemEditForm] handlePhotoDelete - Suppression de l'image R2: ${item.photo_storage_url}`);
+            await deletePhoto(item.photo_storage_url);
+
+            console.log("[ItemEditForm] handlePhotoDelete - Image R2 supprimée avec succès.");
+
+            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${item.id} dans la base de données (photo_storage_url = null).`);
+            const itemToUpdateInDB: any = { photo_storage_url: null };
+            await database.updateItem(item.id, itemToUpdateInDB);
+
+            console.log("[ItemEditForm] handlePhotoDelete - Article DB mis à jour.");
+
+            console.log("[ItemEditForm] handlePhotoDelete - Mise à jour optimiste Redux & Invalidation caches.");
+            const updatedItem: Item = {
+                ...item,
+                photo_storage_url: undefined,
+                updatedAt: new Date().toISOString()
+            };
+            dispatch(updateItem(updatedItem));
+
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
+
+            setLocalImageUri(null);
+            setLocalImageNeedsUpload(false);
             setEditedItem(prev => ({ ...prev, photo_storage_url: null }));
 
+            Alert.alert('Succès', 'L\'image a été supprimée.');
+
         } catch (error) {
-            console.error("[ItemEditForm] handlePhotoDelete - Erreur lors du marquage de la suppression de la photo:", error);
-            handleError(error, 'Erreur Photo', {
-                source: 'item_edit_form_image_delete_ui',
-                message: `Échec du marquage de la photo pour suppression.`,
+            console.error("[ItemEditForm] handlePhotoDelete - Erreur lors de la suppression de la photo:", error);
+            handleError(error, 'Erreur Suppression Image', {
+                source: 'item_edit_form_image_delete_immediate',
+                message: `Échec de la suppression de l'image.`,
                 showAlert: true
             });
         }
-    }, [item, dispatch]);
+    }, [item, deletePhoto, database, dispatch, queryClient, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem, updateItem]);
 
     const navigateToAddContainer = useCallback(() => {
         console.log("[ItemEditForm] navigateToAddContainer - Saving state and navigating.");
@@ -764,6 +762,40 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     />
                 </View>
 
+                <View style={styles.actionsContainer}>
+                    <TouchableOpacity
+                        style={[styles.button, styles.generateLabelButton]}
+                        onPress={() => setShowLabelGenerator(true)}
+                    >
+                        <MaterialIcons name="receipt" size={20} color="#fff" style={styles.buttonIcon} />
+                        <Text style={styles.buttonText}>Générer Étiquette</Text>
+                    </TouchableOpacity>
+
+                    {showLabelGenerator && item && (
+                        <View style={styles.labelGeneratorContainer}>
+                            <LabelGenerator
+                                items={[{
+                                    id: item.id,
+                                    name: item.name,
+                                    qrCode: item.qrCode || `ITEM-${item.id}`,
+                                    sellingPrice: item.sellingPrice,
+                                    description: item.description,
+                                }]}
+                                onComplete={() => {
+                                    Alert.alert('Succès', 'Étiquette PDF générée.');
+                                    setShowLabelGenerator(false);
+                                }}
+                                onError={(err) => {
+                                    console.error('Error generating label:', err);
+                                    Alert.alert('Erreur', 'Impossible de générer l\'étiquette: ' + err.message);
+                                    setShowLabelGenerator(false);
+                                }}
+                                mode="items"
+                            />
+                        </View>
+                    )}
+                </View>
+
                 <View style={styles.buttonContainer}>
                     <TouchableOpacity
                         style={[styles.deleteButton, isPhotoProcessing && styles.disabledButton]}
@@ -800,7 +832,10 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         ) : isPhotoProcessing ? (
                              <Text style={styles.buttonText}>Opération en cours...</Text>
                         ) : (
-                            <Text style={styles.buttonText}>Mettre à jour</Text>
+                            <>
+                                <MaterialIcons name="save" size={20} color="#fff" />
+                                <Text style={styles.buttonText}>Mettre à jour</Text>
+                            </>
                         )}
                     </TouchableOpacity>
                 </View>
@@ -954,20 +989,50 @@ const styles = StyleSheet.create({
     categoryIcon: {
         marginRight: 8,
     },
+    actionsContainer: {
+        marginTop: 16,
+        marginBottom: 12,
+        gap: 12,
+    },
     buttonContainer: {
         flexDirection: 'row',
-        gap: 12,
-        marginTop: 16,
+        justifyContent: 'space-between',
+        marginTop: 12,
+        marginBottom: 12,
+        gap: 10,
+    },
+    button: {
+        flex: 1,
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 48,
+        flexDirection: 'row',
+        gap: 8,
     },
     saveButton: {
-        flex: 1,
-        backgroundColor: '#007AFF',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
+        backgroundColor: theme.colors.primary,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3,
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        flex: 1,
+    },
+    generateLabelButton: {
+        backgroundColor: '#6c5ce7',
+    },
+    buttonIcon: {
+        marginRight: 4,
     },
     uploadButton: {
         backgroundColor: '#4CD964',
@@ -1210,5 +1275,14 @@ const styles = StyleSheet.create({
         color: '#e53935',
         fontSize: 14,
         flexShrink: 1,
+    },
+    labelGeneratorContainer: {
+        marginTop: 10,
+        marginBottom: 0,
+        padding: 10,
+        backgroundColor: theme.colors.surface,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
 });

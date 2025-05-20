@@ -664,7 +664,7 @@ export default function LabelScreen() {
   if (isSearchActive) {
     return (
       <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
-        <Configure {...{ hitsPerPage: 1000 } as any} />
+        <Configure {...{ hitsPerPage: 100 } as any} />
         <LabelScreenContent />
       </InstantSearch>
     );

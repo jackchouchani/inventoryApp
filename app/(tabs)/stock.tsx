@@ -16,13 +16,10 @@ import * as Sentry from '@sentry/react-native';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { QUERY_KEYS as APP_QUERY_KEYS } from '../../src/constants/queryKeys';
 
-// Algolia imports
-// import { InstantSearch, Configure, useRefinementList, useToggleRefinement } from 'react-instantsearch-hooks-web';
-import { useAlgoliaSearch } from '../../src/hooks/useAlgoliaSearch';
-
-
 // Importer également useDefaultStyles et DateType si nécessaire pour les types
 import DateTimePicker, { useDefaultStyles } from 'react-native-ui-datepicker';
+
+import AlgoliaStockList from '../../src/components/AlgoliaStockList';
 
 // Interface pour les filtres de stock
 interface StockFilters {
@@ -31,6 +28,12 @@ interface StockFilters {
   status?: 'all' | 'available' | 'sold';
   minPrice?: number;
   maxPrice?: number;
+}
+
+// Ajout de l'interface pour les props de SearchBox
+interface SearchBoxProps {
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
 }
 
 // Removed: interface StockData - not used
@@ -95,16 +98,35 @@ const SellingPriceInputModal: React.FC<{
     );
 };
 
+// --- Nouvelle SearchBox ---
+// Utilise l'interface SearchBoxProps pour typer les props
+const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) => (
+  <View style={styles.searchBoxContainer}>
+    <TextInput
+      style={styles.searchBoxInput}
+      value={searchQuery}
+      // Quand le texte change, on met à jour l'état local.
+      // L'effet secondaire (useEffect) gérera l'appel debounced à algoliaSearch.
+      onChangeText={setSearchQuery}
+      placeholder="Rechercher des articles..."
+      placeholderTextColor="#999"
+      clearButtonMode="always"
+      autoCapitalize="none"
+      autoCorrect={false}
+    />
+  </View>
+);
+
 const StockScreenContent = () => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  // --- STATES --- 
-  const [filters, setFilters] = useState<StockFilters>({ status: 'all' });
+  // --- STATES ---
+  const [filters, setFilters] = useState<StockFilters>({ status: 'available' });
   const [searchQuery, setSearchQuery] = useState('');
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
-  
+
   // *** ÉTATS POUR LE MODAL DE DATE DE VENTE ***
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [itemToMarkSold, setItemToMarkSold] = useState<Item | null>(null);
@@ -115,20 +137,10 @@ const StockScreenContent = () => {
   // Récupérer les styles par défaut du date picker
   const defaultPickerStyles = useDefaultStyles();
 
-  // Correction de l'appel à useAlgoliaSearch
-  const algolia = searchQuery ? useAlgoliaSearch() : null;
-  const itemsFromAlgolia = algolia?.items || [];
-  const isAlgoliaLoading = algolia?.isLoading || false;
-  const algoliaStatus = algolia?.status || '';
-  const isLastPage = algolia?.isLastPage || false;
-  const loadMore = algolia?.loadMore || (() => {});
-  const refreshAlgolia = algolia?.refresh || (() => {});
-  const nbHits = algolia?.nbHits || 0;
-  const currentPage = algolia?.currentPage || 0;
-
   // --- REFS ---
 
   // --- React Query for Inventory --- //
+  // Cette requête est utilisée quand il n'y a PAS de recherche Algolia active
   const { data: inventoryData, isLoading: isLoadingInventory, error: errorInventory } = useQuery<Item[], QueryError>({
     queryKey: [APP_QUERY_KEYS.INVENTORY, refreshTimestamp], // Depend on refreshTimestamp to refetch when store is refreshed
     queryFn: async () => {
@@ -144,8 +156,10 @@ const StockScreenContent = () => {
       }
     },
     ...CACHE_CONFIG,
-    // Refetch inventory when the screen is focused
-    refetchOnWindowFocus: true, // This might be too aggressive, consider if needed
+    // Désactive la requête React Query si Algolia est actif (searchQuery non vide)
+    // Cela signifie que quand l'utilisateur tape dans la barre de recherche, la liste React Query ne se rafraîchit pas inutilement.
+    enabled: !searchQuery,
+    refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
 
@@ -184,64 +198,41 @@ const StockScreenContent = () => {
     ...CACHE_CONFIG
   });
 
-  // Pour le débogage, surveiller les changements d'items
-  useEffect(() => {
-    console.log(`[Stock] Items count (Algolia): ${itemsFromAlgolia.length}/${nbHits}, isLastPage: ${isLastPage}, status: ${algoliaStatus}, currentPage: ${currentPage}`);
-    console.log(`[Stock] Items count (Inventory Data): ${inventoryData?.length || 0}`);
-  }, [itemsFromAlgolia.length, nbHits, isLastPage, algoliaStatus, currentPage, inventoryData?.length]);
-
   // Utiliser le hook d'actions du stock
   const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
 
   // Mettre en place les callbacks stables en utilisant useRef
-  // Initialiser la ref avec les fonctions externes et les setters internes
   const stableCallbacks = useRef({
-    // Ajouter une référence à l'item à marquer comme vendu pour éviter les pertes d'état
     currentItemToMarkSold: null as Item | null,
     handleItemPress: (item: Item) => {
       setSelectedItem(item);
     },
     handleEditSuccess: () => {
       setSelectedItem(null);
-      // No need to manually invalidate or refetch here due to optimistic updates in useStockActions
     },
     handleEditCancel: () => {
       setSelectedItem(null);
     },
-    handleLoadMoreAlgolia: () => {
-      console.log(`[Stock] Load more (Algolia) triggered. Current count: ${itemsFromAlgolia.length}/${nbHits}`);
-      loadMore(); // Call the Algolia loadMore
-    },
-    // Logique pour afficher le date picker avant de marquer comme vendu
     handleMarkAsSoldPress: (item: Item) => {
         console.log('[handleMarkAsSoldPress] Received item:', item);
-        // Stocker l'item directement dans la référence stable
         stableCallbacks.current.currentItemToMarkSold = item;
-        setItemToMarkSold(item); // Conserver pour la compatibilité
-        // Initialiser la date du modal avec la date actuelle à l'ouverture
+        setItemToMarkSold(item);
         setSelectedSoldDate(new Date());
         setDatePickerVisibility(true);
     },
-    // Appeler directement handleMarkAsAvailable car pas besoin de date
     handleMarkAsAvailablePress: async (item: Item) => {
-        // Utiliser la ref pour accéder à handleMarkAsAvailable
-        // Optimistic update is handled inside handleMarkAsAvailable
         await handleMarkAsAvailable(item.id.toString());
     },
-    // Logique appelée quand une date est confirmée dans le date picker
-    // Cette fonction sera appelée par le bouton OK du modal personnalisé
     handleDateConfirm: async (saisiePrixVente: string) => {
         const itemToProcess = stableCallbacks.current.currentItemToMarkSold;
         console.log('[handleDateConfirm] Called with stableItemToMarkSold:', itemToProcess, 'selectedSoldDate:', selectedSoldDate, 'saisiePrixVente:', saisiePrixVente);
 
         if (itemToProcess && selectedSoldDate) {
-            // --- Utilise la valeur passée en argument ---
-            const cleanText = saisiePrixVente.replace(',', '.'); // Applique le nettoyage
+            const cleanText = saisiePrixVente.replace(',', '.');
             console.log('[DEBUG StockScreen] Valeur cleanText APRES nettoyage:', cleanText, 'Type:', typeof cleanText);
 
             const parsedSalePrice = parseFloat(cleanText);
             console.log('[DEBUG StockScreen] Valeur parsedSalePrice APRES parseFloat:', parsedSalePrice, 'Type:', typeof parsedSalePrice);
-            // --------------------------------------------
 
             const salePrice = isNaN(parsedSalePrice) ? 0 : parsedSalePrice;
 
@@ -265,7 +256,6 @@ const StockScreenContent = () => {
                 stableCallbacks.current.currentItemToMarkSold = null;
             } catch (error) {
                 console.error('[handleDateConfirm] Error during update:', error);
-                // Error handling is done within handleMarkAsSold
             }
         } else {
             console.error('[handleDateConfirm] Cannot proceed: itemToProcess or selectedSoldDate is null',
@@ -273,42 +263,22 @@ const StockScreenContent = () => {
         }
         setDatePickerVisibility(false);
     },
-    // Logique appelée quand l'utilisateur annule le date picker
     handleDateCancel: () => {
         setDatePickerVisibility(false);
         setItemToMarkSold(null);
         stableCallbacks.current.currentItemToMarkSold = null;
     },
-    // Functions from useStockActions and useAlgoliaSearch, assigned in useEffect
     handleMarkAsSold: handleMarkAsSold,
     handleMarkAsAvailable: handleMarkAsAvailable,
-    loadMoreAlgolia: loadMore,
-    refreshAlgolia: refreshAlgolia,
   });
 
-  // Update stableCallbacks.current when the actual hook functions change
-  useEffect(() => {
-    stableCallbacks.current.handleMarkAsSold = handleMarkAsSold;
-    stableCallbacks.current.handleMarkAsAvailable = handleMarkAsAvailable;
-    stableCallbacks.current.loadMoreAlgolia = loadMore;
-    stableCallbacks.current.refreshAlgolia = refreshAlgolia;
-  }, [handleMarkAsSold, handleMarkAsAvailable, loadMore, refreshAlgolia]);
-
-  // Refresh data when the screen is focused (using React Query's refetchOnWindowFocus and refetchOnMount)
-  // useFocusEffect is no longer needed for fetching inventory because of React Query config.
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     console.log('[Stock] Screen focused, potentially refreshing data via React Query config');
-  //     // React Query handles refetching on focus based on staleTime and other configs
-  //     return () => {
-  //       console.log('[Stock] Screen unfocused');
-  //     };
-  //   }, [])
-  // );
-
   // --- Filter inventoryData in memory based on filters state ---
+  // Ce filtre s'applique UNIQUEMENT quand Algolia n'est PAS actif (searchQuery est vide)
   const filteredInventoryData = useMemo(() => {
-    if (!inventoryData) return [];
+    // Si searchQuery est non vide, retournez un tableau vide, car on utilise Algolia
+    if (!inventoryData || searchQuery) return [];
+
+    console.log('[StockScreen] Applying filters to inventory data.');
 
     return inventoryData.filter(item => {
       // Filter by category
@@ -325,7 +295,7 @@ const StockScreenContent = () => {
          // Check if the container filter is 'Tous', which means no filter
          if (filters.containerName !== 'Tous') {
            // Find container by both name and name#number format
-           const container = (containersData || []).find(cont => 
+           const container = (containersData || []).find(cont =>
              cont.name === filters.containerName || `${cont.name}#${cont.number}` === filters.containerName
            );
            if (!container || item.containerId !== container.id) return false;
@@ -343,47 +313,32 @@ const StockScreenContent = () => {
 
       return true;
     });
-  }, [inventoryData, filters, categoriesData, containersData, refreshTimestamp]); // Depend on inventoryData and filters
+  }, [inventoryData, filters, categoriesData, containersData, refreshTimestamp, searchQuery]); // Dépend de searchQuery
 
 
   // --- LOGIQUE DE SÉLECTION DE LA SOURCE DE DONNÉES ---
+  // On utilise Algolia si searchQuery est non vide, sinon on utilise les données filtrées de l'inventaire
   const isSearchActive = !!searchQuery;
 
-  const itemsToDisplay = isSearchActive ? itemsFromAlgolia : filteredInventoryData;
-  const isLoading = isSearchActive ? isAlgoliaLoading : isLoadingInventory;
+  const itemsToDisplay = isSearchActive ? [] : filteredInventoryData;
+  // L'état de chargement dépend de la source de données active
+  const isLoading = isSearchActive ? false : isLoadingInventory;
+  // Les erreurs ne sont affichées que si Algolia n'est pas actif et qu'il y a une erreur React Query
   const errorToDisplay = isSearchActive ? null : errorInventory;
-  const isLoadingMore = isSearchActive ? isAlgoliaLoading && itemsToDisplay.length > 0 : isLoadingInventory && itemsToDisplay.length > 0; // Adjust isLoadingMore logic
+  // L'état de chargement plus dépend de la source de données active
+  const isLoadingMore = isSearchActive ? false : false;
 
-  // --- Handle Load More (either Algolia or Inventory Query if pagination added later) ---
+
+  // --- Handle Load More (Algolia only for now) ---
   const handleLoadMore = useCallback(() => {
-    if (isSearchActive) {
-       if (!isLastPage && !isAlgoliaLoading) {
-         stableCallbacks.current.loadMoreAlgolia();
-       }
-      } else {
-      // Handle pagination for standard inventory list if implemented
-      // Currently, we fetch all inventory at once, so no pagination for the standard list.
-      console.log('[Stock] Load more called on standard inventory list (no pagination implemented)');
-    }
-  }, [isSearchActive, isLastPage, isAlgoliaLoading, stableCallbacks]);
+    // La logique loadMore pour Algolia est maintenant dans AlgoliaStockList
+    // La liste locale ne gère pas la pagination pour l'instant
+    console.log('[Stock] Load more called. Source:', isSearchActive ? 'Algolia' : 'Inventory');
+  }, [isSearchActive]); // Dépend de isSearchActive
 
-  // --- Nouvelle SearchBox ---
-  const SearchBox = () => (
-    <View style={styles.searchBoxContainer}>
-      <TextInput
-        style={styles.searchBoxInput}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Rechercher des articles..."
-        placeholderTextColor="#999"
-        clearButtonMode="always"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
 
   // --- Filtres custom (par nom) ---
+  // Ces filtres sont utilisés uniquement quand isSearchActive est false
   const CategoryFilter = () => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainer}>
       <TouchableOpacity
@@ -437,6 +392,7 @@ const StockScreenContent = () => {
   );
 
   // Display loading indicator or error message based on the active data source
+  // Inclure le chargement Algolia si isSearchActive est true
   if (isLoading || isLoadingCategories || isLoadingContainers) { // Include loading for categories and containers
     return (
       <View style={styles.loadingContainer}>
@@ -446,7 +402,8 @@ const StockScreenContent = () => {
     );
   }
 
-  if (errorToDisplay || errorCategories || errorContainers) { // Include errors for categories and containers
+  // Afficher les erreurs seulement si Algolia n'est pas actif
+  if (!isSearchActive && (errorToDisplay || errorCategories || errorContainers)) { // Include errors for categories and containers
     const errorMessage = errorToDisplay?.message || errorCategories?.message || errorContainers?.message || 'Une erreur inconnue est survenue';
     return (
       <View style={styles.errorContainer}>
@@ -458,36 +415,56 @@ const StockScreenContent = () => {
 
   return (
       <View style={styles.container}>
-      <SearchBox/>
+      {/* La SearchBox met à jour l'état searchQuery */}
+      <SearchBox searchQuery={searchQuery} setSearchQuery={setSearchQuery}/>
       <TouchableOpacity style={styles.filtersToggleHeader} onPress={() => setShowFilters(!showFilters)}>
         <Text style={styles.filtersToggleHeaderText}>Filtrer les articles</Text>
       </TouchableOpacity>
-      {showFilters && (
+      {/* Les filtres custom sont affichés uniquement si la recherche Algolia n'est PAS active */}
+      {showFilters && !isSearchActive && (
         <View style={styles.filtersContainer}>
           <CategoryFilter/>
           <ContainerFilter/>
           <StatusFilter/>
         </View>
       )}
-      {/* Display no results message if both Algolia and Inventory data are empty */}
-      {itemsToDisplay.length === 0 && !isLoading && ( // Check !isLoading to avoid showing message while loading
+      {/* Display no results message handled within AlgoliaStockList or ItemList */}
+      {/* Le message est maintenant géré à l'intérieur des listes */}
+      {/* {itemsToDisplay.length === 0 && !isLoading && ( // Check !isLoading to avoid showing message while loading
          <View style={styles.noResultsContainer}>
            <Text style={styles.noResultsText}>Aucun article trouvé.</Text>
          </View>
-       )}
-        <MemoizedItemList
-          items={itemsToDisplay}
-          onItemPress={stableCallbacks.current.handleItemPress}
-          onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
-          onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
-          categories={categoriesData || []}
-          containers={containersData || []}
-          selectedItem={selectedItem}
-          onEditSuccess={stableCallbacks.current.handleEditSuccess}
-          onEditCancel={stableCallbacks.current.handleEditCancel}
-          onEndReached={handleLoadMore} // Use the combined handleLoadMore
-          isLoadingMore={isLoadingMore}
-        />
+       )} */}
+        {/* Affiche la liste Algolia SEULEMENT si recherche active */}
+        {isSearchActive ? (
+          <AlgoliaStockList
+            searchQuery={searchQuery}
+            onItemPress={stableCallbacks.current.handleItemPress}
+            onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
+            onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
+            categories={categoriesData || []}
+            containers={containersData || []}
+            selectedItem={selectedItem}
+            onEditSuccess={stableCallbacks.current.handleEditSuccess}
+            onEditCancel={stableCallbacks.current.handleEditCancel}
+            onEndReached={handleLoadMore} // onEndReached pour Algolia est géré dans le composant
+            isLoadingMore={isLoadingMore} // l'état isLoadingMore est géré dans le composant Algolia
+          />
+        ) : (
+          <MemoizedItemList
+            items={filteredInventoryData}
+            onItemPress={stableCallbacks.current.handleItemPress}
+            onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
+            onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
+            categories={categoriesData || []}
+            containers={containersData || []}
+            selectedItem={selectedItem}
+            onEditSuccess={stableCallbacks.current.handleEditSuccess}
+            onEditCancel={stableCallbacks.current.handleEditCancel}
+            onEndReached={handleLoadMore} // onEndReached pour la liste locale ne fait rien
+            isLoadingMore={isLoadingMore} // toujours false pour la liste locale
+          />
+        )}
 
         {/* *** MODAL POUR LA SÉLECTION DE LA DATE DE VENTE (Personnalisé avec sélecteur visuel) *** */}
         <Modal
@@ -507,7 +484,7 @@ const StockScreenContent = () => {
                          styles={{
                             ...defaultPickerStyles,
                             selected_label: {
-                                ...(defaultPickerStyles.selected_label as TextStyle), 
+                                ...(defaultPickerStyles.selected_label as TextStyle),
                                 color: '#FFFFFF',
                             },
                             selected: {
@@ -516,7 +493,7 @@ const StockScreenContent = () => {
                             },
                             today: {
                                 ...(defaultPickerStyles.today as ViewStyle),
-                                borderColor: '#007AFF', 
+                                borderColor: '#007AFF',
                                 borderWidth: 1,
                             },
                             day_label: {
@@ -558,7 +535,6 @@ const StockScreenContent = () => {
       </View>
   );
 }
-
 
 export default function StockScreen() {
   return (
@@ -628,7 +604,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-  // *** NOUVEAUX STYLES POUR LES FILTRES ***
   filtersContainer: {
     paddingVertical: 8,
     paddingHorizontal: Platform.OS === 'web' ? 12 : 8,
@@ -673,9 +648,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingRight: 8, // Un peu d'espace pour le switch
+    paddingRight: 8,
   },
-  // **************************************
   filtersToggleHeader: {
     padding: Platform.OS === 'web' ? 12 : 8,
     backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
@@ -690,18 +664,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  // *** STYLES POUR LE MODAL DE DATE PERSONNALISÉ ***
   datePickerModalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Fond semi-transparent
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   datePickerModalContent: {
     backgroundColor: '#fff',
     borderRadius: 10,
     padding: 20,
-    width: 300, // Largeur fixe ou adaptable
+    width: 300,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -719,7 +692,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     fontSize: 16,
     color: '#333',
-    alignSelf: 'flex-start', // Aligner à gauche
+    alignSelf: 'flex-start',
   },
   salePriceInput: {
     height: 40,
@@ -728,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     paddingHorizontal: 10,
     marginBottom: 15,
-    width: '100%', // Prendre toute la largeur du modal content
+    width: '100%',
     backgroundColor: '#fff',
     fontSize: 16,
   },
@@ -744,23 +717,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   datePickerCancelButton: {
-    // Pas de couleur de fond par défaut, texte bleu
   },
   datePickerConfirmButton: {
     backgroundColor: '#007AFF',
   },
   datePickerButtonText: {
     fontSize: 16,
-    color: '#007AFF', // Couleur bleue pour Annuler
+    color: '#007AFF',
   },
   datePickerConfirmButtonText: {
-    color: '#fff', // Couleur blanche pour OK
+    color: '#fff',
     fontWeight: 'bold',
   },
-  // **************************************************
 });
-
-// La MemoizedFilterBar originale et ses dépendances (comme StockFilters et les callbacks de filtre)
-// ont été enlevées ou commentées car Algolia gère maintenant la recherche principale.
-// Il faudra réintégrer les filtres (catégorie, statut, etc.) en utilisant les widgets/hooks d'Algolia.
-// Par exemple, useRefinementList pour les catégories/status, useRangeInput pour les prix.

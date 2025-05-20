@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { database } from '../database/database';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
-import { format, subWeeks, subMonths, subYears } from 'date-fns';
+import { startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, eachDayOfInterval, eachMonthOfInterval, endOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import * as Sentry from '@sentry/react-native';
 
@@ -40,6 +40,11 @@ export interface MonthlyStats {
   revenue: number;
   profit: number;
   itemCount: number;
+}
+
+export interface TimeSeriesDataPoint {
+  x: Date;
+  y: number;
 }
 
 export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
@@ -122,31 +127,42 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
     }
   }, []);
 
-  const calculateMonthlyStats = useCallback((items: Item[]): MonthlyStats[] => {
+  const calculateMonthlyStats = useCallback((items: Item[]) => {
     try {
       const now = new Date();
       let startDate: Date;
+      let endDate: Date = now;
+      let dateInterval: Date[] = [];
 
       switch (selectedPeriod) {
         case 'week':
-          startDate = subWeeks(now, 1);
+          startDate = startOfWeek(now, { locale: fr, weekStartsOn: 1 });
+          endDate = endOfWeek(now, { locale: fr, weekStartsOn: 1 });
+          dateInterval = eachDayOfInterval({ start: startDate, end: endDate });
           break;
         case 'month':
-          startDate = subMonths(now, 1);
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+          dateInterval = eachDayOfInterval({ start: startDate, end: now });
           break;
         case 'year':
-          startDate = subYears(now, 1);
+          startDate = startOfYear(now);
+          endDate = now;
+          dateInterval = eachMonthOfInterval({ start: startDate, end: now });
           break;
         default:
-          startDate = subMonths(now, 1);
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+          dateInterval = eachDayOfInterval({ start: startDate, end: now });
       }
 
       const soldItems = items.filter(item => {
         if (item.status !== 'sold' || !item.soldAt) return false;
         try {
           const soldDate = new Date(item.soldAt);
-          return soldDate >= startDate && soldDate <= now;
+          return soldDate >= startDate && soldDate <= endDate;
         } catch (error) {
+          console.error(`[useStats] Error parsing date for item ${item.name}: ${item.soldAt}`, error);
           Sentry.captureException(error, {
             tags: {
               section: 'monthly_stats_date_parsing'
@@ -154,60 +170,50 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
           });
           return false;
         }
-      });
+      }).sort((a, b) => new Date(a.soldAt!).getTime() - new Date(b.soldAt!).getTime()); // Sort by date
 
-      const stats: { [key: string]: MonthlyStats } = {};
 
-      soldItems.forEach(item => {
-        if (!item.soldAt) return;
+      const revenueData: TimeSeriesDataPoint[] = [];
+      const profitData: TimeSeriesDataPoint[] = [];
+      let currentRevenue = 0;
+      let currentProfit = 0;
+      let itemIndex = 0;
 
-        try {
-          const soldDate = new Date(item.soldAt);
-          let key: string;
-          
-          switch (selectedPeriod) {
-            case 'week':
-              key = format(soldDate, 'EEE', { locale: fr }).toLowerCase();
-              break;
-            case 'month':
-              key = format(soldDate, 'dd/MM', { locale: fr });
-              break;
-            case 'year':
-              key = format(soldDate, 'MMM', { locale: fr }).toLowerCase();
-              break;
-          }
+      dateInterval.forEach((datePoint, index) => {
+        // For year view, we want to show data up to the end of each month
+        // except for the current month where we show up to the current day
+        const thresholdDate = selectedPeriod === 'year' && index === dateInterval.length - 1
+          ? now // For current month, use current date
+          : endOfDay(selectedPeriod === 'year' ? endOfMonth(datePoint) : datePoint); // For other months, use end of month
 
-          if (!stats[key]) {
-            stats[key] = {
-              month: key,
-              revenue: 0,
-              profit: 0,
-              itemCount: 0
-            };
-          }
-
-          stats[key].revenue += item.sellingPrice || 0;
-          stats[key].profit += (item.sellingPrice || 0) - (item.purchasePrice || 0);
-          stats[key].itemCount += 1;
-        } catch (error) {
-          Sentry.captureException(error, {
-            tags: {
-              section: 'monthly_stats_calculation'
-            }
-          });
+        while (
+          itemIndex < soldItems.length &&
+          new Date(soldItems[itemIndex].soldAt!) <= thresholdDate
+          ) {
+            const item = soldItems[itemIndex];
+            currentRevenue += item.sellingPrice || 0;
+            currentProfit += (item.sellingPrice || 0) - (item.purchasePrice || 0);
+            itemIndex++;
         }
+
+        revenueData.push({
+          x: datePoint,
+          y: currentRevenue
+        });
+        profitData.push({
+          x: datePoint,
+          y: currentProfit
+        });
       });
 
-      const sortedStats = Object.values(stats).sort((a, b) => {
-        if (selectedPeriod === 'week') {
-          const weekDays = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
-          return weekDays.indexOf(a.month) - weekDays.indexOf(b.month);
-        }
-        return a.month.localeCompare(b.month);
-      });
+      // Return an object containing the two data series
+      return {
+        revenue: revenueData,
+        profit: profitData
+      };
 
-      return sortedStats;
     } catch (error) {
+      console.error('[useStats] Error in calculateMonthlyStats:', error);
       Sentry.captureException(error, {
         tags: {
           section: 'monthly_stats'

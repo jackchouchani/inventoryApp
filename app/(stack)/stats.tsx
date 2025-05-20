@@ -2,10 +2,15 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useStats, MonthlyStats } from '../../src/hooks/useStats';
+import { useStats } from '../../src/hooks/useStats';
 import { StatsChart } from '../../src/components/StatsChart';
 import { formatCurrency } from '../../src/utils/formatters';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack } from 'expo-router';
+import PeriodSelector from '../../src/components/PeriodSelector';
 
 const StatsScreen = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
@@ -13,24 +18,37 @@ const StatsScreen = () => {
     x: 0,
     y: 0,
     visible: false,
-    index: 0
+    // Stocker l'index du point cliqué
+    dataPointIndex: null as number | null
   });
   
   const router = useRouter();
   const { stats, monthlyStats, isLoading, error } = useStats(selectedPeriod);
 
+  // Reset tooltip function
+  const resetTooltip = useCallback(() => {
+    if (tooltipPos.visible) {
+      setTooltipPos({ x: 0, y: 0, visible: false, dataPointIndex: null });
+    }
+  }, [tooltipPos]);
+  
   const handlePeriodChange = useCallback((period: 'week' | 'month' | 'year') => {
     setSelectedPeriod(period);
-  }, []);
+    resetTooltip(); // Reset tooltip when period changes
+  }, [resetTooltip]);
 
+  // handleDataPointClick reçoit maintenant l'index du point cliqué
   const handleDataPointClick = useCallback((index: number, x: number, y: number) => {
+    console.log('Data point clicked:', { index, x, y });
     setTooltipPos({
       x,
       y,
       visible: true,
-      index
+      dataPointIndex: index,
     });
   }, []);
+
+
 
   if (isLoading) {
     return (
@@ -48,26 +66,36 @@ const StatsScreen = () => {
     );
   }
 
-  const chartData = {
-    labels: monthlyStats.map((stat: MonthlyStats) => stat.month),
-    datasets: [
-      {
-        data: monthlyStats.map((stat: MonthlyStats) => stat.revenue),
-        color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
-        strokeWidth: 2
-      },
-      {
-        data: monthlyStats.map((stat: MonthlyStats) => stat.profit),
-        color: (opacity = 1) => `rgba(52, 199, 89, ${opacity})`,
-        strokeWidth: 2
-      }
-    ],
-    legend: ['CA', 'Marge']
+  // monthlyStats a maintenant le format { revenue: [], profit: [] }
+  const chartData = monthlyStats;
+
+  const formatTooltipDate = (date: Date | null) => {
+    if (!date) return '';
+    switch (selectedPeriod) {
+      case 'week':
+        return format(date, 'EEEE', { locale: fr }); // Lundi, Mardi
+      case 'month':
+        return format(date, 'dd MMMM', { locale: fr }); // 17 mai
+      case 'year':
+        return format(date, 'MMMM yyyy', { locale: fr }); // mai 2024
+      default:
+        return '';
+    }
   };
+
+  // Récupérer les données du point cliqué pour le tooltip
+  const clickedRevenuePoint = tooltipPos.dataPointIndex !== null ? monthlyStats.revenue[tooltipPos.dataPointIndex] : null;
+  const clickedProfitPoint = tooltipPos.dataPointIndex !== null ? monthlyStats.profit[tooltipPos.dataPointIndex] : null;
+
+  // Récupérer les totaux pour la période (dernier point des données cumulées)
+  const totalCA_periode = monthlyStats.revenue.length > 0 ? monthlyStats.revenue[monthlyStats.revenue.length - 1].y : 0;
+  const totalMarge_periode = monthlyStats.profit.length > 0 ? monthlyStats.profit[monthlyStats.profit.length - 1].y : 0;
 
   return (
     <ErrorBoundary>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: 'Statistiques' }} />
+
         <View style={styles.topBar}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -98,7 +126,7 @@ const StatsScreen = () => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Résumé Financier</Text>
+            <Text style={styles.sectionTitle}>Résumé Financier Global</Text>
             <View style={styles.financialStats}>
               <View style={styles.financialRow}>
                 <Text style={styles.financialLabel}>Valeur d'Achat Totale:</Text>
@@ -122,50 +150,57 @@ const StatsScreen = () => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Évolution des ventes</Text>
-            <View style={styles.periodSelector}>
-              <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'week' && styles.periodButtonActive]}
-                onPress={() => handlePeriodChange('week')}
-              >
-                <Text style={[styles.periodButtonText, selectedPeriod === 'week' && styles.periodButtonTextActive]}>
-                  Semaine
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'month' && styles.periodButtonActive]}
-                onPress={() => handlePeriodChange('month')}
-              >
-                <Text style={[styles.periodButtonText, selectedPeriod === 'month' && styles.periodButtonTextActive]}>
-                  Mois
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'year' && styles.periodButtonActive]}
-                onPress={() => handlePeriodChange('year')}
-              >
-                <Text style={[styles.periodButtonText, selectedPeriod === 'year' && styles.periodButtonTextActive]}>
-                  Année
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.periodWrapper}>
+              <PeriodSelector
+                selectedPeriod={selectedPeriod}
+                onSelectPeriod={handlePeriodChange}
+              />
             </View>
             <StatsChart
               data={chartData}
+              selectedPeriod={selectedPeriod}
               onDataPointClick={handleDataPointClick}
             />
-            {tooltipPos.visible && (
-              <View style={[styles.tooltip, { left: tooltipPos.x - 35, top: tooltipPos.y - 70 }]}>
-                <Text style={styles.tooltipText}>
-                  CA: {formatCurrency(monthlyStats[tooltipPos.index].revenue)}
+            
+            {/* Display tooltip if a data point is clicked */}
+            {tooltipPos.visible && tooltipPos.dataPointIndex !== null && (
+              <View style={styles.tooltipContainer}>
+                <Text style={styles.tooltipTitle}>
+                  {clickedRevenuePoint ? formatTooltipDate(clickedRevenuePoint.x) : ''}
                 </Text>
-                <Text style={styles.tooltipText}>
-                  Marge: {formatCurrency(monthlyStats[tooltipPos.index].profit)}
-                </Text>
-                <Text style={styles.tooltipText}>
-                  Ventes: {monthlyStats[tooltipPos.index].itemCount}
-                </Text>
+                <View style={styles.tooltipRow}>
+                  <Text style={styles.tooltipLabel}>Chiffre d'affaires:</Text>
+                  <Text style={[styles.tooltipValue, {color: 'rgba(0, 122, 255, 1)'}]}>
+                    {clickedRevenuePoint ? formatCurrency(clickedRevenuePoint.y) : ''}
+                  </Text>
+                </View>
+                <View style={styles.tooltipRow}>
+                  <Text style={styles.tooltipLabel}>Bénéfice:</Text>
+                  <Text style={[styles.tooltipValue, {color: 'rgba(52, 199, 89, 1)'}]}>
+                    {clickedProfitPoint ? formatCurrency(clickedProfitPoint.y) : ''}
+                  </Text>
+                </View>
               </View>
             )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Évolution des ventes ({selectedPeriod === 'week' ? 'Semaine' : selectedPeriod === 'month' ? 'Mois' : 'Année'})</Text>
+            {/* Display Totals for selected period */}
+            <View style={styles.totalsContainer}>
+              {isLoading ? (
+                <Text>Chargement des statistiques...</Text>
+              ) : (
+                monthlyStats.revenue.length > 0 ? (
+                  <>
+                    <Text style={styles.totalText}>Total CA Période: {formatCurrency(totalCA_periode)}</Text>
+                    <Text style={styles.totalText}>Total Marge Période: {formatCurrency(totalMarge_periode)}</Text>
+                  </>
+                ) : (
+                  <Text>Aucune donnée de vente pour cette période.</Text>
+                )
+              )}
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -194,7 +229,7 @@ const StatsScreen = () => {
             ))}
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </ErrorBoundary>
   );
 };
@@ -275,6 +310,7 @@ const styles = StyleSheet.create({
   },
   financialStats: {
     gap: 12,
+    marginBottom: 16,
   },
   financialRow: {
     flexDirection: 'row',
@@ -298,28 +334,11 @@ const styles = StyleSheet.create({
     color: '#34C759',
     fontSize: 18,
   },
-  periodSelector: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    padding: 4,
-  },
-  periodButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  periodButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  periodButtonText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  periodButtonTextActive: {
-    color: '#fff',
+  periodWrapper: {
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+    paddingTop: 16,
+    width: '100%',
   },
   tooltip: {
     position: 'absolute',
@@ -375,6 +394,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#34C759',
+  },
+  tooltipTextDate: {
+    color: 'white',
+    fontSize: 10,
+    marginBottom: 4,
+  },
+  tooltipContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  tooltipTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#1a1a1a',
+    textAlign: 'center',
+  },
+  tooltipRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 4,
+  },
+  tooltipLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  tooltipValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  totalsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
 });
 
