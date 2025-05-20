@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Platform,
   Alert,
-  ActivityIndicator,
   TextInput,
   ScrollView,
   Switch
@@ -17,7 +16,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { LabelGenerator } from '../../src/components/LabelGenerator';
-import { handleDatabaseError } from '../../src/utils/errorHandler';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import type { Category } from '../../src/types/category';
@@ -87,7 +85,23 @@ const LabelScreenContent = () => {
   }, [filters]);
 
   const router = useRouter();
-  const { results: algoliaResults, refresh: refreshAlgolia, status: algoliaStatus } = useInstantSearch();
+  const [searchQuery, setSearchQuery] = useState('');
+  const isSearchActive = !!searchQuery;
+
+  // --- LOGIQUE ALGOLIA UNIQUEMENT SI RECHERCHE ACTIVE ---
+  let algoliaResults: any[] = [];
+  let refreshAlgolia = () => {};
+  let algoliaStatus = '';
+  let hits: any[] = [];
+  if (isSearchActive) {
+    // Monter InstantSearch et hooks Algolia uniquement si recherche active
+    // Utiliser useInstantSearch, useHits, etc.
+    const algolia = useInstantSearch();
+    // algoliaResults = algolia.results; // Supprimé car SearchResults<any> n'est pas un tableau et n'est pas utilisé comme tel
+    refreshAlgolia = algolia.refresh;
+    algoliaStatus = algolia.status;
+    hits = (useHits().hits as any[]);
+  }
 
   const { 
     data: staticData,
@@ -116,28 +130,12 @@ const LabelScreenContent = () => {
     ...CACHE_CONFIG
   });
 
-  const categories = staticData?.categories || [];
-  const allContainersFromDB = staticData?.containers || [];
-
-  const { hits } = useHits();
-
-  // DEBUG: Vérifier si on reçoit des hits d'Algolia
-  console.log("LABELS DEBUG - Nombre total de hits:", hits.length);
-  console.log("LABELS DEBUG - Premier hit:", hits.length > 0 ? JSON.stringify(hits[0]) : "Aucun hit");
-  
-  // DEBUG: Vérifier l'attribut doc_type sur les hits
-  if (hits.length > 0) {
-    console.log("LABELS DEBUG - doc_type du premier hit:", hits[0].doc_type);
-    const withDocType = hits.filter((hit: any) => hit.doc_type !== undefined).length;
-    console.log("LABELS DEBUG - Hits avec doc_type défini:", withDocType);
-  }
-
   const displayedListFromAlgolia = useMemo(() => {
     // DEBUG: Indiquer le type de filtre appliqué
     console.log("LABELS DEBUG - Filtre appliqué:", showContainers ? "container" : "item");
-    console.log("LABELS DEBUG - Total hits Algolia:", hits.length);
+    console.log("LABELS DEBUG - Total hits Algolia:", (hits as any[]).length);
     
-    const filteredHits = hits.filter((hit: any) => {
+    const filteredHits = (hits as any[]).filter((hit: any) => {
       // DEBUG: Log détaillé du filtrage
       if (hit.doc_type === undefined) {
         console.log("LABELS DEBUG - Hit sans doc_type:", hit.objectID);
@@ -290,11 +288,11 @@ const LabelScreenContent = () => {
   // Définir la fonction handleSelectAll en dehors du useRef pour avoir accès aux dernières valeurs de hits
   const handleSelectAll = useCallback(() => {
     // Debug pour vérifier les hits disponibles
-    console.log("LABELS DEBUG - Nombre de hits disponibles:", hits.length);
+    console.log("LABELS DEBUG - Nombre de hits disponibles:", (hits as any[]).length);
     
     if (showContainers) {
       // Filtre pour containers
-      const allContainers = hits
+      const allContainers = (hits as any[])
         .filter((hit: any) => hit.doc_type === 'container' && hit.objectID)
         .map((hit: any) => Number(hit.objectID));
       
@@ -307,10 +305,10 @@ const LabelScreenContent = () => {
       }
     } else {
       // Debuggons les valeurs doc_type pour comprendre le problème
-      console.log("LABELS DEBUG - 5 premiers hits:", hits.slice(0, 5));
+      console.log("LABELS DEBUG - 5 premiers hits:", (hits as any[]).slice(0, 5));
       
       // Utiliser une condition plus souple pour identifier les items
-      const allItems = hits
+      const allItems = (hits as any[])
         .filter((hit: any) => {
           const isItem = hit.doc_type !== 'container';
           return isItem && hit.objectID;
@@ -377,31 +375,66 @@ const LabelScreenContent = () => {
       });
   };
 
-  const isLoading = isLoadingStaticData || algoliaStatus === 'loading' || algoliaStatus === 'stalled';
-
-  if (isLoading && displayedListFromAlgolia.length === 0 && !staticData) {
-    return (
-      <View style={styles.loadingContainer}>
-        <MaterialIcons name="hourglass-empty" size={48} color="#007AFF" />
-        <Text style={styles.loadingText}>Chargement des données...</Text>
-      </View>
-    );
-  }
-
-  if (errorStaticData) {
-    const errorDetails = handleDatabaseError(errorStaticData);
-    return (
-      <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={48} color="#FF3B30" />
-        <Text style={styles.errorText}>
-          {errorDetails.message || 'Une erreur est survenue lors du chargement des données de base'}
-        </Text>
-      </View>
-    );
-  }
-
   // État pour suivre si le composant web est monté
   const isWebComponentMounted = Platform.OS === 'web' ? true : false;
+
+  // --- CHARGEMENT SUPABASE PAR DÉFAUT ---
+  const {
+    data: supabaseData,
+    isLoading: isLoadingSupabase,
+    error: errorSupabase
+  } = useQuery<InventoryData, Error>({
+    queryKey: ['labels_supabase', filters, searchQuery],
+    queryFn: async () => {
+      if (searchQuery) return { items: [], categories: [], containers: [] }; // On laisse Algolia gérer
+      try {
+        const [categoriesData, containersData, allItems] = await Promise.all([
+          database.getCategories(),
+          database.getContainers(),
+          database.getItems()
+        ]);
+        // Filtres locaux
+        let filteredItems = allItems;
+        if (filters.categoryId) filteredItems = filteredItems.filter(i => i.categoryId === filters.categoryId);
+        if (filters.containerId) filteredItems = filteredItems.filter(i => i.containerId === filters.containerId);
+        if (filters.status && filters.status !== 'all') filteredItems = filteredItems.filter(i => i.status === filters.status);
+        // TODO: Ajouter filtres prix/dates si besoin
+        return {
+          items: filteredItems,
+          categories: categoriesData || [],
+          containers: containersData || []
+        };
+      } catch (error) {
+        if (error instanceof Error) {
+          Sentry.captureException(error, { tags: { type: 'labels_supabase_fetch_error' } });
+        }
+        throw error;
+      }
+    },
+    ...CACHE_CONFIG
+  });
+
+  // --- LOGIQUE DE SÉLECTION DE LA SOURCE DE DONNÉES ---
+  const itemsToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.items || []);
+  const containersToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.containers || []);
+  const isLoading = isSearchActive ? (isLoadingStaticData || algoliaStatus === 'loading' || algoliaStatus === 'stalled') : isLoadingSupabase;
+  const errorToDisplay = isSearchActive ? errorStaticData : errorSupabase;
+
+  // --- SEARCHBOX ADAPTÉE ---
+  const SearchBox = () => (
+    <View style={styles.searchBoxContainer}>
+      <TextInput
+        style={styles.searchBoxInput}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder={Platform.OS === 'web' ? "Rechercher articles/containers..." : "Rechercher..."}
+        placeholderTextColor="#999"
+        clearButtonMode="always"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -437,11 +470,13 @@ const LabelScreenContent = () => {
       </View>
 
       <View style={styles.filterSection}>
-        <AlgoliaSearchBox />
-        <TouchableOpacity style={styles.filtersToggleHeaderAlgolia} onPress={() => setShowAlgoliaFilters(!showAlgoliaFilters)}>
-          <Text style={styles.filtersToggleHeaderTextAlgolia}>Filtrer par attributs</Text>
-        </TouchableOpacity>
-        {showAlgoliaFilters && (
+        <SearchBox />
+        {isSearchActive && (
+          <TouchableOpacity style={styles.filtersToggleHeaderAlgolia} onPress={() => setShowAlgoliaFilters(!showAlgoliaFilters)}>
+            <Text style={styles.filtersToggleHeaderTextAlgolia}>Filtrer par attributs</Text>
+          </TouchableOpacity>
+        )}
+        {isSearchActive && showAlgoliaFilters && (
           <View style={styles.filtersContainerAlgolia}>
             <RefinementListFilter attribute="category_name" title="Catégorie" />
             <RefinementListFilter attribute="container_reference" title="Container" />
@@ -532,7 +567,7 @@ const LabelScreenContent = () => {
         style={styles.selectionSection}
         contentContainerStyle={styles.itemListContent}
       >
-        {displayedListFromAlgolia.map((item, index) => (
+        {(showContainers ? containersToDisplay : itemsToDisplay).map((item, index) => (
           <TouchableOpacity
             key={item.id?.toString() || index}
             style={[
@@ -554,7 +589,7 @@ const LabelScreenContent = () => {
               </Text>
               {!showContainers && (item as Item).containerId && (
                 <Text style={styles.itemContainer}>
-                  {allContainersFromDB?.find(c => c.id === (item as Item).containerId)?.name || 'Sans container'}
+                  {containersToDisplay?.find(c => c.id === (item as Item).containerId)?.name || 'Sans container'}
                 </Text>
               )}
             </View>
@@ -565,7 +600,7 @@ const LabelScreenContent = () => {
             />
           </TouchableOpacity>
         ))}
-        {displayedListFromAlgolia.length === 0 && !isLoading && algoliaResults && (
+        {(showContainers ? containersToDisplay : itemsToDisplay).length === 0 && !isLoading && algoliaResults && (
           <View style={styles.noResultsContainer}>
             <Text style={styles.noResultsText}>
               {`Aucun ${showContainers ? 'container' : 'article'} trouvé.`}
@@ -623,17 +658,18 @@ const LabelScreenContent = () => {
 }
 
 export default function LabelScreen() {
-  return (
-    <InstantSearch
-      searchClient={searchClient}
-      indexName={INDEX_NAME}
-    >
-      <Configure
-        {...{ hitsPerPage: 1000 } as any}
-      />
-      <LabelScreenContent />
-    </InstantSearch>
-  );
+  // Monter InstantSearch uniquement si recherche active
+  const [searchQuery, setSearchQuery] = useState('');
+  const isSearchActive = !!searchQuery;
+  if (isSearchActive) {
+    return (
+      <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
+        <Configure {...{ hitsPerPage: 1000 } as any} />
+        <LabelScreenContent />
+      </InstantSearch>
+    );
+  }
+  return <LabelScreenContent />;
 }
 
 const styles = StyleSheet.create({

@@ -5,7 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
-import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
+import { getImageUrl } from '../utils/r2Client';
 
 // Constantes
 const { STORAGE: { BUCKETS: { PHOTOS } } } = SUPABASE_CONFIG;
@@ -40,6 +40,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localStatus, setLocalStatus] = useState(item.status);
 
   const handlePress = useCallback(() => {
     onPress?.(item);
@@ -54,12 +55,12 @@ const ItemCard: React.FC<ItemCardProps> = ({
   }, [scaleAnimation]);
 
   const handleMarkAsSold = useCallback(() => {
-    console.log('[ItemCard] handleMarkAsSold called for item:', item.id);
+    setLocalStatus('sold');
     onMarkAsSold?.(item);
   }, [item, onMarkAsSold]);
 
   const handleMarkAsAvailable = useCallback(() => {
-    console.log('[ItemCard] handleMarkAsAvailable called for item:', item.id);
+    setLocalStatus('available');
     onMarkAsAvailable?.(item);
   }, [item, onMarkAsAvailable]);
 
@@ -71,13 +72,13 @@ const ItemCard: React.FC<ItemCardProps> = ({
 
   const statusStyle = useMemo(() => [
     styles.statusBadge,
-    item.status === 'sold' ? styles.soldBadge : styles.availableBadge
-  ], [item.status]);
+    localStatus === 'sold' ? styles.soldBadge : styles.availableBadge
+  ], [localStatus]);
 
   const statusTextStyle = useMemo(() => [
     styles.statusText,
-    { color: item.status === 'sold' ? '#c62828' : '#2e7d32' }
-  ], [item.status]);
+    { color: localStatus === 'sold' ? '#c62828' : '#2e7d32' }
+  ], [localStatus]);
 
   useEffect(() => {
     fadeAnimation?.fadeIn({ duration: 300 });
@@ -87,34 +88,18 @@ const ItemCard: React.FC<ItemCardProps> = ({
     if (item.photo_storage_url) {
       setIsLoading(true);
       setErrorMessage(null);
-      
-      downloadImageWithS3Auth(item.photo_storage_url)
-        .then(uri => {
-          if (uri) {
-            setLocalUri(uri);
-            setIsLoading(false);
-          } else {
-            throw new Error('Échec de récupération de l\'image');
-          }
-        })
-        .catch(err => {
-          console.error(`Erreur lors du chargement de l'image pour l'article ${item.id}:`, err);
-          
-          // Tentative de fallback: essayer de récupérer juste le nom du fichier
-          const filenameOrEmpty = extractFilenameFromUrl(item.photo_storage_url || '');
-          if (filenameOrEmpty && filenameOrEmpty.length > 0) {
-            // Essayer d'utiliser directement le composant Image avec le nom de fichier
-            // Cela pourrait fonctionner si le bucket est public
-            setLocalUri(`https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/object/public/${PHOTOS}/${filenameOrEmpty}`);
-          } else {
-            setErrorMessage(`Erreur: ${err.message || 'Problème de chargement'}`);
-          }
-          setIsLoading(false);
-        });
+      // Utiliser getImageUrl pour générer l'URL Cloudflare R2
+      const url = getImageUrl(item.photo_storage_url);
+      setLocalUri(url);
+      setIsLoading(false);
     } else {
       setLocalUri(null);
     }
   }, [item.photo_storage_url, item.id]);
+
+  useEffect(() => {
+    setLocalStatus(item.status);
+  }, [item.status]);
 
   const renderImageContent = () => {
     if (isLoading) {
@@ -137,10 +122,22 @@ const ItemCard: React.FC<ItemCardProps> = ({
     }
     
     if (localUri) {
+      // Ajouter un paramètre unique pour contourner le cache du navigateur si nécessaire
+      const imageUri = Platform.OS === 'web' && !localUri.includes('_cache_bust=') 
+        ? `${localUri}${localUri.includes('?') ? '&' : '?'}_cache_bust=${item.id}`
+        : localUri;
+        
       return (
         <Image 
-          source={{ uri: localUri }} 
+          source={{ uri: imageUri }} 
           style={styles.image}
+          // Désactiver le cache intégré de React Native Image sur le web
+          {...(Platform.OS === 'web' ? { 
+            // @ts-ignore - Ces propriétés ne sont pas dans les types mais fonctionnent sur le web
+            loading: "eager",
+            fetchPriority: "high",
+            imageCachePolicy: "no-store" 
+          } : {})}
           onError={(e) => {
             console.error(`Erreur de rendu d'image pour l'article ${item.id}:`, e.nativeEvent.error);
             setErrorMessage(`Erreur de rendu: ${e.nativeEvent.error}`);
@@ -175,18 +172,18 @@ const ItemCard: React.FC<ItemCardProps> = ({
           <View style={styles.bottomRow}>
             <View style={statusStyle}>
               <Text style={statusTextStyle}>
-                {item.status === 'sold' ? 'Vendu' : 'Disponible'}
+                {localStatus === 'sold' ? 'Vendu' : 'Disponible'}
               </Text>
             </View>
             <TouchableOpacity
               style={[
                 styles.statusToggleButton,
-                item.status === 'sold' ? styles.restoreButton : styles.sellButton
+                localStatus === 'sold' ? styles.restoreButton : styles.sellButton
               ]}
-              onPress={item.status === 'sold' ? handleMarkAsAvailable : handleMarkAsSold}
+              onPress={localStatus === 'sold' ? handleMarkAsAvailable : handleMarkAsSold}
             >
               <MaterialIcons
-                name={item.status === 'sold' ? 'restore' : 'shopping-cart'}
+                name={localStatus === 'sold' ? 'restore' : 'shopping-cart'}
                 size={16}
                 color="#fff"
               />
@@ -328,9 +325,6 @@ const styles = StyleSheet.create({
 export default React.memo(ItemCard, (prevProps, nextProps) => {
   return (
     prevProps.item.id === nextProps.item.id &&
-    prevProps.item.status === nextProps.item.status &&
-    prevProps.item.name === nextProps.item.name &&
-    prevProps.item.sellingPrice === nextProps.item.sellingPrice &&
-    prevProps.item.photo_storage_url === nextProps.item.photo_storage_url
+    prevProps.item.status === nextProps.item.status
   );
 }); 

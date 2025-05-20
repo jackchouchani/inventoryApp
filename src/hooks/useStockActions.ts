@@ -1,127 +1,108 @@
+// Dans src/hooks/useStockActions.ts
 import { useCallback } from 'react';
-import { useDispatch } from 'react-redux';
 import { useQueryClient } from '@tanstack/react-query';
 import { database } from '../database/database';
-import { updateItem as updateItemAction } from '../store/itemsActions';
 import { handleError } from '../utils/errorHandler';
 import type { Item } from '../types/item';
 import { QUERY_KEYS } from '../constants/queryKeys';
 
 export function useStockActions() {
-  const dispatch = useDispatch();
   const queryClient = useQueryClient();
 
-  const handleMarkAsSold = useCallback(async (itemIdString: string, soldDate: string, newSellingPrice?: number) => {
-    console.log('[useStockActions] handleMarkAsSold called with:', { itemIdString, soldDate, newSellingPrice });
+  const markItem = useCallback(async (
+    itemId: number,
+    updates: Partial<Item>,
+    optimisticData: (oldItem: Item) => Item
+  ) => {
+    const previousData = queryClient.getQueryData<Item[]>([QUERY_KEYS.INVENTORY]) || [];
+
+    // Mise à jour optimiste
+    queryClient.setQueryData<Item[]>([QUERY_KEYS.INVENTORY], oldItems =>
+      (oldItems || []).map(item =>
+        item.id === itemId ? optimisticData(item) : item
+      )
+    );
+    console.log('[DEBUG useStockActions] Mise à jour optimiste appliquée pour item:', itemId); // Log optimiste
+
     try {
-      const itemId = parseInt(itemIdString, 10);
-      if (isNaN(itemId)) {
-        const error = new Error('Invalid item ID');
-        console.error('[useStockActions] Invalid item ID:', itemIdString, error);
-        handleError(error, 'ID d\'article invalide', { showAlert: true });
-        return false;
-      }
+      console.log('[DEBUG useStockActions] Envoi à database.updateItem:', { itemId, updates }); // Log avant l'appel API
+      await database.updateItem(itemId, updates);
+      console.log('[DEBUG useStockActions] database.updateItem SUCCESS pour item:', itemId); // Log succès API
 
-      let validSoldDate = null;
-      try {
-        validSoldDate = new Date(soldDate).toISOString();
-        console.log('[useStockActions] Validated soldDate:', validSoldDate);
-      } catch (dateError) {
-        console.error('[useStockActions] Invalid date format:', soldDate, dateError);
-        handleError(new Error('Format de date invalide'), 'Format de date invalide', { showAlert: true });
-        return false;
-      }
-
-      const now = new Date().toISOString();
-      
-      const updateData: any = {
-        status: 'sold',
-        sold_at: validSoldDate,
-        updated_at: now
-      };
-
-      if (newSellingPrice !== undefined && !isNaN(newSellingPrice)) {
-        updateData.selling_price = newSellingPrice;
-        console.log('[useStockActions] Adding selling_price to updateData:', newSellingPrice);
-      }
-
-      console.log('[useStockActions] updateData prepared:', JSON.stringify(updateData));
-
-      try {
-        console.log('[useStockActions] Calling database.updateItem with ID:', itemId, 'and data:', JSON.stringify(updateData));
-        
-        await database.updateItem(itemId, {
-          status: 'sold',
-          soldAt: validSoldDate,
-          sellingPrice: newSellingPrice
-        });
-        
-        console.log('[useStockActions] database.updateItem successful.');
-        
-        console.log('[useStockActions] Invalidating query cache for', QUERY_KEYS.INVENTORY);
-        await queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.INVENTORY] });
-        console.log('[useStockActions] Cache invalidated.');
-        
-        await new Promise(resolve => setTimeout(resolve, 200));
-        console.log('[useStockActions] Mark as sold completed successfully for item:', itemId);
-        
-        return true;
-
-      } catch (error) {
-        console.error('[useStockActions] Error during database update:', error);
-        handleError(error, 'Erreur lors du marquage comme vendu', {
-          source: 'stock_actions',
-          message: `Échec de la mise à jour de l'article ${itemIdString} comme vendu`,
-          showAlert: true
-        });
-        return false;
-      }
-    } catch (error) {
-      console.error('[useStockActions] General error in handleMarkAsSold:', error);
-      handleError(error, 'Erreur lors de la mise à jour du stock', {
-        source: 'stock_actions',
-        message: `Erreur générale lors de la mise à jour de l'article ${itemIdString}`,
-        showAlert: true
+      // Invalidation douce pour resynchronisation
+      await queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.INVENTORY],
+        refetchType: 'active',
       });
+      console.log('[DEBUG useStockActions] Invalidation de requête déclenchée pour item:', itemId); // Log invalidation
+
+
+      return true;
+    } catch (error) {
+      console.error('[DEBUG useStockActions] database.updateItem ERREUR pour item:', itemId, error); // Log erreur API
+      // Rollback en cas d'erreur
+      queryClient.setQueryData([QUERY_KEYS.INVENTORY], previousData);
+      handleError(error, 'Erreur de mise à jour', { showAlert: true });
       return false;
     }
-  }, [dispatch, queryClient]);
+  }, [queryClient]);
+
+  const handleMarkAsSold = useCallback(async (itemIdString: string, soldDate: string, salePrice?: number) => {
+    const itemId = Number(itemIdString);
+    if (isNaN(itemId)) {
+      handleError(new Error('ID invalide'), 'ID d\'article invalide', { showAlert: true });
+      return false;
+    }
+
+    const finalSalePrice = salePrice ?? 0;
+
+    return markItem(
+      itemId,
+      {
+        status: 'sold',
+        soldAt: new Date(soldDate).toISOString(),
+        sellingPrice: finalSalePrice
+      },
+      (oldItem) => ({
+        ...oldItem,
+        status: 'sold',
+        soldAt: new Date(soldDate).toISOString(),
+        sellingPrice: finalSalePrice
+      })
+    );
+  }, [markItem]);
 
   const handleMarkAsAvailable = useCallback(async (itemIdString: string) => {
-    try {
-      const itemId = parseInt(itemIdString, 10);
-      if (isNaN(itemId)) {
-        handleError(new Error('Invalid item ID'), 'ID d\'article invalide pour remise en stock');
-        return;
-      }
-      const now = new Date().toISOString();
-      const updateData = {
-        status: 'available' as const,
-        soldAt: undefined,
-        updatedAt: now
-      };
-
-      try {
-        await database.updateItem(itemId, updateData);
-        queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.INVENTORY] });
-      } catch (error) {
-        handleError(error, 'Erreur lors de la remise en stock', {
-          source: 'stock_actions',
-          message: `Échec de la remise en stock de l'article ${itemIdString}`,
-          showAlert: true
-        });
-      }
-    } catch (error) {
-      handleError(error, 'Erreur lors de la mise à jour du stock', {
-        source: 'stock_actions',
-        message: `Erreur générale lors de la remise en stock de l'article ${itemIdString}`,
-        showAlert: true
-      });
+    const itemId = Number(itemIdString);
+    if (isNaN(itemId)) {
+      handleError(new Error('ID invalide'), 'ID d\'article invalide', { showAlert: true });
+      return false;
     }
-  }, [dispatch, queryClient]);
+
+    return markItem(
+      itemId,
+      { status: 'available', soldAt: undefined },
+      (oldItem) => ({ ...oldItem, status: 'available', soldAt: undefined })
+    );
+  }, [markItem]);
+
+  const handleUpdateSellingPrice = useCallback(async (itemIdString: string, newSellingPrice: number) => {
+    const itemId = Number(itemIdString);
+    if (isNaN(itemId)) {
+      handleError(new Error('ID invalide'), 'ID d\'article invalide', { showAlert: true });
+      return false;
+    }
+
+    return markItem(
+      itemId,
+      { sellingPrice: newSellingPrice },
+      (oldItem) => ({ ...oldItem, sellingPrice: newSellingPrice })
+    );
+  }, [markItem]);
 
   return {
     handleMarkAsSold,
-    handleMarkAsAvailable
+    handleMarkAsAvailable,
+    handleUpdateSellingPrice
   };
-} 
+}

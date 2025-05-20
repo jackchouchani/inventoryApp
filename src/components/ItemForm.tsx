@@ -431,42 +431,81 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 return;
             }
             
-            let finalFormData = { ...item };
-            
+            let photoStorageUrl = item.photo_storage_url; // Utiliser l'URL existante si aucune nouvelle photo n'est sélectionnée
+
             // Si nous avons une image locale en attente d'upload
             if (localImage && localImage.needsUpload) {
                 setIsUploading(true);
                 try {
-                    // Ici on upload réellement l'image
-                    const uploadedUrl = await uploadPhoto(localImage.uri);
-                    
-                    // Assurer que l'URL est correctement traitée
-                    if (uploadedUrl) {
-                        finalFormData.photo_storage_url = uploadedUrl;
+                    console.log("[ItemForm] handleSubmit - Upload d'une nouvelle image vers R2...");
+                    // Appeler uploadPhoto depuis usePhoto, qui utilise le worker R2
+                    // Le hook se charge de générer le nom de fichier et l'uploader
+                    const uploadedFilename = await uploadPhoto(localImage.uri, true); // shouldCompress = true par défaut, pas besoin de customFilename ici si usePhoto le génère
+
+                    // uploadPhoto doit retourner le nom de fichier R2 si réussi
+                    if (uploadedFilename) {
+                        console.log("[ItemForm] handleSubmit - Upload R2 réussi, nom de fichier:", uploadedFilename);
+                        photoStorageUrl = uploadedFilename; // Stocker le nom de fichier R2
                     } else {
-                        finalFormData.photo_storage_url = undefined;
+                        console.warn("[ItemForm] handleSubmit - Échec de l'upload R2, continuation sans photo.");
+                        photoStorageUrl = undefined; // Pas d'image si l'upload échoue
                     }
                 } catch (uploadError) {
+                    console.error("[ItemForm] handleSubmit - Erreur lors de l'upload photo R2:", uploadError);
                     handleError(uploadError, 'Erreur lors de l\'upload de la photo', {
-                        source: 'item_form',
+                        source: 'item_form_upload_r2',
                         message: 'Impossible d\'uploader la photo',
                         showAlert: true
                     });
                     // Continuer sans photo si l'upload échoue
-                    finalFormData.photo_storage_url = undefined;
+                    photoStorageUrl = undefined;
                 } finally {
                     setIsUploading(false);
                 }
+            } else {
+                 // Si pas de nouvelle image locale, vérifier si l'image existante a été supprimée
+                 // Dans ItemForm (création), il n'y a pas d'image existante à supprimer de R2
+                 // Cette logique est plus pertinente dans ItemEditForm
+                 console.log("[ItemForm] handleSubmit - Pas de nouvelle image locale à uploader.");
             }
 
-            // Utilisation directe de addItemMutation sans passer par handleSave
-            await addItemMutation.mutateAsync(finalFormData);
+            console.log("[ItemForm] handleSubmit - Préparation des données pour l'ajout à la base de données");
+            const purchasePrice = parseFloat(item.purchasePrice);
+            const sellingPrice = parseFloat(item.sellingPrice);
+
+            // Assurer que categoryId n'est pas null (mais peut être undefined)
+            const categoryId = item.categoryId || undefined;
+
+            const data: ItemInput = {
+                name: item.name.trim(),
+                description: item.description.trim(),
+                purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice, // Gérer les NaN
+                sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,   // Gérer les NaN
+                status: item.status,
+                photo_storage_url: photoStorageUrl, // Stocker le nom de fichier R2 (string | undefined)
+                containerId: item.containerId || null,
+                categoryId, // Utilisez la version sans null
+                qrCode: generateId('ITEM') // Générer le QR Code ici
+            };
+
+            console.log("[ItemForm] handleSubmit - Données à ajouter:", JSON.stringify(data, null, 2));
+
+            // Utilisation directe de addItemMutation
+            // La mutation s'occupe de l'optimistic update et de l'insertion DB
+            await addItemMutation.mutateAsync(data);
+
+            // La réinitialisation du formulaire et l'appel à onSuccess sont gérés dans onSuccess de la mutation
+            // resetForm();
+            // onSuccess?.(); // Appelé dans addItemMutation.mutateAsync().then(...)
+
         } catch (error) {
-            handleError(error, 'Erreur lors de la création', {
-                source: 'item_form',
+            console.error("[ItemForm] handleSubmit - Erreur générale lors de la sauvegarde:", error);
+            handleError(error, 'Erreur lors de la création de l\'article', {
+                source: 'item_form_submit',
                 message: 'Impossible de créer l\'article',
                 showAlert: true
             });
+            setIsUploading(false); // Assurez-vous que l'indicateur d'upload est désactivé en cas d'erreur
         }
     };
 

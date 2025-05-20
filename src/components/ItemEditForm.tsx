@@ -12,16 +12,12 @@ import { validatePrice, validateItemName } from '../utils/validation';
 import { handleError } from '../utils/errorHandler';
 import { checkPhotoPermissions } from '../utils/permissions';
 import { usePhoto } from '../hooks/usePhoto';
-import { supabase } from '../config/supabase';
-import * as ExpoImagePicker from 'expo-image-picker';
 import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
 import { theme } from '../utils/theme';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
-import { ImagePicker } from './ImagePicker';
-import { downloadImageWithS3Auth, extractFilenameFromUrl } from '../utils/s3AuthClient';
-import { SUPABASE_CONFIG } from '../config/supabaseConfig';
+import * as ExpoImagePicker from 'expo-image-picker';
 
 interface ItemEditFormProps {
     item: Item;
@@ -42,7 +38,6 @@ interface EditedItemForm {
     categoryId?: number;
 }
 
-// Composant mémorisé pour l'option de container
 const ContainerOption = memo(({ 
     container, 
     isSelected, 
@@ -57,12 +52,11 @@ const ContainerOption = memo(({
         onPress={onSelect}
     >
         <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-            {container.name}
+            {container.name}#{container.number}
         </Text>
     </TouchableOpacity>
 ));
 
-// Composant mémorisé pour l'option de catégorie
 const CategoryOption = memo(({ 
     category, 
     isSelected, 
@@ -88,7 +82,6 @@ const CategoryOption = memo(({
     </TouchableOpacity>
 ));
 
-// Ajout des composants pour les listes de containers et catégories
 const ContainerList = memo(({ 
     containers, 
     selectedId, 
@@ -126,7 +119,6 @@ const ContainerList = memo(({
     </ScrollView>
 ));
 
-// Composant pour la liste de catégories
 const CategoryList = memo(({ 
     categories, 
     selectedId, 
@@ -164,11 +156,9 @@ const CategoryList = memo(({
     </ScrollView>
 ));
 
-// Fonction pour comparer les props et éviter les re-renders inutiles
 const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProps) => {
     return (
         prevProps.item.id === nextProps.item.id &&
-        prevProps.item.description === nextProps.item.description &&
         prevProps.item.updatedAt === nextProps.item.updatedAt &&
         prevProps.categories.length === nextProps.categories.length &&
         prevProps.containers.length === nextProps.containers.length
@@ -176,29 +166,40 @@ const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProp
 };
 
 export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
-    // console.log("[ItemEditForm] Received item prop:", JSON.stringify(item, null, 2)); // <-- RETRAIT DU DIAGNOSTIC
-    
-    // S'assurer que les containers et catégories sont des tableaux valides
     const containers = Array.isArray(propContainers) ? propContainers : [];
     const categories = Array.isArray(propCategories) ? propCategories : [];
-    
+
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
-    const { uploadPhoto, deletePhoto, compressImage } = usePhoto();
+    const { uploadPhoto, deletePhoto, loadImage, state: photoHookState, validatePhoto } = usePhoto();
+
     const router = useRouter();
 
-    // État pour tracker si l'image a été modifiée et doit être uploadée
-    const [localImage, setLocalImage] = useState<{ uri: string; needsUpload: boolean } | null>(null);
-    // Ajout d'un état pour suivre l'upload en cours
-    const [isUploading, setIsUploading] = useState(false);
-    // Nouvel état pour gérer l'URL directe de l'image pour l'affichage
-    const [displayImageUri, setDisplayImageUri] = useState<string | null>(null);
-    // État pour gérer les erreurs d'image
-    const [imageError, setImageError] = useState<string | null>(null);
-    // État pour le chargement de l'image
-    const [isImageLoading, setIsImageLoading] = useState(false);
+    const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+    const [localImageNeedsUpload, setLocalImageNeedsUpload] = useState(false);
 
-    // État pour la boîte de dialogue de confirmation de suppression
+    const [editedItem, setEditedItem] = useState<EditedItemForm>({
+        name: item.name,
+        description: item.description || '',
+        purchasePrice: (typeof item.purchasePrice === 'number' && !isNaN(item.purchasePrice)) ? item.purchasePrice.toString() : '0',
+        sellingPrice: (typeof item.sellingPrice === 'number' && !isNaN(item.sellingPrice)) ? item.sellingPrice.toString() : '0',
+        status: item.status,
+        photo_storage_url: item.photo_storage_url,
+        containerId: item.containerId,
+        categoryId: item.categoryId
+    });
+
+    const initialItemState = useMemo(() => ({
+        name: item.name,
+        description: item.description || '',
+        purchasePrice: (typeof item.purchasePrice === 'number' && !isNaN(item.purchasePrice)) ? item.purchasePrice.toString() : '0',
+        sellingPrice: (typeof item.sellingPrice === 'number' && !isNaN(item.sellingPrice)) ? item.sellingPrice.toString() : '0',
+        status: item.status,
+        photo_storage_url: item.photo_storage_url,
+        containerId: item.containerId,
+        categoryId: item.categoryId
+    }), [item]);
+
     const [confirmDialog, setConfirmDialog] = useState<{
         visible: boolean;
         itemId: number | null;
@@ -207,32 +208,41 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         itemId: null
     });
 
-    // Initialisation de l'état du formulaire
-    const [editedItem, setEditedItem] = useState<EditedItemForm>({
-        name: item.name,
-        description: item.description || '',
-        purchasePrice: item.purchasePrice.toString(),
-        sellingPrice: item.sellingPrice.toString(),
-        status: item.status,
-        photo_storage_url: item.photo_storage_url,
-        containerId: item.containerId,
-        categoryId: item.categoryId
-    });
-
-    const initialFormState = useMemo(() => ({
-        name: item.name,
-        description: item.description || '',
-        purchasePrice: item.purchasePrice.toString(),
-        sellingPrice: item.sellingPrice.toString(),
-        status: item.status,
-        photo_storage_url: item.photo_storage_url,
-        containerId: item.containerId,
-        categoryId: item.categoryId
-    }), [item]);
-
     useEffect(() => {
-        setEditedItem(initialFormState);
-    }, [initialFormState]);
+        console.log("[ItemEditForm] useEffect - Initializing form with item:", item.id);
+        setEditedItem(initialItemState);
+        setLocalImageUri(null);
+        setLocalImageNeedsUpload(false);
+
+        if (item.photo_storage_url && typeof item.photo_storage_url === 'string') {
+            console.log("[ItemEditForm] useEffect - Loading initial image from R2:", item.photo_storage_url);
+            loadImage(item.photo_storage_url);
+        } else {
+             console.log("[ItemEditForm] useEffect - No initial image to load or photo_storage_url is null.");
+        }
+
+        return () => {
+             console.log("[ItemEditForm] useEffect - Cleanup");
+        };
+
+    }, [initialItemState, item.photo_storage_url, item.id, loadImage]);
+
+    const hasFormChanged = useMemo(() => {
+        const fieldsChanged =
+             editedItem.name !== initialItemState.name ||
+             editedItem.description !== initialItemState.description ||
+             editedItem.purchasePrice !== initialItemState.purchasePrice ||
+             editedItem.sellingPrice !== initialItemState.sellingPrice ||
+             editedItem.status !== initialItemState.status ||
+             editedItem.containerId !== initialItemState.containerId ||
+             editedItem.categoryId !== initialItemState.categoryId;
+
+         const photoChanged =
+             localImageNeedsUpload ||
+             editedItem.photo_storage_url !== initialItemState.photo_storage_url;
+
+         return fieldsChanged || photoChanged;
+    }, [editedItem, initialItemState, localImageNeedsUpload]);
 
     const handlePriceChange = useCallback((field: 'purchasePrice' | 'sellingPrice', text: string) => {
         const cleanText = text.replace(',', '.');
@@ -244,502 +254,377 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const validateForm = useCallback((): boolean => {
         try {
             if (!validateItemName(editedItem.name)) {
-                Alert.alert('Erreur', 'Le nom de l\'article est invalide');
+                Alert.alert('Erreur', 'Le nom de l\'article est invalide.');
                 return false;
             }
 
             const purchasePrice = parseFloat(editedItem.purchasePrice);
             const sellingPrice = parseFloat(editedItem.sellingPrice);
 
-            if (!validatePrice(purchasePrice) || !validatePrice(sellingPrice)) {
-                Alert.alert('Erreur', 'Les prix doivent être des nombres valides');
-                return false;
-            }
+            if (isNaN(purchasePrice) || purchasePrice < 0) {
+                 Alert.alert('Erreur', 'Le prix d\'achat doit être un nombre positif.');
+                 return false;
+             }
+             if (isNaN(sellingPrice) || sellingPrice < 0) {
+                 Alert.alert('Erreur', 'Le prix de vente doit être un nombre positif.');
+                 return false;
+             }
 
             if (sellingPrice < purchasePrice) {
-                Alert.alert('Attention', 'Le prix de vente est inférieur au prix d\'achat');
-                return false;
+                // C'est un avertissement, pas une erreur bloquante. Laissez l'utilisateur continuer s'il le souhaite.
+            }
+
+            if (!editedItem.categoryId) {
+                 Alert.alert('Erreur', 'La catégorie est requise.');
+                 return false;
             }
 
             return true;
         } catch (error) {
-            handleError(error, 'Erreur de validation du formulaire', {
+            console.error("[ItemEditForm] validateForm - Erreur:", error);
+            handleError(error, 'Erreur de validation', {
                 source: 'item_edit_form_validation',
-                message: `Erreur lors de la validation de l'article ${item.id}`
+                message: `Erreur lors de la validation de l'article ${item.id}`,
+                 showAlert: true
             });
             return false;
         }
     }, [editedItem, item.id]);
 
-    // Modification de la fonction handleImagePreview pour gérer spécifiquement Safari iOS
     const handleImagePreview = useCallback(async () => {
         try {
+            console.log("[ItemEditForm] handleImagePreview - Sélection d'image...");
             const hasPermissions = await checkPhotoPermissions();
             if (!hasPermissions) {
                 console.error("handleImagePreview - Permission refusée");
-                Alert.alert('Erreur', 'Permission d\'accès aux photos refusée');
+                Alert.alert('Erreur', 'Permission d\'accès aux photos refusée.');
                 return;
             }
-            
-            // Utiliser ImagePicker pour sélectionner une image
+
             const result = await ExpoImagePicker.launchImageLibraryAsync({
                 mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.7, // Augmenter légèrement la qualité pour Safari iOS
-                base64: true, // Toujours demander le base64
-                exif: false, // Ignorer les métadonnées EXIF pour réduire la taille
+                quality: 0.7,
+                base64: true,
+                exif: false,
             });
-            
+
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const selectedAsset = result.assets[0];
-                
-                if (Platform.OS === 'web') {
-                    // Pour le web, toujours privilégier le format base64
-                    if (selectedAsset.base64) {
-                        const mimeType = selectedAsset.mimeType || 'image/jpeg';
-                        const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
-                        
-                        // Vérifier la taille approximative
-                        const base64Size = (selectedAsset.base64.length * 3) / 4;
-                        console.log(`handleImagePreview - Taille approximative: ${(base64Size/1024/1024).toFixed(2)}MB`);
-                        
-                        // Toujours compresser les images sur Safari iOS pour éviter les problèmes
-                        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                        
-                        if (isSafari || isIOS || base64Size > (512 * 1024)) { // Compresser systématiquement sur Safari/iOS ou si > 512KB
-                            console.log("handleImagePreview - Safari iOS détecté ou image large, compression en cours");
-                            try {
-                                const compressedUri = await compressImage(base64Uri);
-                                console.log("handleImagePreview - Compression réussie");
-                                setLocalImage({ uri: compressedUri, needsUpload: true });
-                                return;
-                            } catch (compressError) {
-                                console.error("handleImagePreview - Erreur de compression:", compressError);
-                                // En cas d'échec, continuer avec l'URI original tout en notifiant l'utilisateur
-                                Alert.alert(
-                                    'Avertissement', 
-                                    'La compression de l\'image a échoué, ce qui pourrait causer des problèmes lors de l\'enregistrement. Essayez avec une image plus petite.'
-                                );
-                            }
-                        }
-                        
-                        // Stocker directement l'URI base64 pour la prévisualisation et l'upload
-                        setLocalImage({ uri: base64Uri, needsUpload: true });
-                    } else {
-                        console.error("handleImagePreview - Impossible d'obtenir l'image en base64");
-                        Alert.alert('Erreur', 'Impossible d\'obtenir l\'image en format compatible');
-                    }
-                } else {
-                    // Sur les plateformes natives, on utilise l'URI standard
-                    setLocalImage({ uri: selectedAsset.uri, needsUpload: true });
-                }
+                const selectedUri = selectedAsset.uri;
+
+                console.log("[ItemEditForm] Image sélectionnée:", selectedUri.substring(0, 50) + "...");
+
+                 const isValid = await validatePhoto(selectedUri);
+                 if (!isValid) {
+                     console.warn("[ItemEditForm] handleImagePreview - Photo non valide.");
+                     return;
+                 }
+
+                 setLocalImageUri(selectedUri);
+                 setLocalImageNeedsUpload(true);
+
+                 setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
+
+            } else {
+                 console.log("[ItemEditForm] handleImagePreview - Sélection d'image annulée.");
             }
         } catch (error) {
             console.error("handleImagePreview - Erreur:", error);
-            handleError(error, 'Erreur lors de la prévisualisation de la photo', {
+            handleError(error, 'Erreur sélection photo', {
                 source: 'item_edit_form_image_preview',
-                message: `Échec de la prévisualisation de la photo pour l'article ${item.id}`,
+                message: `Échec de la sélection de la photo pour l'article ${item.id}`,
                 showAlert: true
             });
         }
-    }, [item.id, compressImage]);
+    }, [item.id, validatePhoto]);
 
-    // Mise à jour pour utiliser usePhoto au lieu de faire notre propre compression/upload
-    const handlePhotoUpload = async (uri: string): Promise<string | null> => {
-        try {
-            setIsUploading(true);
-            
-            // Créer un nom de fichier identifiant qui inclut l'ID de l'article
-            const timestamp = Date.now();
-            const randomId = Math.random().toString(36).substring(2, 8);
-            const fileName = `item_${item.id}_${timestamp}_${randomId}.jpg`;
-            
-            // Uploader avec notre système qui compresse déjà automatiquement
-            const uploadedUrl = await uploadPhoto(uri, true, fileName);
-            
-            setIsUploading(false);
-            return uploadedUrl;
-        } catch (error) {
-            console.error("handlePhotoUpload - Erreur:", error);
-            Alert.alert(
-                'Erreur',
-                error instanceof Error ? error.message : 'Erreur lors de l\'upload de la photo'
-            );
-            setIsUploading(false);
-            return null;
-        }
-    };
-
-    // Fonction pour vérifier si le formulaire a été modifié
-    const hasFormChanged = useMemo(() => {
-        // Vérifier si l'image a été modifiée
-        const imageChanged = 
-            (localImage && localImage.needsUpload) || 
-            (initialFormState.photo_storage_url !== editedItem.photo_storage_url);
-            
-        // Vérifier si d'autres champs ont été modifiés
-        const otherFieldsChanged = 
-            initialFormState.name !== editedItem.name ||
-            initialFormState.description !== editedItem.description ||
-            initialFormState.purchasePrice !== editedItem.purchasePrice ||
-            initialFormState.sellingPrice !== editedItem.sellingPrice ||
-            initialFormState.status !== editedItem.status ||
-            initialFormState.containerId !== editedItem.containerId ||
-            initialFormState.categoryId !== editedItem.categoryId;
-            
-        return imageChanged || otherFieldsChanged;
-    }, [initialFormState, editedItem, localImage]);
-
-    // Nouvelle fonction pour charger l'image depuis Supabase
-    useEffect(() => {
-        if (editedItem.photo_storage_url && !localImage) {
-            setIsImageLoading(true);
-            setImageError(null);
-            
-            console.log(`[ItemEditForm] Chargement de l'image: ${editedItem.photo_storage_url}`);
-            
-            downloadImageWithS3Auth(editedItem.photo_storage_url)
-                .then(uri => {
-                    if (uri) {
-                        console.log(`[ItemEditForm] Image chargée avec succès: ${uri.substring(0, 50)}...`);
-                        setDisplayImageUri(uri);
-                    } else {
-                        throw new Error('Échec de récupération de l\'image');
-                    }
-                })
-                .catch(err => {
-                    console.error(`[ItemEditForm] Erreur lors du chargement de l'image:`, err);
-                    
-                    // Tentative de fallback: essayer de récupérer juste le nom du fichier
-                    const filenameOrEmpty = extractFilenameFromUrl(editedItem.photo_storage_url || '');
-                    if (filenameOrEmpty && filenameOrEmpty.length > 0) {
-                        // Essayer d'utiliser directement l'URL publique
-                        const publicUrl = `https://lixpixyyszvcuwpcgmxe.supabase.co/storage/v1/object/public/${SUPABASE_CONFIG.STORAGE.BUCKETS.PHOTOS}/${filenameOrEmpty}`;
-                        console.log(`[ItemEditForm] Tentative avec URL publique: ${publicUrl.substring(0, 50)}...`);
-                        setDisplayImageUri(publicUrl);
-                    } else {
-                        setImageError(`Erreur: ${err.message || 'Problème de chargement'}`);
-                    }
-                })
-                .finally(() => {
-                    setIsImageLoading(false);
-                });
-        } else if (localImage) {
-            // Si nous avons une image locale, l'utiliser pour l'affichage
-            setDisplayImageUri(localImage.uri);
-            setImageError(null);
-        } else {
-            // Pas d'image à afficher
-            setDisplayImageUri(null);
-            setImageError(null);
-        }
-    }, [editedItem.photo_storage_url, localImage]);
-
-    // Modification du handleSubmit pour vérifier l'accessibilité des images
     const handleSubmit = useCallback(async () => {
-        try {
-            console.log("[ItemEditForm] handleSubmit - Début de la sauvegarde");
-            
-            // Vérifier si le formulaire a été modifié
-            if (!hasFormChanged) {
-                console.log("[ItemEditForm] handleSubmit - Aucune modification détectée");
-                Alert.alert('Information', 'Aucune modification à enregistrer');
-                return;
-            }
-            
-            console.log("[ItemEditForm] handleSubmit - Formulaire modifié, validation en cours");
-            
-            if (!validateForm()) {
-                console.log("[ItemEditForm] handleSubmit - Échec de la validation du formulaire");
-                return;
-            }
+        console.log("[ItemEditForm] handleSubmit - Début de la sauvegarde");
 
-            if (!item.id) {
-                console.error("[ItemEditForm] handleSubmit - ID de l'article manquant");
-                throw new Error('ID de l\'article manquant');
-            }
+        if (!hasFormChanged) {
+            console.log("[ItemEditForm] handleSubmit - Aucune modification détectée");
+            Alert.alert('Information', 'Aucune modification à enregistrer.');
+            return;
+        }
 
-            console.log(`[ItemEditForm] handleSubmit - Validation OK, traitement de l'article ${item.id}`);
+        console.log("[ItemEditForm] handleSubmit - Formulaire modifié, validation en cours");
 
-            // Si nous avons une image locale qui doit être uploadée
-            let photoStorageUrl = editedItem.photo_storage_url;
-            
-            if (localImage && localImage.needsUpload) {
-                console.log("[ItemEditForm] handleSubmit - Upload d'image nécessaire");
-                
-                // Afficher un indicateur de chargement
-                setIsUploading(true);
-                
-                console.log(`[ItemEditForm] handleSubmit - Début de l'upload de l'image: ${localImage.uri.substring(0, 50)}...`);
-                const uploadedUrl = await handlePhotoUpload(localImage.uri);
-                
-                if (uploadedUrl) {
-                    console.log(`[ItemEditForm] handleSubmit - Upload réussi: ${uploadedUrl.substring(0, 50)}...`);
-                    photoStorageUrl = uploadedUrl;
-                    
-                    // Vérifier immédiatement si l'URL est accessible
-                    if (Platform.OS === 'web') {
-                        try {
-                            const response = await fetch(uploadedUrl, { method: 'HEAD' });
-                            if (response.ok) {
-                                console.log(`[ItemEditForm] handleSubmit - L'URL d'image est accessible`);
-                            } else {
-                                console.warn(`[ItemEditForm] handleSubmit - L'URL d'image n'est pas accessible: ${response.status} ${response.statusText}`);
-                                // Continuer quand même, car l'URL peut devenir accessible plus tard
-                            }
-                        } catch (verifyError) {
-                            console.warn("[ItemEditForm] handleSubmit - Impossible de vérifier l'accessibilité de l'URL:", verifyError);
-                            // Continuer malgré l'erreur
-                        }
-                    }
-                } else {
-                    console.error("[ItemEditForm] handleSubmit - Échec de l'upload de l'image pendant la sauvegarde");
-                    Alert.alert('Attention', "L'article sera sauvegardé sans l'image");
-                    // En cas d'échec, on garde l'ancienne URL si elle existe
-                    photoStorageUrl = item.photo_storage_url;
-                }
-            } else {
-                console.log("[ItemEditForm] handleSubmit - Pas d'upload d'image nécessaire");
-            }
+        if (!validateForm()) {
+            console.log("[ItemEditForm] handleSubmit - Échec de la validation du formulaire.");
+            return;
+        }
 
-            // Vérifiez si l'image a été supprimée dans l'interface
-            const imageWasDeleted = item.photo_storage_url && photoStorageUrl === null;
-            
-            if (imageWasDeleted && item.photo_storage_url) {
-                console.log(`[ItemEditForm] handleSubmit - Suppression de l'ancienne image: ${item.photo_storage_url.substring(0, 50)}...`);
-                try {
-                    await deletePhoto(item.photo_storage_url);
-                    console.log("[ItemEditForm] handleSubmit - Suppression de l'image réussie");
-                } catch (photoError) {
-                    console.error('[ItemEditForm] handleSubmit - Échec de la suppression de l\'image du stockage:', photoError);
-                }
-            }
+        if (!item.id) {
+            console.error("[ItemEditForm] handleSubmit - ID de l'article manquant");
+            Alert.alert('Erreur interne', "Impossible de sauvegarder: ID de l'article manquant.");
+            return;
+        }
 
-            console.log("[ItemEditForm] handleSubmit - Préparation des données pour la mise à jour");
-            const purchasePrice = parseFloat(editedItem.purchasePrice);
-            const sellingPrice = parseFloat(editedItem.sellingPrice);
+        console.log(`[ItemEditForm] handleSubmit - Validation OK pour l'article ${item.id}`);
 
-            // Pour la mise à jour de l'item, utiliser explicitement undefined ou l'URL
-            const itemToUpdate: ItemUpdate = {
-                name: editedItem.name,
-                description: editedItem.description,
-                purchasePrice,
-                sellingPrice,
-                status: editedItem.status,
-                photo_storage_url: imageWasDeleted ? undefined : photoStorageUrl || undefined,
-                containerId: editedItem.containerId,
-                categoryId: editedItem.categoryId
-            };
+        let finalPhotoStorageUrl = editedItem.photo_storage_url;
 
-            console.log("[ItemEditForm] handleSubmit - Données prêtes", JSON.stringify(itemToUpdate, null, 2));
+        if (localImageUri && localImageNeedsUpload) {
+            console.log("[ItemEditForm] handleSubmit - Upload d'une nouvelle image nécessaire.");
 
+            console.log("[ItemEditForm] handleSubmit - Début de l'upload de la nouvelle image vers R2");
             try {
-                // Mise à jour explicite pour NULL si l'image a été supprimée
-                if (imageWasDeleted) {
-                    console.log("[ItemEditForm] handleSubmit - Mise à jour explicite à NULL pour l'image supprimée");
-                    
-                    const { error: explicitUpdateError } = await supabase
-                        .from('items')
-                        .update({ photo_storage_url: null })
-                        .eq('id', item.id);
-                    
-                    if (explicitUpdateError) {
-                        console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour explicite:", explicitUpdateError);
-                        throw explicitUpdateError;
-                    }
-                }
-                
-                console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${item.id} dans la base de données`);
-                // Mise à jour normale pour tous les autres cas
-                await database.updateItem(item.id, itemToUpdate);
-                
-                console.log("[ItemEditForm] handleSubmit - Mise à jour optimiste dans Redux");
-                // Mise à jour optimiste
-                const updatedItem: Item = {
-                    ...item,
-                    ...itemToUpdate,
-                    updatedAt: new Date().toISOString()
-                };
-                
-                dispatch(updateItem(updatedItem));
-                
-                console.log("[ItemEditForm] handleSubmit - Invalidation des queries");
-                // Mise à jour des queries
-                queryClient.invalidateQueries({ queryKey: ['items'] });
-                queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                const uploadedFilename = await uploadPhoto(localImageUri, true, item.photo_storage_url || undefined);
 
-                // Réinitialiser l'état local
-                setLocalImage(null);
-                setIsUploading(false);
-
-                console.log("[ItemEditForm] handleSubmit - Sauvegarde terminée avec succès");
-                if (onSuccess) {
-                    console.log("[ItemEditForm] handleSubmit - Appel du callback onSuccess");
-                    onSuccess();
+                if (uploadedFilename) {
+                    console.log(`[ItemEditForm] handleSubmit - Nouvelle image R2 uploadée: ${uploadedFilename}`);
+                    finalPhotoStorageUrl = uploadedFilename;
+                    setLocalImageNeedsUpload(false);
+                    setLocalImageUri(null);
+                } else {
+                    console.warn("[ItemEditForm] handleSubmit - Échec de l'upload de la nouvelle image, continuation sans cette image.");
+                    finalPhotoStorageUrl = undefined;
                 }
-            } catch (error) {
-                console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour de la base de données:", error);
-                handleError(error, 'Erreur lors de la mise à jour', {
-                    source: 'item_edit_form_update',
-                    message: `Échec de la mise à jour de l'article ${item.id}`,
+            } catch (uploadError) {
+                console.error("[ItemEditForm] handleSubmit - Erreur lors de l'upload de la nouvelle image:", uploadError);
+                handleError(uploadError, 'Erreur Upload', {
+                    source: 'item_edit_form_upload_new_r2',
+                    message: `Échec de l'upload de la nouvelle image.`,
                     showAlert: true
                 });
-                setIsUploading(false);
+                 finalPhotoStorageUrl = undefined;
+            }
+        } else if (item.photo_storage_url && editedItem.photo_storage_url === null) {
+             console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${item.photo_storage_url} demandée.`);
+             try {
+                await deletePhoto(item.photo_storage_url);
+                console.log(`[ItemEditForm] handleSubmit - Image R2 ${item.photo_storage_url} supprimée.`);
+                finalPhotoStorageUrl = null;
+             } catch (deleteError) {
+                console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${item.photo_storage_url} lors de la sauvegarde:`, deleteError);
+                 handleError(deleteError, 'Avertissement Suppression Image', {
+                    source: 'item_edit_form_delete_existing_r2_onsave',
+                     message: `Échec de la suppression de l'image existante.`,
+                     showAlert: true
+                 });
+                  finalPhotoStorageUrl = item.photo_storage_url;
+             }
+        } else {
+            console.log("[ItemEditForm] handleSubmit - Pas d'upload ou suppression d'image nécessaire (juste mise à jour des métadonnées).");
+             finalPhotoStorageUrl = editedItem.photo_storage_url;
+        }
+
+        console.log("[ItemEditForm] handleSubmit - Préparation des données pour la mise à jour de la base de données");
+        const purchasePrice = parseFloat(editedItem.purchasePrice);
+        const sellingPrice = parseFloat(editedItem.sellingPrice);
+
+        const itemToUpdate: ItemUpdate = {
+            name: editedItem.name,
+            description: editedItem.description,
+            purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
+            sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+            status: editedItem.status,
+            photo_storage_url: finalPhotoStorageUrl === null ? undefined : finalPhotoStorageUrl,
+            containerId: editedItem.containerId,
+            categoryId: editedItem.categoryId
+        };
+
+         const itemToUpdateToSendToDB: any = {
+            name: editedItem.name,
+            description: editedItem.description,
+            purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
+            sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+            status: editedItem.status,
+            containerId: editedItem.containerId,
+            categoryId: editedItem.categoryId
+         };
+
+         if (finalPhotoStorageUrl !== undefined) {
+              itemToUpdateToSendToDB.photo_storage_url = finalPhotoStorageUrl;
+         }
+
+        console.log("[ItemEditForm] handleSubmit - Données prêtes pour DB:", JSON.stringify(itemToUpdateToSendToDB, null, 2));
+
+        try {
+            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${item.id} dans la base de données`);
+            await database.updateItem(item.id, itemToUpdateToSendToDB);
+            console.log("[ItemEditForm] handleSubmit - Mise à jour DB réussie.");
+
+            console.log("[ItemEditForm] handleSubmit - Mise à jour optimiste dans Redux");
+            const updatedItem: Item = {
+                ...item,
+                ...itemToUpdateToSendToDB,
+                photo_storage_url: itemToUpdateToSendToDB.photo_storage_url === null || itemToUpdateToSendToDB.photo_storage_url === undefined ? undefined : itemToUpdateToSendToDB.photo_storage_url,
+                updatedAt: new Date().toISOString()
+            };
+
+             console.log("[ItemEditForm] Redux updatedItem:", JSON.stringify(updatedItem, null, 2));
+
+            dispatch(updateItem(updatedItem));
+
+            console.log("[ItemEditForm] handleSubmit - Invalidation des queries React Query");
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            if (item.photo_storage_url) {
+                queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
+            }
+            if (finalPhotoStorageUrl && typeof finalPhotoStorageUrl === 'string') {
+                 queryClient.invalidateQueries({ queryKey: ['photo', finalPhotoStorageUrl] });
+            }
+
+            console.log("[ItemEditForm] handleSubmit - Sauvegarde terminée avec succès");
+            if (onSuccess) {
+                console.log("[ItemEditForm] handleSubmit - Appel du callback onSuccess");
+                onSuccess();
             }
         } catch (error) {
-            console.error("[ItemEditForm] handleSubmit - Erreur générale:", error);
+            console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour finale de la base de données:", error);
             handleError(error, 'Erreur lors de la mise à jour', {
-                source: 'item_edit_form_update',
-                message: `Erreur générale lors de la mise à jour de l'article ${item.id}`,
+                source: 'item_edit_form_update_db',
+                message: `Échec de la mise à jour de l'article ${item.id}.`,
                 showAlert: true
             });
-            setIsUploading(false);
+        } finally {
         }
-    }, [editedItem, item, validateForm, deletePhoto, dispatch, onSuccess, queryClient, localImage, handlePhotoUpload, hasFormChanged]);
+    }, [editedItem, item, validateForm, deletePhoto, uploadPhoto, dispatch, onSuccess, queryClient, localImageUri, localImageNeedsUpload, hasFormChanged]);
 
     const handleDelete = useCallback(async () => {
-        if (!item.id) return;
+        if (!item.id) {
+             console.warn("[ItemEditForm] handleDelete - ID de l'article manquant.");
+             return;
+        }
 
-        // Afficher la boîte de dialogue de confirmation
         setConfirmDialog({
             visible: true,
             itemId: item.id
         });
     }, [item.id]);
 
-    // Fonction pour gérer la confirmation de suppression
     const handleConfirmDelete = useCallback(async () => {
         const itemId = confirmDialog.itemId;
-        if (!itemId) return;
-        
+        if (!itemId) {
+             console.warn("[ItemEditForm] handleConfirmDelete - ID de l'article manquant dans la confirmation.");
+             setConfirmDialog({ visible: false, itemId: null });
+             return;
+        }
+
         try {
-            // Suppression optimiste
+            console.log(`[ItemEditForm] handleConfirmDelete - Suppression optimiste de l'article ${itemId} dans Redux.`);
             dispatch(deleteItem(itemId));
-            
-            try {
-                await database.deleteItem(itemId);
-                queryClient.invalidateQueries({ queryKey: ['items'] });
-                queryClient.invalidateQueries({ queryKey: ['inventory'] });
-                if (onCancel) onCancel();
-            } catch (error) {
-                // Rollback en cas d'erreur
-                dispatch(updateItem(item));
-                handleError(error, 'Erreur lors de la suppression', {
-                    source: 'item_edit_form_delete',
-                    message: `Échec de la suppression de l'article ${item.id}`,
-                    showAlert: true
-                });
+
+            if (item.photo_storage_url) {
+                console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'image R2 associée: ${item.photo_storage_url}`);
+                 try {
+                    await deletePhoto(item.photo_storage_url);
+                    console.log(`[ItemEditForm] handleConfirmDelete - Image R2 associée supprimée avec succès.`);
+                 } catch (deleteError) {
+                    console.warn(`[ItemEditForm] handleConfirmDelete - Échec de la suppression de l'image R2 ${item.photo_storage_url} lors de la suppression de l'item:`, deleteError);
+                     handleError(deleteError, 'Avertissement Suppression Image', {
+                        source: 'item_edit_form_delete_item_image',
+                         message: `L'article a été supprimé, mais son image n'a pas pu être supprimée du serveur.`,
+                         showAlert: true
+                    });
+                 }
+            }
+
+            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article ${itemId} de la base de données.`);
+            await database.deleteItem(itemId);
+            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article DB réussie.`);
+
+            console.log("[ItemEditForm] handleConfirmDelete - Invalidation des queries React Query.");
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+            if (item.photo_storage_url) {
+                queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
+            }
+
+            if (onCancel) {
+                console.log("[ItemEditForm] handleConfirmDelete - Appel du callback onCancel");
+                onCancel();
             }
         } catch (error) {
+            console.error("[ItemEditForm] handleConfirmDelete - Erreur lors de la suppression finale de l'article:", error);
+            console.warn("[ItemEditForm] handleConfirmDelete - Rollback Redux.");
+            dispatch(updateItem(item));
             handleError(error, 'Erreur lors de la suppression', {
-                source: 'item_edit_form_delete',
-                message: `Erreur générale lors de la suppression de l'article ${item.id}`,
+                source: 'item_edit_form_delete_item_db',
+                message: `Échec de la suppression de l'article ${item.id}.`,
                 showAlert: true
             });
         } finally {
-            // Fermer la boîte de dialogue
             setConfirmDialog({ visible: false, itemId: null });
         }
-    }, [confirmDialog.itemId, dispatch, item, queryClient, onCancel]);
+    }, [confirmDialog.itemId, dispatch, item, queryClient, onCancel, deletePhoto]);
 
-    // Fonction pour annuler la suppression
     const handleCancelDelete = useCallback(() => {
+        console.log("[ItemEditForm] handleCancelDelete - Suppression annulée.");
         setConfirmDialog({ visible: false, itemId: null });
     }, []);
 
-    const handlePhotoDelete = useCallback(async () => {
+    const handlePhotoDelete = useCallback(() => {
+        console.log("[ItemEditForm] handlePhotoDelete - Suppression de la photo demandée via UI");
         try {
-            // On ne supprime pas l'image du stockage ici, on la supprimera lors de la sauvegarde
-            // On met juste à jour l'état local pour retirer visuellement l'image
-            
-            // Réinitialiser l'image locale
-            setLocalImage(null);
-            
-            // Utiliser null pour indiquer explicitement que l'image a été supprimée
+            setLocalImageUri(null);
+            setLocalImageNeedsUpload(false);
+
             setEditedItem(prev => ({ ...prev, photo_storage_url: null }));
-            
-            // Mise à jour optimiste de Redux pour refléter immédiatement le changement
-            // dans l'interface utilisateur
-            if (item.id) {
-                // Pour Redux, on utilise undefined pour être compatible avec le type Item
-                const updatedItem: Item = {
-                    ...item,
-                    photo_storage_url: undefined,
-                    updatedAt: new Date().toISOString()
-                };
-                
-                dispatch(updateItem(updatedItem));
-                
-                // Noter que l'image a été supprimée visuellement mais pas encore dans la base de données
-            }
+
         } catch (error) {
-            handleError(error, 'Erreur lors de la suppression de la photo', {
-                source: 'item_edit_form_image',
-                message: `Échec de la suppression de la photo de l'article ${item.id}`,
+            console.error("[ItemEditForm] handlePhotoDelete - Erreur lors du marquage de la suppression de la photo:", error);
+            handleError(error, 'Erreur Photo', {
+                source: 'item_edit_form_image_delete_ui',
+                message: `Échec du marquage de la photo pour suppression.`,
                 showAlert: true
             });
         }
     }, [item, dispatch]);
 
-    // Remplacer les fonctions d'ajout direct par redirection vers les formulaires existants
     const navigateToAddContainer = useCallback(() => {
-        // Enregistrer l'état actuel du formulaire dans queryClient pour le récupérer ensuite
+        console.log("[ItemEditForm] navigateToAddContainer - Saving state and navigating.");
         queryClient.setQueryData(['temp_edit_form_state', item.id], editedItem);
-        
-        // Naviguer vers le formulaire de container
         router.push('/containers');
-        
-        // Note: On ne peut pas utiliser addListener avec Expo Router
-        // On utilisera useEffect pour rafraîchir les données lorsqu'on revient à cet écran
     }, [router, queryClient, item.id, editedItem]);
 
     const navigateToAddCategory = useCallback(() => {
-        // Enregistrer l'état actuel du formulaire dans queryClient
+        console.log("[ItemEditForm] navigateToAddCategory - Saving state and navigating.");
         queryClient.setQueryData(['temp_edit_form_state', item.id], editedItem);
-        
-        // Naviguer vers le formulaire de catégorie
         router.push('/add-category');
-        
-        // Note: On ne peut pas utiliser addListener avec Expo Router
-        // On utilisera useEffect pour rafraîchir les données lorsqu'on revient à cet écran
     }, [router, queryClient, item.id, editedItem]);
 
-    // Ajouter un effet pour rafraîchir les données lorsqu'on revient à cet écran
     useEffect(() => {
-        // Rafraîchir les données des containers et catégories
-        queryClient.invalidateQueries({ queryKey: ['containers'] });
-        queryClient.invalidateQueries({ queryKey: ['categories'] });
-        
-        // Récupérer le dernier container ajouté
+        const savedState = queryClient.getQueryData<EditedItemForm>(['temp_edit_form_state', item.id]);
         const fetchedContainers = queryClient.getQueryData<Container[]>(['containers']);
-        if (fetchedContainers && fetchedContainers.length > 0) {
-            // Trier par date de création pour obtenir le plus récent
-            const sortedContainers = [...fetchedContainers].sort((a, b) => 
+
+        if (savedState && savedState.containerId === null && fetchedContainers && fetchedContainers.length > 0) {
+            console.log("[ItemEditForm] useEffect - Restoring container selection after navigation.");
+            const sortedContainers = [...fetchedContainers].sort((a, b) =>
                 new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
             );
-            
-            // Si notre container actuel n'est pas défini, sélectionner automatiquement le plus récent
-            if (!editedItem.containerId) {
-                setEditedItem(prev => ({ ...prev, containerId: sortedContainers[0].id }));
-            }
+            setEditedItem(prev => ({ ...prev, containerId: sortedContainers[0].id }));
         }
-        
-        // Récupérer la dernière catégorie ajoutée
+
         const fetchedCategories = queryClient.getQueryData<Category[]>(['categories']);
-        if (fetchedCategories && fetchedCategories.length > 0) {
-            // Trier par date de création pour obtenir la plus récente
-            const sortedCategories = [...fetchedCategories].sort((a, b) => 
-                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-            );
-            
-            // Si notre catégorie actuelle n'est pas définie, sélectionner automatiquement la plus récente
-            if (!editedItem.categoryId) {
-                setEditedItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
-            }
+         if (savedState && savedState.categoryId === undefined && fetchedCategories && fetchedCategories.length > 0) {
+             console.log("[ItemEditForm] useEffect - Restoring category selection after navigation.");
+             const sortedCategories = [...fetchedCategories].sort((a, b) =>
+                 new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+             );
+              const uncategorized = sortedCategories.find(cat => cat.name === 'Sans catégorie');
+              const defaultCategoryId = uncategorized ? uncategorized.id : sortedCategories[0].id;
+
+              setEditedItem(prev => ({ ...prev, categoryId: defaultCategoryId }));
+         }
+
+        if (savedState) {
+            console.log("[ItemEditForm] useEffect - Restoring saved form state.");
+            setEditedItem(savedState);
+            queryClient.removeQueries({ queryKey: ['temp_edit_form_state', item.id] });
         }
-    }, [queryClient, editedItem.containerId, editedItem.categoryId]);
+
+    }, [queryClient, item.id]);
+
+    const displayImageUri = localImageUri || photoHookState.uri;
+    const isPhotoProcessing = photoHookState.loading;
+    const photoError = photoHookState.error;
+
+    const isSaveDisabled = !hasFormChanged || isPhotoProcessing;
 
     return (
         <ScrollView style={styles.container}>
@@ -749,6 +634,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     placeholder="Nom de l'article"
                     value={editedItem.name}
                     onChangeText={(text) => setEditedItem(prev => ({ ...prev, name: text }))}
+                     placeholderTextColor="#999"
                 />
 
                 <TextInput
@@ -758,6 +644,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     onChangeText={(text) => setEditedItem(prev => ({ ...prev, description: text }))}
                     multiline
                     numberOfLines={4}
+                     placeholderTextColor="#999"
                 />
 
                 <View style={styles.priceContainer}>
@@ -769,6 +656,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             value={editedItem.purchasePrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('purchasePrice', text)}
+                             placeholderTextColor="#999"
                         />
                     </View>
                     <View style={styles.priceInputWrapper}>
@@ -779,6 +667,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             value={editedItem.sellingPrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('sellingPrice', text)}
+                             placeholderTextColor="#999"
                         />
                     </View>
                 </View>
@@ -786,67 +675,69 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 <View style={styles.formSection}>
                     <Text style={styles.sectionTitle}>Photo</Text>
                     <View style={styles.imageContainer}>
-                        {displayImageUri || isImageLoading ? (
+                         {displayImageUri || isPhotoProcessing || photoError ? (
                             <View style={styles.imageWrapper}>
-                                {isImageLoading ? (
+                                {isPhotoProcessing ? (
                                     <View style={[styles.image, styles.imagePlaceholder]}>
                                         <ActivityIndicator size="small" color="#007AFF" />
                                         <Text style={styles.loadingText}>Chargement...</Text>
                                     </View>
-                                ) : imageError ? (
+                                ) : photoError ? (
                                     <View style={[styles.image, styles.errorImagePlaceholder]}>
                                         <MaterialIcons name="error-outline" size={24} color="#e53935" />
                                         <Text style={styles.errorText}>Erreur de chargement</Text>
                                     </View>
-                                ) : (
-                                    <Image 
-                                        source={{ uri: displayImageUri! }}
+                                ) : displayImageUri && (
+                                    <Image
+                                        source={{ uri: displayImageUri }}
                                         style={styles.image}
                                         resizeMode="cover"
-                                        onError={(e) => {
-                                            console.error(`[ItemEditForm] Erreur de rendu d'image:`, e.nativeEvent.error);
-                                            setImageError(`Erreur de rendu: ${e.nativeEvent.error}`);
-                                        }}
+                                        {...(Platform.OS === 'web' ? {
+                                            loading: "eager",
+                                            fetchPriority: "high",
+                                        } : {})}
                                     />
                                 )}
                                 <View style={styles.imageActions}>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.imageActionButton}
                                         onPress={handleImagePreview}
-                                        disabled={isUploading}
+                                        disabled={isPhotoProcessing}
                                     >
-                                        <MaterialIcons name="edit" size={24} color={isUploading ? "#cccccc" : "#007AFF"} />
+                                        <MaterialIcons name="edit" size={24} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
                                     </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={styles.imageActionButton}
-                                        onPress={handlePhotoDelete}
-                                        disabled={isUploading}
-                                    >
-                                        <MaterialIcons name="delete" size={24} color={isUploading ? "#cccccc" : "#FF3B30"} />
-                                    </TouchableOpacity>
+                                    {(item.photo_storage_url !== null && item.photo_storage_url !== undefined) || localImageUri ? (
+                                         <TouchableOpacity
+                                             style={styles.imageActionButton}
+                                             onPress={handlePhotoDelete}
+                                             disabled={isPhotoProcessing}
+                                         >
+                                             <MaterialIcons name="delete" size={24} color={isPhotoProcessing ? "#cccccc" : "#FF3B30"} />
+                                         </TouchableOpacity>
+                                    ) : null}
                                 </View>
-                                {localImage?.needsUpload && (
+                                {localImageNeedsUpload && !isPhotoProcessing && (
                                     <View style={styles.newImageBadge}>
                                         <MaterialIcons name="cloud-upload" size={14} color="#FFFFFF" />
                                         <Text style={styles.newImageText}>En attente d'upload</Text>
                                     </View>
                                 )}
-                                {isUploading && (
+                                {isPhotoProcessing && (
                                     <View style={styles.uploadingOverlay}>
-                                        <MaterialIcons name="cloud-upload" size={32} color="#FFFFFF" />
-                                        <Text style={styles.uploadingText}>Upload en cours...</Text>
+                                        <ActivityIndicator size="large" color="#FFFFFF" />
+                                        <Text style={styles.uploadingText}>Opération en cours...</Text>
                                     </View>
                                 )}
                             </View>
                         ) : (
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.imagePicker}
                                 onPress={handleImagePreview}
-                                disabled={isUploading}
+                                disabled={isPhotoProcessing}
                             >
-                                <MaterialIcons name="add-photo-alternate" size={48} color={isUploading ? "#cccccc" : "#007AFF"} />
-                                <Text style={[styles.imagePickerText, isUploading && {color: "#cccccc"}]}>
-                                    {isUploading ? "Upload en cours..." : "Sélectionner une image"}
+                                <MaterialIcons name="add-photo-alternate" size={48} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
+                                <Text style={[styles.imagePickerText, isPhotoProcessing && {color: "#cccccc"}]}>
+                                    {isPhotoProcessing ? "Opération en cours..." : "Sélectionner une image"}
                                 </Text>
                             </TouchableOpacity>
                         )}
@@ -874,40 +765,40 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 </View>
 
                 <View style={styles.buttonContainer}>
-                    <TouchableOpacity 
-                        style={[styles.deleteButton, isUploading && styles.disabledButton]} 
+                    <TouchableOpacity
+                        style={[styles.deleteButton, isPhotoProcessing && styles.disabledButton]}
                         onPress={handleDelete}
-                        disabled={isUploading}
+                        disabled={isPhotoProcessing}
                     >
                         <MaterialIcons name="delete" size={20} color="#fff" />
                         <Text style={styles.buttonText}>Supprimer</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                        style={[styles.cancelButton, isUploading && styles.disabledButton]} 
+                    <TouchableOpacity
+                        style={[styles.cancelButton, isPhotoProcessing && styles.disabledButton]}
                         onPress={onCancel}
-                        disabled={isUploading}
+                        disabled={isPhotoProcessing}
                     >
                         <Text style={styles.buttonText}>Annuler</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[
                             styles.saveButton,
-                            !hasFormChanged || isUploading ? styles.disabledButton : null,
-                            localImage?.needsUpload && !isUploading ? styles.uploadButton : null
-                        ]} 
+                            isSaveDisabled ? styles.disabledButton : null,
+                            localImageNeedsUpload && !isPhotoProcessing ? styles.uploadButton : null
+                        ]}
                         onPress={() => {
                             console.log("[ItemEditForm] Bouton de sauvegarde cliqué");
                             handleSubmit();
                         }}
-                        disabled={!hasFormChanged || isUploading}
+                        disabled={isSaveDisabled}
                     >
-                        {localImage?.needsUpload && !isUploading ? (
+                        {localImageNeedsUpload && !isPhotoProcessing ? (
                             <>
                                 <MaterialIcons name="cloud-upload" size={20} color="#fff" />
                                 <Text style={styles.buttonText}>Uploader & Sauvegarder</Text>
                             </>
-                        ) : isUploading ? (
-                            <Text style={styles.buttonText}>Upload en cours...</Text>
+                        ) : isPhotoProcessing ? (
+                             <Text style={styles.buttonText}>Opération en cours...</Text>
                         ) : (
                             <Text style={styles.buttonText}>Mettre à jour</Text>
                         )}
@@ -915,17 +806,22 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 </View>
             </View>
 
-            {/* Ajouter le dialogue de confirmation */}
             <ConfirmationDialog
                 visible={confirmDialog.visible}
                 title="Confirmation de suppression"
-                message="Êtes-vous sûr de vouloir supprimer cet article ?"
+                message="Êtes-vous sûr de vouloir supprimer cet article ? Cette action est irréversible."
                 confirmText="Supprimer"
                 cancelText="Annuler"
                 confirmButtonStyle="destructive"
                 onConfirm={handleConfirmDelete}
                 onCancel={handleCancelDelete}
             />
+            {photoError && (
+                <View style={styles.globalErrorContainer}>
+                    <MaterialIcons name="error-outline" size={24} color="#e53935" />
+                    <Text style={styles.globalErrorText}>{photoError.message}</Text>
+                </View>
+            )}
         </ScrollView>
     );
 }, arePropsEqual);
@@ -1171,6 +1067,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderRadius: 8,
+        zIndex: 10,
     },
     uploadingText: {
         color: 'white',
@@ -1296,5 +1193,22 @@ const styles = StyleSheet.create({
         fontSize: 14,
         marginTop: 4,
         textAlign: 'center',
+    },
+    globalErrorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ffebee',
+        padding: 12,
+        borderRadius: 8,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#e53935',
+    },
+    globalErrorText: {
+        marginLeft: 8,
+        color: '#e53935',
+        fontSize: 14,
+        flexShrink: 1,
     },
 });

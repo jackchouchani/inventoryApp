@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, FlatList, ScrollView, TouchableOpacity, Switch, Modal, TextStyle, ViewStyle } from 'react-native';
+import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal, TextStyle, ViewStyle } from 'react-native';
 import ItemList from '../../src/components/ItemList';
 // import { FilterBar } from '../../src/components/FilterBar'; // Temporarily remove or replace
 import { useDispatch } from 'react-redux';
@@ -14,39 +14,26 @@ import { setCategories } from '../../src/store/categorySlice';
 import { setContainers } from '../../src/store/containersSlice';
 import * as Sentry from '@sentry/react-native';
 import { useRefreshStore } from '../../src/store/refreshStore';
+import { QUERY_KEYS as APP_QUERY_KEYS } from '../../src/constants/queryKeys';
 
 // Algolia imports
-import { InstantSearch, Configure, useRefinementList, useToggleRefinement } from 'react-instantsearch-hooks-web';
-import { searchClient, INDEX_NAME } from '../../src/config/algolia';
+// import { InstantSearch, Configure, useRefinementList, useToggleRefinement } from 'react-instantsearch-hooks-web';
 import { useAlgoliaSearch } from '../../src/hooks/useAlgoliaSearch';
-import { useFocusEffect } from '@react-navigation/native';
-// Remplacer react-native-modal-datetime-picker par Modal de react-native
-// import DateTimePickerModal from "react-native-modal-datetime-picker";
 
-// Importer le nouveau date picker compatible web
+
 // Importer également useDefaultStyles et DateType si nécessaire pour les types
-import DateTimePicker, { useDefaultStyles, DateType } from 'react-native-ui-datepicker';
-import dayjs from 'dayjs'; // react-native-ui-datepicker utilise dayjs en interne
+import DateTimePicker, { useDefaultStyles } from 'react-native-ui-datepicker';
 
-// Interface pour les filtres de stock - maintenu pour référence future
+// Interface pour les filtres de stock
 interface StockFilters {
-  categoryId?: number;
-  containerId?: number | 'none';
+  categoryName?: string;
+  containerName?: string;
   status?: 'all' | 'available' | 'sold';
   minPrice?: number;
   maxPrice?: number;
 }
 
-interface StockData {
-  categories: Category[];
-  containers: Container[];
-}
-
-const QUERY_KEYS = {
-  allData: 'allData',
-  categoriesOnly: 'categoriesOnly',
-  containersOnly: 'containersOnly',
-} as const;
+// Removed: interface StockData - not used
 
 const CACHE_CONFIG = {
   staleTime: 5 * 60 * 1000, // 5 minutes
@@ -56,104 +43,64 @@ const CACHE_CONFIG = {
 
 type QueryError = Error;
 
-// Composant de recherche simple pour Algolia
-const AlgoliaSearchBox = () => {
-  const { query, search } = useAlgoliaSearch();
-  const [inputValue, setInputValue] = useState(query || '');
-  
-  const onChangeText = (newQuery: string) => {
-    setInputValue(newQuery);
-    search(newQuery);
-  };
-  
-  // Synchroniser l'input avec la query actuelle
-  useEffect(() => {
-    if (query !== inputValue) {
-      setInputValue(query);
-    }
-  }, [query]);
 
-  return (
-    <View style={styles.searchBoxContainer}>
-      <TextInput
-        style={styles.searchBoxInput}
-        value={inputValue}
-        onChangeText={onChangeText}
-        placeholder="Rechercher des articles..."
-        placeholderTextColor="#999"
-        clearButtonMode="always"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
-};
-
-// Helper debounce function n'est plus nécessaire, il est dans useAlgoliaSearch
-
-// *** NOUVEAUX COMPOSANTS DE FILTRE ***
-
-// Composant générique pour les filtres de liste (Catégories, Containers, Statut)
-const RefinementListFilter = ({ attribute, title }: { attribute: string; title: string }) => {
-  const { items, refine, canRefine } = useRefinementList({ attribute });
-
-  // *** AJOUT DE LOGS POUR DIAGNOSTIC ***
-  useEffect(() => {
-    console.log(`[RefinementListFilter] ${title} - canRefine: ${canRefine}, items:`, items);
-  }, [canRefine, items, title]);
-  // ***********************************
-
-  if (!canRefine) {
-    return null; // Ne rien afficher si aucun raffinement possible
-  }
-
-  return (
-    <View style={styles.filterSection}>
-      <Text style={styles.filterTitle}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainer}>
-        {items.map((item) => (
-          <TouchableOpacity
-            key={item.value}
-            style={[styles.filterButton, item.isRefined && styles.filterButtonActive]}
-            onPress={() => refine(item.value)}
-          >
-            <Text style={[styles.filterButtonText, item.isRefined && styles.filterButtonTextActive]}>
-              {item.label} ({item.count})
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-};
-
-// Composant pour le filtre booléen (Prix Achat = Prix Vente)
-const PriceMatchFilter = ({ attribute, title }: { attribute: string; title: string }) => {
-  const { value, refine, canRefine } = useToggleRefinement({ attribute, on: true }); // on: true signifie que le filtre est actif quand la valeur est true
-
-  if (!canRefine) {
-    return null;
-  }
-
-  return (
-    <View style={[styles.filterSection, styles.toggleFilterContainer]}>
-      <Text style={styles.filterTitle}>{title}</Text>
-      <Switch
-        value={value.isRefined}
-        onValueChange={() => refine({ isRefined: !value.isRefined })}
-        trackColor={{ false: "#767577", true: "#81b0ff" }}
-        thumbColor={value.isRefined ? "#007AFF" : "#f4f3f4"}
-        ios_backgroundColor="#3e3e3e"
-      />
-    </View>
-  );
-};
+// Removed: Helper debounce function
+// Removed: NOUVEAUX COMPOSANTS DE FILTRE commented out
 
 const MemoizedItemList = React.memo(ItemList);
+
+// --- Créer un nouveau composant pour l'input du prix et les boutons du modal ---
+const SellingPriceInputModal: React.FC<{
+    initialPrice: string;
+    onConfirm: (price: string) => void; // Accepte la saisie comme string
+    onCancel: () => void;
+}> = ({ initialPrice, onConfirm, onCancel }) => {
+    const [localEditableSalePrice, setLocalEditableSalePrice] = useState(initialPrice);
+
+    // Met à jour l'état local si le prix initial change (quand le modal s'ouvre pour un nouvel item)
+    useEffect(() => {
+        setLocalEditableSalePrice(initialPrice);
+    }, [initialPrice]);
+
+    const handleLocalPriceChange = useCallback((text: string) => {
+        const cleanText = text.replace(',', '.');
+        if (cleanText === '' || /^\d*\.?\d*$/.test(cleanText)) {
+            setLocalEditableSalePrice(cleanText);
+        }
+    }, []);
+
+    return (
+        <>
+            <TextInput
+                style={styles.salePriceInput}
+                value={localEditableSalePrice}
+                onChangeText={handleLocalPriceChange}
+                placeholder="Prix de vente"
+                keyboardType="numeric"
+                placeholderTextColor="#999"
+            />
+            <View style={styles.datePickerButtonsContainer}>
+                <TouchableOpacity
+                    style={[styles.datePickerButton, styles.datePickerCancelButton]}
+                    onPress={onCancel}>
+                    <Text style={styles.datePickerButtonText}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.datePickerButton, styles.datePickerConfirmButton]}
+                    onPress={() => onConfirm(localEditableSalePrice)}>
+                    <Text style={[styles.datePickerButtonText, styles.datePickerConfirmButtonText]}>OK</Text>
+                </TouchableOpacity>
+            </View>
+        </>
+    );
+};
 
 const StockScreenContent = () => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  // --- STATES --- 
+  const [filters, setFilters] = useState<StockFilters>({ status: 'all' });
+  const [searchQuery, setSearchQuery] = useState('');
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
@@ -163,183 +110,48 @@ const StockScreenContent = () => {
   const [itemToMarkSold, setItemToMarkSold] = useState<Item | null>(null);
   // Stocker la date comme un objet Date, initialisé à la date actuelle
   const [selectedSoldDate, setSelectedSoldDate] = useState<Date>(new Date());
-  // État pour le prix de vente modifiable dans le modal
-  const [editableSalePrice, setEditableSalePrice] = useState<string>("");
   // ******************************************
 
   // Récupérer les styles par défaut du date picker
   const defaultPickerStyles = useDefaultStyles();
 
-  // Utiliser notre hook personnalisé
-  const { 
-    items: itemsFromAlgolia, 
-    isLoading: isAlgoliaLoading,
-    status: algoliaStatus,
-    isLastPage,
-    loadMore,
-    refresh: refreshAlgolia,
-    nbHits,
-    currentPage
-  } = useAlgoliaSearch();
+  // Correction de l'appel à useAlgoliaSearch
+  const algolia = searchQuery ? useAlgoliaSearch() : null;
+  const itemsFromAlgolia = algolia?.items || [];
+  const isAlgoliaLoading = algolia?.isLoading || false;
+  const algoliaStatus = algolia?.status || '';
+  const isLastPage = algolia?.isLastPage || false;
+  const loadMore = algolia?.loadMore || (() => {});
+  const refreshAlgolia = algolia?.refresh || (() => {});
+  const nbHits = algolia?.nbHits || 0;
+  const currentPage = algolia?.currentPage || 0;
 
-  // Pour le débogage, surveiller les changements d'items
-  useEffect(() => {
-    console.log(`[Stock] Items count: ${itemsFromAlgolia.length}/${nbHits}, isLastPage: ${isLastPage}, status: ${algoliaStatus}, currentPage: ${currentPage}`);
-  }, [itemsFromAlgolia.length, nbHits, isLastPage, algoliaStatus, currentPage]);
+  // --- REFS ---
 
-  // Utiliser le hook d'actions du stock
-  const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
-
-  // Mettre en place les callbacks stables en utilisant useRef
-  // Initialiser la ref avec les fonctions externes et les setters internes
-  const stableCallbacks = useRef({
-    // Ajouter une référence à l'item à marquer comme vendu pour éviter les pertes d'état
-    currentItemToMarkSold: null as Item | null,
-    handleItemPress: (item: Item) => {
-      setSelectedItem(item);
+  // --- React Query for Inventory --- //
+  const { data: inventoryData, isLoading: isLoadingInventory, error: errorInventory } = useQuery<Item[], QueryError>({
+    queryKey: [APP_QUERY_KEYS.INVENTORY, refreshTimestamp], // Depend on refreshTimestamp to refetch when store is refreshed
+    queryFn: async () => {
+      console.log('[StockScreen] Fetching inventory from database...');
+      try {
+        const items = await database.getItems();
+        console.log('[StockScreen] Inventory fetched:', items?.length || 0, 'items');
+        return items || [];
+      } catch (error) {
+        console.error('[StockScreen] Error fetching inventory:', error);
+        Sentry.captureException(error, { tags: { type: 'inventory_fetch_error' } });
+        throw new Error('Erreur lors du chargement de l\'inventaire');
+      }
     },
-    handleEditSuccess: () => {
-      setSelectedItem(null);
-      // Utiliser la ref pour accéder à refreshAlgolia
-      stableCallbacks.current.refreshAlgolia();
-    },
-    handleEditCancel: () => {
-      setSelectedItem(null);
-    },
-    handleLoadMore: () => {
-      console.log(`[Stock] Load more triggered. Current count: ${itemsFromAlgolia.length}/${nbHits}`);
-      // Utiliser la ref pour accéder à loadMore
-      stableCallbacks.current.loadMore();
-    },
-    // Logique pour afficher le date picker avant de marquer comme vendu
-    handleMarkAsSoldPress: (item: Item) => {
-        console.log('[handleMarkAsSoldPress] Received item:', item);
-        // Stocker l'item directement dans la référence stable
-        stableCallbacks.current.currentItemToMarkSold = item;
-        setItemToMarkSold(item); // Conserver pour la compatibilité
-        // Initialiser la date du modal avec la date actuelle à l'ouverture
-        setSelectedSoldDate(new Date());
-        // Pré-remplir le prix de vente avec le prix actuel de l'article
-        setEditableSalePrice(item.sellingPrice?.toString() || "");
-        setDatePickerVisibility(true);
-    },
-    // Appeler directement handleMarkAsAvailable car pas besoin de date
-    handleMarkAsAvailablePress: async (item: Item) => {
-        // Utiliser la ref pour accéder à handleMarkAsAvailable
-        await stableCallbacks.current.handleMarkAsAvailable(item.id.toString());
-        // Utiliser la ref pour accéder à refreshAlgolia
-        stableCallbacks.current.refreshAlgolia();
-    },
-    // Logique appelée quand une date est confirmée dans le date picker
-    // Cette fonction sera appelée par le bouton OK du modal personnalisé
-    handleDateConfirm: async () => {
-        // Utiliser l'item stocké dans la référence stable plutôt que l'état React
-        const itemToProcess = stableCallbacks.current.currentItemToMarkSold;
-        console.log('[handleDateConfirm] Called with stableItemToMarkSold:', itemToProcess, 'selectedSoldDate:', selectedSoldDate);
-        
-        // Utiliser la date stockée dans l'état selectedSoldDate
-        if (itemToProcess && selectedSoldDate) {
-            const finalSalePrice = parseFloat(editableSalePrice);
-            const salePrice = isNaN(finalSalePrice) ? undefined : finalSalePrice;
-            console.log('[handleDateConfirm] Calling handleMarkAsSold with:', {
-                itemId: itemToProcess.id.toString(),
-                soldDate: selectedSoldDate.toISOString(),
-                salePrice: salePrice
-            });
-            
-            try {
-                // Attendre que la mise à jour soit terminée
-                const updateResult = await stableCallbacks.current.handleMarkAsSold(
-                    itemToProcess.id.toString(),
-                    selectedSoldDate.toISOString(),
-                    salePrice
-                );
-                
-                console.log('[handleDateConfirm] handleMarkAsSold result:', updateResult);
-                
-                // Si la mise à jour a réussi, vérifier l'état directement via la base de données
-                if (updateResult) {
-                    try {
-                        // Attendre un peu pour que la base de données se mette à jour complètement
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        const updatedItem = await database.getItem(itemToProcess.id);
-                        console.log('[handleDateConfirm] Updated item check:', updatedItem);
-                        
-                        if (updatedItem && updatedItem.status === 'sold') {
-                            console.log('[handleDateConfirm] Item status successfully changed to sold!');
-                        } else {
-                            console.warn('[handleDateConfirm] Item status check failed or not updated yet');
-                        }
-                    } catch (checkError) {
-                        console.error('[handleDateConfirm] Error checking updated item:', checkError);
-                    }
-                }
-                
-                console.log('[handleDateConfirm] Now refreshing data');
-                // Attendre aussi la fin du rafraîchissement
-                await stableCallbacks.current.refreshAlgolia();
-                console.log('[handleDateConfirm] refreshAlgolia completed');
-                
-                setItemToMarkSold(null); // Réinitialiser l'article
-                stableCallbacks.current.currentItemToMarkSold = null; // Réinitialiser aussi dans la référence stable
-                setEditableSalePrice(""); // Réinitialiser le prix modifiable
-            } catch (error) {
-                console.error('[handleDateConfirm] Error during update:', error);
-            }
-        } else {
-            console.error('[handleDateConfirm] Cannot proceed: itemToProcess or selectedSoldDate is null', 
-                { itemToProcess, selectedSoldDate });
-        }
-        setDatePickerVisibility(false); // Fermer le modal après confirmation
-    },
-    // Logique appelée quand l'utilisateur annule le date picker
-    handleDateCancel: () => {
-        setDatePickerVisibility(false);
-        setItemToMarkSold(null); // Annuler la sélection de l'article
-        stableCallbacks.current.currentItemToMarkSold = null; // Réinitialiser aussi dans la référence stable
-        setEditableSalePrice(""); // Aussi réinitialiser le prix ici
-    },
-    // Fonctions externes qui seront mises à jour par useEffect
-    handleMarkAsSold: async (itemId: string, soldDate: string, newSellingPrice?: number): Promise<boolean | undefined> => { 
-        // Cette fonction est une placeholder, la vraie est dans useStockActions
-        // et sera assignée via useEffect. Le typage ici aide TypeScript.
-        console.log('Placeholder handleMarkAsSold called', itemId, soldDate, newSellingPrice);
-        return undefined;
-    },
-    handleMarkAsAvailable: handleMarkAsAvailable,
-    loadMore: loadMore,
-    refreshAlgolia: refreshAlgolia,
-
+    ...CACHE_CONFIG,
+    // Refetch inventory when the screen is focused
+    refetchOnWindowFocus: true, // This might be too aggressive, consider if needed
+    refetchOnMount: true,
   });
 
-  // Mettre à jour les références stables SEULEMENT quand les fonctions externes changent
-  useEffect(() => {
-    stableCallbacks.current.handleMarkAsSold = handleMarkAsSold;
-    stableCallbacks.current.handleMarkAsAvailable = handleMarkAsAvailable;
-    stableCallbacks.current.loadMore = loadMore;
-    stableCallbacks.current.refreshAlgolia = refreshAlgolia;
-    // Ajouter les dépendances nécessaires
-  }, [handleMarkAsSold, handleMarkAsAvailable, loadMore, refreshAlgolia]);
-
-  // Rafraîchir les données quand on revient sur cet écran
-  useFocusEffect(
-    useCallback(() => {
-      console.log('[Stock] Screen focused, refreshing data');
-      // Utiliser la ref pour accéder à refreshAlgolia
-      stableCallbacks.current.refreshAlgolia();
-      return () => {
-        console.log('[Stock] Screen unfocused');
-      };
-    }, []) // Le tableau de dépendances est vide car on utilise la ref
-  );
-
-
-  const { 
-    data: categoriesData, 
-    isLoading: isLoadingCategories, 
-    error: errorCategories 
-  } = useQuery<Category[], QueryError>({
-    queryKey: [QUERY_KEYS.categoriesOnly, refreshTimestamp],
+  // Fetch categories and containers using React Query
+  const { data: categoriesData, isLoading: isLoadingCategories, error: errorCategories } = useQuery<Category[], QueryError>({
+    queryKey: [APP_QUERY_KEYS.CATEGORIES, refreshTimestamp],
     queryFn: async () => {
       try {
         const data = await database.getCategories();
@@ -355,12 +167,8 @@ const StockScreenContent = () => {
     ...CACHE_CONFIG
   });
 
-  const { 
-    data: containersData, 
-    isLoading: isLoadingContainers, 
-    error: errorContainers 
-  } = useQuery<Container[], QueryError>({
-    queryKey: [QUERY_KEYS.containersOnly, refreshTimestamp],
+  const { data: containersData, isLoading: isLoadingContainers, error: errorContainers } = useQuery<Container[], QueryError>({
+    queryKey: [APP_QUERY_KEYS.CONTAINERS, refreshTimestamp],
     queryFn: async () => {
       try {
         const data = await database.getContainers();
@@ -375,56 +183,300 @@ const StockScreenContent = () => {
     },
     ...CACHE_CONFIG
   });
-  
-  // Les actions sont maintenant dans les dépendances de la ref stableCallbacks
-  // const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
-  
-  const isLoading = isLoadingCategories || isLoadingContainers || isAlgoliaLoading;
 
-  if (isLoading && itemsFromAlgolia.length === 0) {
+  // Pour le débogage, surveiller les changements d'items
+  useEffect(() => {
+    console.log(`[Stock] Items count (Algolia): ${itemsFromAlgolia.length}/${nbHits}, isLastPage: ${isLastPage}, status: ${algoliaStatus}, currentPage: ${currentPage}`);
+    console.log(`[Stock] Items count (Inventory Data): ${inventoryData?.length || 0}`);
+  }, [itemsFromAlgolia.length, nbHits, isLastPage, algoliaStatus, currentPage, inventoryData?.length]);
+
+  // Utiliser le hook d'actions du stock
+  const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
+
+  // Mettre en place les callbacks stables en utilisant useRef
+  // Initialiser la ref avec les fonctions externes et les setters internes
+  const stableCallbacks = useRef({
+    // Ajouter une référence à l'item à marquer comme vendu pour éviter les pertes d'état
+    currentItemToMarkSold: null as Item | null,
+    handleItemPress: (item: Item) => {
+      setSelectedItem(item);
+    },
+    handleEditSuccess: () => {
+      setSelectedItem(null);
+      // No need to manually invalidate or refetch here due to optimistic updates in useStockActions
+    },
+    handleEditCancel: () => {
+      setSelectedItem(null);
+    },
+    handleLoadMoreAlgolia: () => {
+      console.log(`[Stock] Load more (Algolia) triggered. Current count: ${itemsFromAlgolia.length}/${nbHits}`);
+      loadMore(); // Call the Algolia loadMore
+    },
+    // Logique pour afficher le date picker avant de marquer comme vendu
+    handleMarkAsSoldPress: (item: Item) => {
+        console.log('[handleMarkAsSoldPress] Received item:', item);
+        // Stocker l'item directement dans la référence stable
+        stableCallbacks.current.currentItemToMarkSold = item;
+        setItemToMarkSold(item); // Conserver pour la compatibilité
+        // Initialiser la date du modal avec la date actuelle à l'ouverture
+        setSelectedSoldDate(new Date());
+        setDatePickerVisibility(true);
+    },
+    // Appeler directement handleMarkAsAvailable car pas besoin de date
+    handleMarkAsAvailablePress: async (item: Item) => {
+        // Utiliser la ref pour accéder à handleMarkAsAvailable
+        // Optimistic update is handled inside handleMarkAsAvailable
+        await handleMarkAsAvailable(item.id.toString());
+    },
+    // Logique appelée quand une date est confirmée dans le date picker
+    // Cette fonction sera appelée par le bouton OK du modal personnalisé
+    handleDateConfirm: async (saisiePrixVente: string) => {
+        const itemToProcess = stableCallbacks.current.currentItemToMarkSold;
+        console.log('[handleDateConfirm] Called with stableItemToMarkSold:', itemToProcess, 'selectedSoldDate:', selectedSoldDate, 'saisiePrixVente:', saisiePrixVente);
+
+        if (itemToProcess && selectedSoldDate) {
+            // --- Utilise la valeur passée en argument ---
+            const cleanText = saisiePrixVente.replace(',', '.'); // Applique le nettoyage
+            console.log('[DEBUG StockScreen] Valeur cleanText APRES nettoyage:', cleanText, 'Type:', typeof cleanText);
+
+            const parsedSalePrice = parseFloat(cleanText);
+            console.log('[DEBUG StockScreen] Valeur parsedSalePrice APRES parseFloat:', parsedSalePrice, 'Type:', typeof parsedSalePrice);
+            // --------------------------------------------
+
+            const salePrice = isNaN(parsedSalePrice) ? 0 : parsedSalePrice;
+
+            console.log('[DEBUG StockScreen] Valeur salePrice envoyée:', salePrice, typeof salePrice);
+            console.log('[handleDateConfirm] Calling handleMarkAsSold with:', {
+                itemId: itemToProcess.id.toString(),
+                soldDate: selectedSoldDate.toISOString(),
+                salePrice: salePrice
+            });
+
+            try {
+                const updateResult = await handleMarkAsSold(
+                    itemToProcess.id.toString(),
+                    selectedSoldDate.toISOString(),
+                    salePrice
+                );
+
+                console.log('[handleDateConfirm] handleMarkAsSold result:', updateResult);
+
+                setItemToMarkSold(null);
+                stableCallbacks.current.currentItemToMarkSold = null;
+            } catch (error) {
+                console.error('[handleDateConfirm] Error during update:', error);
+                // Error handling is done within handleMarkAsSold
+            }
+        } else {
+            console.error('[handleDateConfirm] Cannot proceed: itemToProcess or selectedSoldDate is null',
+                { itemToProcess, selectedSoldDate });
+        }
+        setDatePickerVisibility(false);
+    },
+    // Logique appelée quand l'utilisateur annule le date picker
+    handleDateCancel: () => {
+        setDatePickerVisibility(false);
+        setItemToMarkSold(null);
+        stableCallbacks.current.currentItemToMarkSold = null;
+    },
+    // Functions from useStockActions and useAlgoliaSearch, assigned in useEffect
+    handleMarkAsSold: handleMarkAsSold,
+    handleMarkAsAvailable: handleMarkAsAvailable,
+    loadMoreAlgolia: loadMore,
+    refreshAlgolia: refreshAlgolia,
+  });
+
+  // Update stableCallbacks.current when the actual hook functions change
+  useEffect(() => {
+    stableCallbacks.current.handleMarkAsSold = handleMarkAsSold;
+    stableCallbacks.current.handleMarkAsAvailable = handleMarkAsAvailable;
+    stableCallbacks.current.loadMoreAlgolia = loadMore;
+    stableCallbacks.current.refreshAlgolia = refreshAlgolia;
+  }, [handleMarkAsSold, handleMarkAsAvailable, loadMore, refreshAlgolia]);
+
+  // Refresh data when the screen is focused (using React Query's refetchOnWindowFocus and refetchOnMount)
+  // useFocusEffect is no longer needed for fetching inventory because of React Query config.
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     console.log('[Stock] Screen focused, potentially refreshing data via React Query config');
+  //     // React Query handles refetching on focus based on staleTime and other configs
+  //     return () => {
+  //       console.log('[Stock] Screen unfocused');
+  //     };
+  //   }, [])
+  // );
+
+  // --- Filter inventoryData in memory based on filters state ---
+  const filteredInventoryData = useMemo(() => {
+    if (!inventoryData) return [];
+
+    return inventoryData.filter(item => {
+      // Filter by category
+      if (filters.categoryName) {
+        // Check if the category filter is 'Toutes', which means no filter
+        if (filters.categoryName !== 'Toutes') {
+          const category = (categoriesData || []).find(cat => cat.name === filters.categoryName);
+          if (!category || item.categoryId !== category.id) return false;
+        }
+      }
+
+      // Filter by container
+      if (filters.containerName) {
+         // Check if the container filter is 'Tous', which means no filter
+         if (filters.containerName !== 'Tous') {
+           // Find container by both name and name#number format
+           const container = (containersData || []).find(cont => 
+             cont.name === filters.containerName || `${cont.name}#${cont.number}` === filters.containerName
+           );
+           if (!container || item.containerId !== container.id) return false;
+         }
+      }
+
+      // Filter by status
+      if (filters.status && filters.status !== 'all') {
+        if (item.status !== filters.status) return false;
+      }
+
+      // Filter by price range
+      if (filters.minPrice !== undefined && item.sellingPrice < filters.minPrice) return false;
+      if (filters.maxPrice !== undefined && item.sellingPrice > filters.maxPrice) return false;
+
+      return true;
+    });
+  }, [inventoryData, filters, categoriesData, containersData, refreshTimestamp]); // Depend on inventoryData and filters
+
+
+  // --- LOGIQUE DE SÉLECTION DE LA SOURCE DE DONNÉES ---
+  const isSearchActive = !!searchQuery;
+
+  const itemsToDisplay = isSearchActive ? itemsFromAlgolia : filteredInventoryData;
+  const isLoading = isSearchActive ? isAlgoliaLoading : isLoadingInventory;
+  const errorToDisplay = isSearchActive ? null : errorInventory;
+  const isLoadingMore = isSearchActive ? isAlgoliaLoading && itemsToDisplay.length > 0 : isLoadingInventory && itemsToDisplay.length > 0; // Adjust isLoadingMore logic
+
+  // --- Handle Load More (either Algolia or Inventory Query if pagination added later) ---
+  const handleLoadMore = useCallback(() => {
+    if (isSearchActive) {
+       if (!isLastPage && !isAlgoliaLoading) {
+         stableCallbacks.current.loadMoreAlgolia();
+       }
+      } else {
+      // Handle pagination for standard inventory list if implemented
+      // Currently, we fetch all inventory at once, so no pagination for the standard list.
+      console.log('[Stock] Load more called on standard inventory list (no pagination implemented)');
+    }
+  }, [isSearchActive, isLastPage, isAlgoliaLoading, stableCallbacks]);
+
+  // --- Nouvelle SearchBox ---
+  const SearchBox = () => (
+    <View style={styles.searchBoxContainer}>
+      <TextInput
+        style={styles.searchBoxInput}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Rechercher des articles..."
+        placeholderTextColor="#999"
+        clearButtonMode="always"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
+
+  // --- Filtres custom (par nom) ---
+  const CategoryFilter = () => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainer}>
+      <TouchableOpacity
+        style={[styles.filterButton, !filters.categoryName && styles.filterButtonActive]}
+        // Modified: Set filter value to undefined for 'Toutes'
+        onPress={() => setFilters(f => ({ ...f, categoryName: undefined }))}>
+        <Text style={[styles.filterButtonText, !filters.categoryName && styles.filterButtonTextActive]}>Toutes</Text>
+      </TouchableOpacity>
+      {(categoriesData || []).map(cat => (
+        <TouchableOpacity
+          key={cat.id}
+          style={[styles.filterButton, filters.categoryName === cat.name && styles.filterButtonActive]}
+          onPress={() => setFilters(f => ({ ...f, categoryName: cat.name }))}>
+          <Text style={[styles.filterButtonText, filters.categoryName === cat.name && styles.filterButtonTextActive]}>{cat.name}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+  const ContainerFilter = () => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainer}>
+      <TouchableOpacity
+        style={[styles.filterButton, !filters.containerName && styles.filterButtonActive]}
+        // Modified: Set filter value to undefined for 'Tous'
+        onPress={() => setFilters(f => ({ ...f, containerName: undefined }))}>
+        <Text style={[styles.filterButtonText, !filters.containerName && styles.filterButtonTextActive]}>Tous</Text>
+      </TouchableOpacity>
+      {(containersData || []).map(cont => (
+        <TouchableOpacity
+          key={cont.id}
+          // Modified: Check both name and name#number for selection
+          style={[styles.filterButton, filters.containerName === `${cont.name}#${cont.number}` && styles.filterButtonActive]}
+          // Modified: Set filter value as name#number
+          onPress={() => setFilters(f => ({ ...f, containerName: `${cont.name}#${cont.number}` }))}>
+          {/* Modified: Display name#number */}
+          <Text style={[styles.filterButtonText, filters.containerName === `${cont.name}#${cont.number}` && styles.filterButtonTextActive]}>{`${cont.name}#${cont.number}`}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+  const StatusFilter = () => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainer}>
+      {(['all', 'available', 'sold'] as const).map(status => (
+        <TouchableOpacity
+          key={status}
+          style={[styles.filterButton, filters.status === status && styles.filterButtonActive]}
+          onPress={() => setFilters(f => ({ ...f, status }))}>
+          <Text style={[styles.filterButtonText, filters.status === status && styles.filterButtonTextActive]}>{status === 'all' ? 'Tous' : status === 'available' ? 'Disponible' : 'Vendu'}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+
+  // Display loading indicator or error message based on the active data source
+  if (isLoading || isLoadingCategories || isLoadingContainers) { // Include loading for categories and containers
     return (
-      <ErrorBoundary>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Chargement des articles...</Text>
-        </View>
-      </ErrorBoundary>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Chargement des données...</Text>
+      </View>
     );
   }
 
-  if (errorCategories || errorContainers) {
+  if (errorToDisplay || errorCategories || errorContainers) { // Include errors for categories and containers
+    const errorMessage = errorToDisplay?.message || errorCategories?.message || errorContainers?.message || 'Une erreur inconnue est survenue';
     return (
-      <ErrorBoundary>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>
-            Une erreur est survenue lors du chargement des données de filtre.
-            {errorCategories?.message} {errorContainers?.message}
-          </Text>
-        </View>
-      </ErrorBoundary>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Une erreur est survenue :</Text>
+        <Text style={styles.errorDetails}>{errorMessage}</Text>
+      </View>
     );
   }
 
   return (
       <View style={styles.container}>
-      <AlgoliaSearchBox/>
+      <SearchBox/>
       <TouchableOpacity style={styles.filtersToggleHeader} onPress={() => setShowFilters(!showFilters)}>
         <Text style={styles.filtersToggleHeaderText}>Filtrer les articles</Text>
       </TouchableOpacity>
       {showFilters && (
         <View style={styles.filtersContainer}>
-          <RefinementListFilter attribute="category_name" title="Catégorie"/>
-          <RefinementListFilter attribute="container_reference" title="Container"/>
-          <RefinementListFilter attribute="status" title="Disponibilité"/>
+          <CategoryFilter/>
+          <ContainerFilter/>
+          <StatusFilter/>
         </View>
       )}
-      {!isAlgoliaLoading && itemsFromAlgolia.length === 0 && (
+      {/* Display no results message if both Algolia and Inventory data are empty */}
+      {itemsToDisplay.length === 0 && !isLoading && ( // Check !isLoading to avoid showing message while loading
          <View style={styles.noResultsContainer}>
            <Text style={styles.noResultsText}>Aucun article trouvé.</Text>
          </View>
        )}
         <MemoizedItemList
-          items={itemsFromAlgolia}
+          items={itemsToDisplay}
           onItemPress={stableCallbacks.current.handleItemPress}
           onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
           onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
@@ -433,8 +485,8 @@ const StockScreenContent = () => {
           selectedItem={selectedItem}
           onEditSuccess={stableCallbacks.current.handleEditSuccess}
           onEditCancel={stableCallbacks.current.handleEditCancel}
-          onEndReached={stableCallbacks.current.handleLoadMore}
-          isLoadingMore={isAlgoliaLoading && itemsFromAlgolia.length > 0}
+          onEndReached={handleLoadMore} // Use the combined handleLoadMore
+          isLoadingMore={isLoadingMore}
         />
 
         {/* *** MODAL POUR LA SÉLECTION DE LA DATE DE VENTE (Personnalisé avec sélecteur visuel) *** */}
@@ -467,20 +519,20 @@ const StockScreenContent = () => {
                                 borderColor: '#007AFF', 
                                 borderWidth: 1,
                             },
-                            day_label: { 
+                            day_label: {
                                 ...(defaultPickerStyles.day_label as TextStyle),
                                 color: '#000000',
                             },
-                            disabled_label: { 
+                            disabled_label: {
                                 ...(defaultPickerStyles.disabled_label as TextStyle),
                                 color: '#aaaaaa',
                             },
-                            month_label: { 
+                            month_label: {
                                 ...(defaultPickerStyles.month_label as TextStyle),
                                 color: '#000000',
                                 fontWeight: 'bold',
                             },
-                            year_label: { 
+                            year_label: {
                                 ...(defaultPickerStyles.year_label as TextStyle),
                                 color: '#000000',
                                 fontWeight: 'bold',
@@ -489,26 +541,16 @@ const StockScreenContent = () => {
                          locale="fr"
                     />
                     <Text style={styles.salePriceInputLabel}>Prix de vente (€) :</Text>
-                    <TextInput
-                        style={styles.salePriceInput}
-                        value={editableSalePrice}
-                        onChangeText={setEditableSalePrice}
-                        placeholder={itemToMarkSold?.sellingPrice?.toString() || "Prix de vente"}
-                        keyboardType="numeric"
-                        placeholderTextColor="#999"
-                    />
-                    <View style={styles.datePickerButtonsContainer}>
-                        <TouchableOpacity 
-                            style={[styles.datePickerButton, styles.datePickerCancelButton]}
-                            onPress={stableCallbacks.current.handleDateCancel}>
-                            <Text style={styles.datePickerButtonText}>Annuler</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                             style={[styles.datePickerButton, styles.datePickerConfirmButton]}
-                            onPress={stableCallbacks.current.handleDateConfirm}>
-                            <Text style={[styles.datePickerButtonText, styles.datePickerConfirmButtonText]}>OK</Text>
-                        </TouchableOpacity>
-                    </View>
+                    {/* --- Utilise SellingPriceInputModal --*/}
+                    {itemToMarkSold && ( // S'assurer que itemToMarkSold existe avant de rendre SellingPriceInputModal
+                        <SellingPriceInputModal
+                            initialPrice={itemToMarkSold.sellingPrice?.toString() || "0"} // <-- Utilise le prix de l'item, fallback à "0"
+                            onConfirm={(price) => { // <-- price est la valeur saisie du modal
+                                stableCallbacks.current.handleDateConfirm(price); // <-- Passe la valeur à handleDateConfirm
+                            }}
+                            onCancel={stableCallbacks.current.handleDateCancel}
+                        />
+                    )}
                 </View>
             </View>
         </Modal>
@@ -521,18 +563,7 @@ const StockScreenContent = () => {
 export default function StockScreen() {
   return (
     <ErrorBoundary>
-      <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
-        <Configure
-          {...{
-            hitsPerPage: 20,
-            distinct: true,
-            analytics: false,
-            attributesToRetrieve: ['*'],
-            filters: 'doc_type:item'
-          } as any}
-        />
-        <StockScreenContent />
-      </InstantSearch>
+      <StockScreenContent />
     </ErrorBoundary>
   );
 }
@@ -553,6 +584,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FF3B30',
     textAlign: 'center',
+  },
+  errorDetails: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
   },
   loadingContainer: {
     flex: 1,
