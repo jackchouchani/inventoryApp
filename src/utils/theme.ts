@@ -18,7 +18,6 @@ export const theme = {
       inverse: '#FFFFFF'
     },
     border: '#E5E5E5',
-    shadow: '#000000',
     danger: {
       main: '#FF3B30',
       background: '#FFF5F5',
@@ -58,23 +57,11 @@ export const theme = {
   },
   shadows: {
     sm: {
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 1,
-      },
-      shadowOpacity: 0.20,
-      shadowRadius: 1.41,
+      boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)',
       elevation: 2,
     },
     md: {
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
+      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)',
       elevation: 5,
     }
   }

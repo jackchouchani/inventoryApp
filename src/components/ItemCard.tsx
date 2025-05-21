@@ -4,11 +4,7 @@ import { Item } from '../types/item';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
-import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { getImageUrl } from '../utils/r2Client';
-
-// Constantes
-const { STORAGE: { BUCKETS: { PHOTOS } } } = SUPABASE_CONFIG;
 
 export interface ItemCardProps {
   item: Item;
@@ -202,10 +198,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
     elevation: Platform.select({ android: 2, default: 0 }),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
   },
   cardContent: {
     flexDirection: 'row',
@@ -269,10 +262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
       },
       android: {
         elevation: 2,

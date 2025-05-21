@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.sm,
-    ...theme.shadows.sm,
+    boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)', elevation: 2,
   },
   buttonText: {
     color: theme.colors.text.inverse,

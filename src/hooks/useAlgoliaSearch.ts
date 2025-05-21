@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useSearchBox, useInstantSearch, usePagination } from 'react-instantsearch-hooks-web';
+import { useSearchBox, useInstantSearch, usePagination } from 'react-instantsearch';
 import type { Item } from '../types/item';
 
 export const useAlgoliaSearch = () => {

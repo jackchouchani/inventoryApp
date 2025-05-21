@@ -23,12 +23,10 @@ import Reanimated, {
     withTiming,
     useSharedValue,
     Easing,
-  withSpring,
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
 import { theme } from '../utils/theme';
-import { parseId } from '../utils/identifierManager';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 
@@ -53,8 +51,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SCANNER_SIZE = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.7;
 const CAMERA_PERMISSION_KEY = '@app:camera_permission';
 const SCAN_DELAY = 1000; // Délai entre les scans pour éviter les scans multiples
-const SCAN_SUCCESS_ANIMATION_DURATION = 1500; // Durée de l'animation de succès
-const MAX_RECENT_SCANS = 20; // Maximum d'éléments récents à afficher
 
 // Interface des props du composant
 interface ScannerProps {
@@ -78,14 +74,10 @@ type ScannerState =
 
 // Composants animés
 const AnimatedView = Reanimated.createAnimatedComponent(View);
-const AnimatedBlurView = Reanimated.createAnimatedComponent(BlurView);
 
 export const Scanner: React.FC<ScannerProps> = ({
   onClose,
   onScan,
-  items,
-  containers,
-  onUpdateItem,
   onFinishScan
 }) => {
   // État de la machine à états
@@ -137,11 +129,6 @@ export const Scanner: React.FC<ScannerProps> = ({
   
   const progressStyle = useAnimatedStyle(() => ({
     width: `${processingProgress.value * 100}%`,
-  }));
-  
-  const itemListStyle = useAnimatedStyle(() => ({
-    height: withTiming(listHeight.value, { duration: 300 }),
-    opacity: withTiming(listHeight.value > 0 ? 1 : 0, { duration: 200 })
   }));
 
   // Animation pour le succès final
@@ -1165,10 +1152,7 @@ const styles = StyleSheet.create({
         width: '90%',
         maxWidth: 400,
         elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.25)',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.1)',
     },
@@ -1208,10 +1192,7 @@ const styles = StyleSheet.create({
         minWidth: 140,
         justifyContent: 'center',
         elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4.65,
+        boxShadow: '0px 4px 4.65px rgba(0, 0, 0, 0.3)',
     },
     confirmButton: {
     backgroundColor: theme.colors.success,

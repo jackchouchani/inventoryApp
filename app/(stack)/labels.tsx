@@ -1,15 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-  Alert,
-  TextInput,
-  ScrollView,
-  Switch
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -25,8 +15,8 @@ import { database } from '../../src/database/database';
 import * as Sentry from '@sentry/react-native';
 
 // Algolia imports
-import { InstantSearch, useSearchBox, useHits, useInstantSearch, Configure, useRefinementList, useToggleRefinement } from 'react-instantsearch-hooks-web';
-import { searchClient, INDEX_NAME, algoliaConfig } from '../../src/config/algolia';
+import { InstantSearch, useHits, useInstantSearch, Configure, useRefinementList } from 'react-instantsearch';
+import { searchClient, INDEX_NAME } from '../../src/config/algolia';
 
 interface Filters {
   categoryId: number | null;
@@ -44,7 +34,7 @@ interface InventoryData {
   containers: Container[];
 }
 
-type ListItemFromAlgolia = Item | Container;
+// Removed unused type
 
 const QUERY_KEYS = {
   allData: 'allData'
@@ -89,24 +79,17 @@ const LabelScreenContent = () => {
   const isSearchActive = !!searchQuery;
 
   // --- LOGIQUE ALGOLIA UNIQUEMENT SI RECHERCHE ACTIVE ---
-  let algoliaResults: any[] = [];
-  let refreshAlgolia = () => {};
   let algoliaStatus = '';
   let hits: any[] = [];
   if (isSearchActive) {
     // Monter InstantSearch et hooks Algolia uniquement si recherche active
-    // Utiliser useInstantSearch, useHits, etc.
     const algolia = useInstantSearch();
-    // algoliaResults = algolia.results; // Supprimé car SearchResults<any> n'est pas un tableau et n'est pas utilisé comme tel
-    refreshAlgolia = algolia.refresh;
     algoliaStatus = algolia.status;
     hits = (useHits().hits as any[]);
   }
 
   const { 
-    data: staticData,
-    isLoading: isLoadingStaticData, 
-    error: errorStaticData 
+    isLoading: isLoadingStaticData
   } = useQuery<InventoryData, Error>({
     queryKey: [QUERY_KEYS.allData],
     queryFn: async () => {
@@ -379,10 +362,9 @@ const LabelScreenContent = () => {
   const isWebComponentMounted = Platform.OS === 'web' ? true : false;
 
   // --- CHARGEMENT SUPABASE PAR DÉFAUT ---
-  const {
-    data: supabaseData,
-    isLoading: isLoadingSupabase,
-    error: errorSupabase
+  const { 
+    data: supabaseData, 
+    isLoading: isLoadingSupabase
   } = useQuery<InventoryData, Error>({
     queryKey: ['labels_supabase', filters, searchQuery],
     queryFn: async () => {
@@ -418,7 +400,6 @@ const LabelScreenContent = () => {
   const itemsToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.items || []);
   const containersToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.containers || []);
   const isLoading = isSearchActive ? (isLoadingStaticData || algoliaStatus === 'loading' || algoliaStatus === 'stalled') : isLoadingSupabase;
-  const errorToDisplay = isSearchActive ? errorStaticData : errorSupabase;
 
   // --- SEARCHBOX ADAPTÉE ---
   const SearchBox = () => (
@@ -600,7 +581,7 @@ const LabelScreenContent = () => {
             />
           </TouchableOpacity>
         ))}
-        {(showContainers ? containersToDisplay : itemsToDisplay).length === 0 && !isLoading && algoliaResults && (
+        {(showContainers ? containersToDisplay : itemsToDisplay).length === 0 && !isLoading && hits && (
           <View style={styles.noResultsContainer}>
             <Text style={styles.noResultsText}>
               {`Aucun ${showContainers ? 'container' : 'article'} trouvé.`}
@@ -659,12 +640,16 @@ const LabelScreenContent = () => {
 
 export default function LabelScreen() {
   // Monter InstantSearch uniquement si recherche active
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery] = useState('');
   const isSearchActive = !!searchQuery;
   if (isSearchActive) {
+    // Use type assertion to fix SearchClient type mismatch
     return (
-      <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
-        <Configure {...{ hitsPerPage: 100 } as any} />
+      <InstantSearch 
+        searchClient={searchClient as any} 
+        indexName={INDEX_NAME}
+      >
+        <Configure hitsPerPage={100} />
         <LabelScreenContent />
       </InstantSearch>
     );
@@ -718,10 +703,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
     elevation: 2,
   },
   selectionHeader: {
@@ -736,10 +718,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
     gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
     elevation: 2,
   },
   sectionTitle: {
@@ -867,7 +846,7 @@ const styles = StyleSheet.create({
   itemContainer: { fontSize: 14, color: '#666' },
   segmentIcon: { marginRight: 6 },
   segmentButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 8, borderRadius: 6 },
-  segmentButtonActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  segmentButtonActive: { backgroundColor: '#fff', boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)', elevation: 2 },
   segmentButtonText: { fontSize: 15, color: '#666' },
   segmentButtonTextActive: { color: '#007AFF', fontWeight: '600' },
   datePickerLabel: {
@@ -975,58 +954,6 @@ const styles = StyleSheet.create({
   },
 });
 
-function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  const debounced = (...args: Parameters<F>) => {
-    if (timeout !== null) {
-      clearTimeout(timeout);
-      timeout = null;
-    }
-    timeout = setTimeout(() => func(...args), waitFor);
-  };
-  return debounced as (...args: Parameters<F>) => ReturnType<F>;
-}
-
-const AlgoliaSearchBox = () => {
-  const { query, refine } = useSearchBox();
-  const [inputValue, setInputValue] = useState(query);
-  const inputRef = useRef<TextInput>(null);
-
-  const debouncedRefine = useCallback(
-    debounce((newQuery: string) => {
-      refine(newQuery);
-    }, 300),
-    [refine]
-  );
-
-  const onChangeText = (newQuery: string) => {
-    setInputValue(newQuery);
-    debouncedRefine(newQuery);
-  };
-  
-  useEffect(() => {
-    if (query !== inputValue) {
-      setInputValue(query);
-    }
-  }, [query]);
-
-  return (
-    <View style={styles.searchBoxContainer}>
-      <TextInput
-        ref={inputRef}
-        style={styles.searchBoxInput}
-        value={inputValue}
-        onChangeText={onChangeText}
-        placeholder={Platform.OS === 'web' ? "Rechercher articles/containers..." : "Rechercher..."}
-        placeholderTextColor="#999"
-        clearButtonMode="always"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
-};
-
 const RefinementListFilter = ({ attribute, title }: { attribute: string; title: string }) => {
   const { items, refine, canRefine } = useRefinementList({ attribute });
 
@@ -1054,27 +981,6 @@ const RefinementListFilter = ({ attribute, title }: { attribute: string; title: 
           </TouchableOpacity>
         ))}
       </ScrollView>
-    </View>
-  );
-};
-
-const PriceMatchFilter = ({ attribute, title }: { attribute: string; title: string }) => {
-  const { value, refine, canRefine } = useToggleRefinement({ attribute, on: true });
-
-  if (!canRefine) {
-    return null;
-  }
-
-  return (
-    <View style={[styles.filterSectionAlgolia, styles.toggleFilterContainerAlgolia]}>
-      <Text style={styles.filterTitleAlgolia}>{title}</Text>
-      <Switch
-        value={value.isRefined}
-        onValueChange={() => refine({ isRefined: !value.isRefined })}
-        trackColor={{ false: "#767577", true: "#81b0ff" }}
-        thumbColor={value.isRefined ? "#007AFF" : "#f4f3f4"}
-        ios_backgroundColor="#3e3e3e"
-      />
     </View>
   );
 };

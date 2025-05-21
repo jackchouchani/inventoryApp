@@ -20,7 +20,6 @@ interface ItemListProps {
   categories: Category[];
   containers: Container[];
   isLoading?: boolean;
-  error?: string;
   selectedItem: Item | null;
   onEditSuccess: () => void;
   onEditCancel: () => void;
@@ -194,21 +193,12 @@ const ItemList: React.FC<ItemListProps> = ({
   categories,
   containers,
   isLoading,
-  error,
   selectedItem,
   onEditSuccess,
   onEditCancel,
   onEndReached,
   isLoadingMore
 }) => {
-  const renderStartTime = useRef(Date.now());
-  
-  useEffect(() => {
-    return () => {
-      const renderDuration = Date.now() - renderStartTime.current;
-    };
-  });
-
   const renderItem = ({ item }: { item: Item }) => {
     
     return (
@@ -354,10 +344,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
     elevation: 2,
   },
   filterOptionSelected: {
@@ -433,11 +420,8 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     borderRadius: 12,
     padding: 16,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -495,6 +479,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    boxShadow: '0px 2px 2px rgba(0, 0, 0, 0.1)',
     elevation: 1,
   },
   restoreButton: {
@@ -543,11 +528,8 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     borderRadius: 12,
     padding: 16,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
   itemContent: {
     flexDirection: 'row',

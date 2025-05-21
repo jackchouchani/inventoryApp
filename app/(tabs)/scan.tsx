@@ -91,18 +91,17 @@ const ScanScreen: React.FC = () => {
                 </Text>
                 <Text style={styles.comingSoonSubtext}>
                   Cette fonctionnalité vous permettra d'assigner manuellement des articles à des containers.
-                    </Text>
-                  
-                      <TouchableOpacity
+                </Text>
+                <TouchableOpacity
                   style={styles.switchToScannerButton}
                   onPress={handleModeChange}
                 >
                   <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
                   <Text style={styles.switchToScannerText}>
                     Utiliser le scanner
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <View style={styles.scannerContainer}>
@@ -180,10 +179,7 @@ const styles = StyleSheet.create({
     padding: 30,
     backgroundColor: '#fff',
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   comingSoonIcon: {

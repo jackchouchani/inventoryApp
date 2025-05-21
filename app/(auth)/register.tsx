@@ -196,7 +196,7 @@ const createStyles = () => StyleSheet.create({
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
-    ...theme.shadows.md,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)', elevation: 5,
   },
   title: {
     fontSize: theme.typography.h1.fontSize,

@@ -230,6 +230,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    ...theme.shadows.md,
+    boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)', elevation: 2,
   },
 });

@@ -6,9 +6,6 @@ const STATIC_ASSETS = [
   '/static/css/main.css',
   '/manifest.json',
   '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png',
-  '/assets/Logo.png'
 ];
 
 // Configuration pour iOS

@@ -289,7 +289,7 @@ export const SalesChart: React.FC<SalesChartProps> = memo(({
       fallbackRender={ErrorFallback}
     >
       <Animated.View 
-        style={[styles.container, { backgroundColor: theme.colors.card }]}
+        style={[styles.container, { backgroundColor: theme.colors.card, boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)' }]}
         accessibilityRole="summary"
         accessibilityLabel="Graphique d'évolution des ventes"
       >
@@ -314,10 +314,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     margin: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   header: {
@@ -343,10 +339,7 @@ const styles = StyleSheet.create({
   },
   activePeriod: {
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
     elevation: 2,
   },
   periodText: {

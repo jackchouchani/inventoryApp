@@ -492,7 +492,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
 
             // Utilisation directe de addItemMutation
             // La mutation s'occupe de l'optimistic update et de l'insertion DB
-            await addItemMutation.mutateAsync(data);
+            await addItemMutation.mutateAsync(data as unknown as ItemFormState);
 
             // La réinitialisation du formulaire et l'appel à onSuccess sont gérés dans onSuccess de la mutation
             // resetForm();
@@ -737,10 +737,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e5e5e5',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
         elevation: 2,
     },
     modalTitle: {
@@ -770,10 +767,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 16,
         marginBottom: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
         elevation: 2,
     },
     formSectionLast: {
@@ -839,13 +833,7 @@ const styles = StyleSheet.create({
         padding: 8,
         zIndex: 1,
         elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     },
     optionsScrollView: {
         marginBottom: 0,
@@ -1002,10 +990,7 @@ const styles = StyleSheet.create({
         padding: 20,
         width: '100%',
         maxWidth: 500,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
         elevation: 5,
     },
     modalButtonsContainer: {

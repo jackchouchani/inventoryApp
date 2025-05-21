@@ -8,7 +8,7 @@ import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import type { Category } from '../../src/types/category';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { database } from '../../src/database/database';
 import { setCategories } from '../../src/store/categorySlice';
 import { setContainers } from '../../src/store/containersSlice';
@@ -124,7 +124,6 @@ const StockScreenContent = () => {
   const [filters, setFilters] = useState<StockFilters>({ status: 'available' });
   const [searchQuery, setSearchQuery] = useState('');
   const dispatch = useDispatch();
-  const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   // *** ÉTATS POUR LE MODAL DE DATE DE VENTE ***
@@ -144,10 +143,8 @@ const StockScreenContent = () => {
   const { data: inventoryData, isLoading: isLoadingInventory, error: errorInventory } = useQuery<Item[], QueryError>({
     queryKey: [APP_QUERY_KEYS.INVENTORY, refreshTimestamp], // Depend on refreshTimestamp to refetch when store is refreshed
     queryFn: async () => {
-      console.log('[StockScreen] Fetching inventory from database...');
       try {
         const items = await database.getItems();
-        console.log('[StockScreen] Inventory fetched:', items?.length || 0, 'items');
         return items || [];
       } catch (error) {
         console.error('[StockScreen] Error fetching inventory:', error);
@@ -278,7 +275,6 @@ const StockScreenContent = () => {
     // Si searchQuery est non vide, retournez un tableau vide, car on utilise Algolia
     if (!inventoryData || searchQuery) return [];
 
-    console.log('[StockScreen] Applying filters to inventory data.');
 
     return inventoryData.filter(item => {
       // Filter by category
@@ -320,7 +316,6 @@ const StockScreenContent = () => {
   // On utilise Algolia si searchQuery est non vide, sinon on utilise les données filtrées de l'inventaire
   const isSearchActive = !!searchQuery;
 
-  const itemsToDisplay = isSearchActive ? [] : filteredInventoryData;
   // L'état de chargement dépend de la source de données active
   const isLoading = isSearchActive ? false : isLoadingInventory;
   // Les erreurs ne sont affichées que si Algolia n'est pas actif et qu'il y a une erreur React Query
@@ -333,7 +328,6 @@ const StockScreenContent = () => {
   const handleLoadMore = useCallback(() => {
     // La logique loadMore pour Algolia est maintenant dans AlgoliaStockList
     // La liste locale ne gère pas la pagination pour l'instant
-    console.log('[Stock] Load more called. Source:', isSearchActive ? 'Algolia' : 'Inventory');
   }, [isSearchActive]); // Dépend de isSearchActive
 
 
@@ -676,10 +670,7 @@ const styles = StyleSheet.create({
     padding: 20,
     width: 300,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 5,
   },
   datePickerModalTitle: {

@@ -8,8 +8,6 @@ import { Category } from '../../src/types/category';
 import { ContainerGrid } from '../../src/components/ContainerGrid';
 import { ContainerForm } from '../../src/components/ContainerForm';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
-import { handleDatabaseError } from '../../src/utils/errorHandler';
-import { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '../../src/config/supabase';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -779,10 +777,7 @@ const styles = StyleSheet.create({
     padding: 15,
     margin: 10,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   addIcon: {
@@ -906,10 +901,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
@@ -938,10 +930,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 2,
   },
   categoryFilter: {

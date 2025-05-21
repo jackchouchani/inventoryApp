@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { InstantSearch } from 'react-instantsearch-hooks-web';
+import { InstantSearch } from 'react-instantsearch';
 import { searchClient, INDEX_NAME } from '../config/algolia';
 import ItemList from './ItemList';
 import { useAlgoliaSearch } from '../hooks/useAlgoliaSearch';
@@ -25,7 +25,6 @@ const AlgoliaStockListInner: React.FC<AlgoliaStockListProps> = (props) => {
   const {
     items,
     isLoading,
-    status,
     nbHits,
     loadMore,
     search,
@@ -72,7 +71,10 @@ const AlgoliaStockListInner: React.FC<AlgoliaStockListProps> = (props) => {
 };
 
 export const AlgoliaStockList: React.FC<AlgoliaStockListProps> = (props) => (
-  <InstantSearch searchClient={searchClient} indexName={INDEX_NAME}>
+  <InstantSearch 
+    searchClient={searchClient as any} 
+    indexName={INDEX_NAME}
+  >
     <AlgoliaStockListInner {...props} />
   </InstantSearch>
 );
