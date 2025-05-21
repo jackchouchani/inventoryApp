@@ -79,13 +79,10 @@
       "display": "standalone",
       "orientation": "portrait",
       "description": "Application de gestion d'inventaire",
-      "config": {
-        "head": {
-          "links": [
-            {
-              "rel": "stylesheet",
-              "href": "https://fonts.googleapis.com/icon?family=Material+Icons"
-            }
+      "build": {
+        "babel": {
+          "include": [
+            "@expo/vector-icons"
           ]
         }
       }

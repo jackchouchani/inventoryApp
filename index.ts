@@ -1,12 +1,8 @@
-import "expo-router/entry";
+import { loadFonts } from './src/config/fonts';
 import { Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 
-// Override MaterialIcons to use Google Fonts on web
 if (Platform.OS === 'web') {
-  MaterialIcons.font = {
-    fontFamily: 'Material Icons',
-    fontWeight: 'normal',
-    fontStyle: 'normal',
-  };
+    loadFonts().catch(console.error);
 }
+
+import "expo-router/entry";
