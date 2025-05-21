@@ -45,7 +45,6 @@ const COMPANY_INFO = {
 const TVA_MENTIONS = {
   regime: "Régime particulier – Biens d'occasion",
   legalReference: "Article 297 A du CGI et directive communautaire 2006/112/CE",
-  noDeduction: "TVA non applicable. Les clients n'ont aucun droit à déduction."
 };
 
 // Hooks et utils factices si les originaux ne sont pas disponibles dans ce contexte
@@ -418,7 +417,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       calculatedFooterContentHeight += footerTopSeparatorHeight;
 
       doc.setFontSize(7);
-      const tvaTextLines = [TVA_MENTIONS.regime, TVA_MENTIONS.legalReference, TVA_MENTIONS.noDeduction];
+      const tvaTextLines = [TVA_MENTIONS.regime, TVA_MENTIONS.legalReference];
       tvaTextLines.forEach(line => {
         const split = doc.splitTextToSize(line, contentWidth);
         calculatedFooterContentHeight += split.length * footerLineSpacing;
@@ -430,7 +429,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       const splitMerci = doc.splitTextToSize(merciMsg, contentWidth);
       calculatedFooterContentHeight += splitMerci.length * footerMerciSpacing;
 
-      let footerDrawStartY = pageHeight - margin - calculatedFooterContentHeight;
+      let footerDrawStartY = pageHeight - calculatedFooterContentHeight;
 
       // S'assurer que le contenu principal ne chevauche pas le footer
       // Si le contenu est trop long, il faudrait gérer l'ajout d'une page (non implémenté ici pour simplicité)
@@ -444,7 +443,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       }
 
       // --- DESSIN DU TOTAL (juste avant le footer) ---
-      const totalSectionHeight = 10; // Hauteur approx pour la section Total TTC
+      const totalSectionHeight = 8; // Hauteur approx pour la section Total TTC
       yPos = footerDrawStartY - totalSectionHeight; // Positionner le Y pour le total
 
       const totalLineXStart = margin + contentWidth / 2.5;

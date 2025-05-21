@@ -79,14 +79,16 @@
       "display": "standalone",
       "orientation": "portrait",
       "description": "Application de gestion d'inventaire",
-      "build": {
-        "babel": {
-          "include": [
-            "react-native-vector-icons"
+      "config": {
+        "head": {
+          "links": [
+            {
+              "rel": "stylesheet",
+              "href": "https://fonts.googleapis.com/icon?family=Material+Icons"
+            }
           ]
         }
-      },
-      "bundler": "metro"
+      }
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
