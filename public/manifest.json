@@ -55,7 +55,7 @@
       "Vibration",
       "Audio playback"
     ],
-    "display_override": ["standalone", "minimal-ui"],
+    "display_override": ["standalone"],
     "launch_handler": {
       "client_mode": "focus-existing"
     },

@@ -78,7 +78,15 @@
       "startUrl": "/",
       "display": "standalone",
       "orientation": "portrait",
-      "description": "Application de gestion d'inventaire"
+      "description": "Application de gestion d'inventaire",
+      "build": {
+        "babel": {
+          "include": [
+            "react-native-vector-icons"
+          ]
+        }
+      },
+      "bundler": "metro"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
