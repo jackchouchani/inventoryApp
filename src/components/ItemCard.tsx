@@ -5,6 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 import { getImageUrl } from '../utils/r2Client';
+import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 
 export interface ItemCardProps {
   item: Item;
@@ -33,6 +34,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
   fadeAnimation,
   scaleAnimation
 }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -73,8 +76,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
 
   const statusTextStyle = useMemo(() => [
     styles.statusText,
-    { color: localStatus === 'sold' ? '#c62828' : '#2e7d32' }
-  ], [localStatus]);
+    { color: localStatus === 'sold' ? activeTheme.danger.text : activeTheme.text.inverse }
+  ], [localStatus, activeTheme]);
 
   useEffect(() => {
     fadeAnimation?.fadeIn({ duration: 300 });
@@ -101,7 +104,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
     if (isLoading) {
       return (
         <View style={[styles.image, styles.noImageContainer]}>
-          <ActivityIndicator size="small" color="#2196f3" />
+          <ActivityIndicator size="small" color={activeTheme.primary} />
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
       );
@@ -110,7 +113,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
     if (errorMessage) {
       return (
         <View style={[styles.image, styles.noImageContainer]}>
-          <MaterialIcons name="error-outline" size={24} color="#e53935" />
+          <MaterialIcons name="error-outline" size={24} color={activeTheme.danger.text} />
           <Text style={styles.errorText}>Erreur</Text>
           <Text style={styles.errorDetail}>{errorMessage.substring(0, 25)}</Text>
         </View>
@@ -144,7 +147,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
     
     return (
       <View style={[styles.image, styles.noImageContainer]}>
-        <MaterialIcons name="image-not-supported" size={24} color="#999" />
+        <MaterialIcons name="image-not-supported" size={24} color={activeTheme.text.secondary} />
       </View>
     );
   };
@@ -191,14 +194,14 @@ const ItemCard: React.FC<ItemCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: theme.surface,
+    borderRadius: theme.borderRadius.md,
     marginHorizontal: 16,
     marginVertical: 8,
-    elevation: Platform.select({ android: 2, default: 0 }),
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    elevation: Platform.select({ android: theme.shadows.sm.elevation, default: 0 }),
+    boxShadow: theme.shadows.sm.boxShadow,
   },
   cardContent: {
     flexDirection: 'row',
@@ -237,15 +240,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   itemName: {
-    fontSize: 16,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text.primary,
     marginBottom: 4,
   },
   itemPrice: {
-    fontSize: 15,
+    fontSize: theme.typography.body.fontSize - 1,
     fontWeight: '500',
-    color: '#2196f3',
+    color: theme.primary,
     marginBottom: 8,
   },
   bottomRow: {
@@ -270,10 +273,10 @@ const styles = StyleSheet.create({
     }),
   },
   sellButton: {
-    backgroundColor: '#2196f3',
+    backgroundColor: theme.primary,
   },
   restoreButton: {
-    backgroundColor: '#ff9800',
+    backgroundColor: theme.warning,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -282,10 +285,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   availableBadge: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: theme.success,
   },
   soldBadge: {
-    backgroundColor: '#ffebee',
+    backgroundColor: theme.danger.text,
   },
   statusText: {
     fontSize: 12,
@@ -294,12 +297,12 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#e53935',
+    color: theme.danger.main,
     marginTop: 4,
   },
   errorDetail: {
     fontSize: 9,
-    color: '#e53935',
+    color: theme.danger.main,
     textAlign: 'center',
     marginTop: 2,
     paddingHorizontal: 4,
@@ -307,14 +310,16 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#2196f3',
+    color: theme.primary,
     marginTop: 4,
   },
 });
 
-export default React.memo(ItemCard, (prevProps, nextProps) => {
+const MemoizedItemCard = React.memo(ItemCard, (prevProps, nextProps) => {
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.status === nextProps.item.status
   );
-}); 
+});
+
+export default MemoizedItemCard;

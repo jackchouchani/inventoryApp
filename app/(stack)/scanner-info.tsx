@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useCameraPermissions, CameraView as ExpoCameraView } from 'expo-camera';
 import { supabase } from '../../src/config/supabase';
 import { formatCurrency } from '../../src/utils/format';
 import { getImageUrl } from '../../src/utils/r2Client';
@@ -59,6 +59,205 @@ try {
 
 const FALLBACK_IMAGE_URL = process.env.EXPO_PUBLIC_FALLBACK_IMAGE_URL;
 
+// Web-only implementation for camera scanning
+interface WebCameraProps {
+  barcodeScannerSettings: { barcodeTypes: string[] };
+  onBarcodeScanned: ((data: { data: string }) => void) | undefined;
+  style: any;
+}
+
+// Import QrScanner pour une meilleure implémentation web
+import QrScanner from 'qr-scanner';
+
+// Composant caméra web avec scanner QR intégré (même implémentation que Scanner.tsx)
+const WebCamera: React.FC<{ 
+  onBarcodeScanned: (result: { data: string }) => void;
+  onCameraReady: () => void;
+}> = ({ onBarcodeScanned, onCameraReady }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const qrScannerRef = useRef<QrScanner | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    let initializationTimeout: NodeJS.Timeout;
+
+    const initializeScanner = async () => {
+      if (!videoRef.current || qrScannerRef.current) return;
+
+      try {
+        console.log("Initialisation du scanner QR...");
+        
+        // Vérifier si on est en HTTPS ou localhost
+        const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+        if (!isSecure) {
+          throw new Error('HTTPS est requis pour l\'accès à la caméra. Veuillez utiliser: npx expo start --web --https');
+        }
+        
+        // Créer une instance de QrScanner
+        const qrScanner = new QrScanner(
+          videoRef.current,
+          (result) => {
+            console.log("Code QR détecté:", result.data);
+            // Convertir le résultat au format attendu
+            onBarcodeScanned({ data: result.data });
+          },
+          {
+            onDecodeError: (error) => {
+              // Ne pas logger tous les erreurs de décodage car c'est normal
+            },
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            preferredCamera: 'environment'
+          }
+        );
+
+        qrScannerRef.current = qrScanner;
+
+        // Démarrer le scanner avec un délai pour éviter les conflits
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await qrScanner.start();
+        
+        if (mounted) {
+          console.log("Scanner QR démarré avec succès!");
+          setIsReady(true);
+          setError(null);
+          onCameraReady();
+        }
+
+      } catch (error) {
+        console.error('Erreur lors de l\'initialisation du scanner:', error);
+        if (mounted) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage?.includes('HTTPS')) {
+            setError('HTTPS requis. Démarrez avec: npx expo start --web --https');
+          } else {
+            setError('Impossible d\'accéder à la caméra. Veuillez vérifier les permissions.');
+          }
+        }
+      }
+    };
+
+    // Délai pour éviter les initialisations multiples rapides
+    initializationTimeout = setTimeout(() => {
+      if (mounted) {
+        initializeScanner();
+      }
+    }, 200);
+
+    return () => {
+      mounted = false;
+      clearTimeout(initializationTimeout);
+      
+      if (qrScannerRef.current) {
+        console.log("Arrêt du scanner QR...");
+        try {
+          qrScannerRef.current.stop();
+          qrScannerRef.current.destroy();
+        } catch (e) {
+          console.log("Nettoyage du scanner (normal)");
+        }
+        qrScannerRef.current = null;
+      }
+    };
+  }, []); // Dépendances vides pour éviter les re-rendus
+
+  if (error) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.9)' }]}>
+        <MaterialIcons name="error" size={48} color="#FF3B30" />
+        <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', marginVertical: 20, paddingHorizontal: 20 }}>{error}</Text>
+        <TouchableOpacity 
+          style={{ backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }}
+          onPress={() => {
+            setError(null);
+            window.location.reload();
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      {/* Video element pour le web */}
+      <video
+        ref={videoRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover'
+        }}
+      />
+      {!isReady && !error && (
+        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)' }]}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 16, marginTop: 12, textAlign: 'center' }}>
+            Initialisation du scanner QR...
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 8, textAlign: 'center' }}>
+            Veuillez autoriser l'accès à la caméra
+          </Text>
+        </View>
+      )}
+      {isReady && (
+        <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 100 }]}>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', padding: 12, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontSize: 14, textAlign: 'center', fontWeight: '500' }}>
+              Pointez la caméra vers un code QR
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// React QR Barcode Scanner implementation for web et mobile
+const CameraView = ({ onBarcodeScanned, style }: WebCameraProps) => {
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  
+  return (
+    <View style={style}>
+      {/* Utiliser WebCamera sur le web et ExpoCameraView sur mobile */}
+      {Platform.OS === 'web' ? (
+        <WebCamera 
+          onBarcodeScanned={onBarcodeScanned || (() => {})}
+          onCameraReady={() => {
+            console.log("Caméra web prête!");
+            setIsCameraReady(true);
+          }}
+        />
+      ) : (
+        <ExpoCameraView
+          style={StyleSheet.absoluteFillObject}
+          onBarcodeScanned={onBarcodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_e', 'itf14', 'datamatrix', 'codabar', 'pdf417'],
+          }}
+          onCameraReady={() => {
+            console.log("Caméra mobile prête!");
+            setIsCameraReady(true);
+          }}
+        />
+      )}
+      
+      {/* Overlay pour le cadre de scan (seulement sur web pour éviter les conflits avec expo) */}
+      {Platform.OS === 'web' && (
+        <View style={styles.overlay}>
+          <View style={styles.scanFrame} />
+          <Text style={styles.scanText}>
+            Placez le QR code dans le cadre
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 type ScannedItemWithAlgolia = Item & { objectID?: string; photo_storage_url?: string };
 
 export default function ScannerInfoScreen() {
@@ -107,7 +306,12 @@ export default function ScannerInfoScreen() {
     }
   }, [permission, requestPermission]);
 
-  const fetchContainerName = async (containerId: string) => {
+  const fetchContainerName = async (containerId: string | null | undefined) => {
+    // Si containerId est null ou undefined, retourner directement 'Non spécifié'
+    if (containerId === null || containerId === undefined) {
+      return 'Non spécifié';
+    }
+    
     try {
       const { data, error } = await supabase
         .from('containers')
@@ -123,7 +327,12 @@ export default function ScannerInfoScreen() {
     }
   };
 
-  const fetchCategoryName = async (categoryId: string) => {
+  const fetchCategoryName = async (categoryId: string | null | undefined) => {
+    // Si categoryId est null ou undefined, retourner directement 'Non spécifiée'
+    if (categoryId === null || categoryId === undefined) {
+      return 'Non spécifiée';
+    }
+    
     try {
       const { data, error } = await supabase
         .from('categories')
@@ -201,29 +410,27 @@ export default function ScannerInfoScreen() {
       };
       setScannedItem(updatedScannedItem);
 
+      // Récupérer les données d'image d'Algolia
       try {
+        // Récupérer l'image depuis Algolia
         const algoliaItem = await itemsIndex.getObject(objectID, {
           attributesToRetrieve: ['photo_storage_url', 'name'],
         });
         
-        console.log('Article récupéré depuis Algolia (getObject):', algoliaItem);
-
+        // Utiliser photo_storage_url d'Algolia si disponible
         if (algoliaItem && algoliaItem.photo_storage_url) {
           console.log("Utilisation de photo_storage_url d'Algolia:", algoliaItem.photo_storage_url);
           const imageUrl = getImageUrl(algoliaItem.photo_storage_url);
-          console.log("URL générée pour l'image:", imageUrl); // Debug
+          console.log("URL générée pour l'image:", imageUrl);
           setImageUrl(imageUrl);
           setImageLoading(false);
           setImageError(false);
+          // Mettre à jour l'item avec photo_storage_url
           updatedScannedItem = { ...updatedScannedItem, photo_storage_url: algoliaItem.photo_storage_url };
           setScannedItem(updatedScannedItem);
-        } else if (supabaseItem.photo_url) {
-          console.log("photo_storage_url non trouvée dans Algolia, utilisation de Supabase photo_url:", supabaseItem.photo_url);
-          setImageUrl(getImageUrl(supabaseItem.photo_url));
-          setImageLoading(false);
-          setImageError(false);
         } else {
-          console.log("Aucune URL d'image trouvée.");
+          // Fallback si aucune image n'est trouvée
+          console.log("Aucune photo_storage_url trouvée dans Algolia");
           setImageUrl(FALLBACK_IMAGE_URL || null);
         }
       } catch (algoliaGetError) {
@@ -276,18 +483,14 @@ export default function ScannerInfoScreen() {
         };
 
         const response = await searchClient.getRecommendations([requestOptions]);
-        console.log('Réponse de getRecommendations:', JSON.stringify(response, null, 2));
 
         if (response && response.results && response.results[0] && response.results[0].hits) {
           const similar = response.results[0].hits;
-          console.log('Articles similaires trouvés:', similar);
           setSimilarItems(similar);
         } else {
-          console.log('Aucun article similaire trouvé ou structure de réponse inattendue.');
           setSimilarItems([]);
         }
       } catch (e) {
-        console.error('Erreur lors de la récupération des articles similaires:', e);
         setError('Erreur lors de la récupération des articles similaires.');
         setSimilarItems([]);
       } finally {
@@ -298,30 +501,17 @@ export default function ScannerInfoScreen() {
     fetchSimilarItems();
   }, [algoliaObjectID, scannedItem]); // Déclencher si scannedItem change aussi, au cas où l'objectID est défini après
 
-  // Effet pour charger l'image de l'article scanné si elle n'a pas été définie par la logique getObject/photo_storage_url
+  // Effet pour gérer les cas où l'image pourrait ne pas être définie correctement
   useEffect(() => {
-    if (scannedItem) {
-      if (scannedItem.photo_storage_url) {
-        if (imageUrl !== getImageUrl(scannedItem.photo_storage_url)) {
-          const newImageUrl = getImageUrl(scannedItem.photo_storage_url);
-          console.log("Mise à jour de l'URL de l'image principale:", newImageUrl);
-          setImageUrl(newImageUrl);
-          setImageLoading(false);
-          setImageError(false);
-        }
-      } else if (scannedItem.photo_url) {
-        console.log("useEffect image: photo_storage_url absent, photo_url présent. Appel fetchImageUrl si nécessaire:", scannedItem.photo_url);
-        if (imageUrl === null && !imageLoading) { 
-            setImageUrl(getImageUrl(scannedItem.photo_url));
-        } else if (!imageUrl && !imageLoading && !imageError && !FALLBACK_IMAGE_URL){
-            setImageUrl(getImageUrl(scannedItem.photo_url));
-        }
-      } else if (!imageLoading && !imageUrl) {
-        console.log("useEffect image: Ni photo_storage_url ni photo_url. Utilisation du fallback.");
+    if (scannedItem && !imageUrl && !imageLoading) {
+      // Cas de secours si l'image n'a pas été définie dans handleBarCodeScanned
+      if (scannedItem.photo_url) {
+        setImageUrl(getImageUrl(scannedItem.photo_url));
+      } else {
         setImageUrl(FALLBACK_IMAGE_URL || null);
       }
     }
-  }, [scannedItem, imageUrl, imageLoading, imageError]);
+  }, [scannedItem, imageUrl, imageLoading]);
 
   // Effet pour mettre à jour les noms de conteneur et catégorie
   useEffect(() => {
@@ -487,27 +677,29 @@ export default function ScannerInfoScreen() {
       
       {isScanning ? (
         <View style={styles.cameraContainer}>
+          {/* Web-specific camera implementation */}
           <CameraView
             barcodeScannerSettings={{
               barcodeTypes: ["qr"],
             }}
             onBarcodeScanned={isScanning && !loading ? handleBarCodeScanned : undefined}
             style={StyleSheet.absoluteFillObject}
+          />
+          
+          {/* Overlay elements */}
+          <View style={styles.overlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scanText}>
+              Placez le QR code dans le cadre
+            </Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.scanBackButton} 
+            onPress={handleGoBack}
           >
-            <View style={styles.overlay}>
-              <View style={styles.scanFrame} />
-              <Text style={styles.scanText}>
-                Placez le QR code dans le cadre
-              </Text>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.scanBackButton} 
-              onPress={handleGoBack}
-            >
-              <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </CameraView>
+            <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={styles.itemInfo}>
@@ -844,17 +1036,33 @@ export default function ScannerInfoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
+  },
+  webTestButton: {
+    position: 'absolute',
+    bottom: 80,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 122, 255, 0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  webTestButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   cameraContainer: {
     flex: 1,
     overflow: 'hidden',
+    position: 'relative',
   },
+
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0)', // Transparence augmentée pour meilleure visibilité
+    zIndex: 2,
   },
   scanFrame: {
     width: 250,
@@ -862,15 +1070,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ffffff',
     borderRadius: 12,
+    backgroundColor: 'transparent',
   },
   scanText: {
     color: '#ffffff',
     fontSize: 16,
     marginTop: 20,
     textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 8,
     borderRadius: 4,
+    fontWeight: 'bold',
   },
   scanBackButton: {
     position: 'absolute',

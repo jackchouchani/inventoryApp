@@ -167,6 +167,7 @@ interface ErrorHandlerOptions {
   logToSentry?: boolean;
   source?: string;
   message?: string;
+  additionalData?: Record<string, any>;
 }
 
 /**

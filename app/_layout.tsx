@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
 import { Slot, SplashScreen, router, useSegments } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
@@ -10,6 +10,7 @@ import { queryClient } from '../src/config/queryClient';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { DataLoader } from '../src/components/DataLoader';
 import * as Sentry from '@sentry/react-native';
+import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
 
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
@@ -60,8 +61,11 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <Provider store={store}>
           <AuthProvider>
-            {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
-            <Toast config={toastConfig} />
+            <ThemeProvider>
+              {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
+              <Toast config={toastConfig} />
+              {Platform.OS === 'web' && <div id="datepicker-portal"></div>}
+            </ThemeProvider>
           </AuthProvider>
         </Provider>
       </QueryClientProvider>
@@ -71,9 +75,11 @@ export default function RootLayout() {
 
 // Écran de chargement initial
 function InitialLoadingScreen() {
+  const { activeTheme } = useAppTheme();
+  
   return (
-    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator size="large" color="#007AFF" />
+    <View style={[{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color={activeTheme.primary} />
     </View>
   );
 }
@@ -92,6 +98,7 @@ function RootLayoutContent() {
   const { user, isLoading } = useAuth();
   const [isReady, setIsReady] = useState(false);
   const segments = useSegments();
+  const { activeTheme } = useAppTheme();
   
   // Utilisation d'une référence pour stocker l'état précédent et éviter les redirections en boucle
   const prevStateRef = useRef<PrevStateRefType>({ 
@@ -242,15 +249,15 @@ function RootLayoutContent() {
   // Afficher un loader pendant le chargement initial
   if (isLoading || !isReady) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={activeTheme.primary} />
       </View>
     );
   }
 
   // Rendre le contenu principal
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: activeTheme.background }}>
       {user ? (
         <DataLoader>
           <Slot />
@@ -261,10 +268,3 @@ function RootLayoutContent() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  }
-}); 

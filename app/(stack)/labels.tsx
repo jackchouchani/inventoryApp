@@ -1,11 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ScrollView } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect, useRef, useId } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ScrollView, ActivityIndicator, FlatList, SafeAreaView } from 'react-native'; 
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { LabelGenerator } from '../../src/components/LabelGenerator';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import type { Category } from '../../src/types/category';
@@ -13,14 +8,112 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { database } from '../../src/database/database';
 import * as Sentry from '@sentry/react-native';
+import DatePicker, { registerLocale, setDefaultLocale } from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { fr } from 'date-fns/locale/fr';
+registerLocale('fr', fr);
+setDefaultLocale('fr'); 
+import Select, { ActionMeta, SingleValue, GroupBase } from 'react-select'; 
 
-// Algolia imports
-import { InstantSearch, useHits, useInstantSearch, Configure, useRefinementList } from 'react-instantsearch';
-import { searchClient, INDEX_NAME } from '../../src/config/algolia';
+import { searchItems, SearchFilters } from '../../src/services/searchService';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
+
+// Define theme colors locally
+// const themeColorsLight = {
+//   colors: {
+//     primary: '#007bff',
+//     secondary: '#6c757d',
+//     text: '#212529',
+//     background: '#ffffff',
+//     placeholder: '#6c757d',
+//     icon: '#495057',
+//     activeText: '#ffffff',
+//     inactiveText: '#007bff',
+//     itemRowBackground: '#ffffff',
+//     itemRowBorder: '#f0f0f0',
+//     itemSelectedBackground: '#e6f7ff',
+//     itemName: '#212529',
+//     itemContainerText: '#666',
+//     footerBackground: '#ffffff',
+//     footerBorder: '#e0e0e0',
+//     buttonText: '#ffffff',
+//     noResultsBackground: '#f8f9fa',
+//     noResultsText: '#6c757d',
+//     loadingText: '#666',
+//     errorText: 'red',
+//     errorDetails: '#e74c3c',
+//     danger: '#dc3545', // Added danger color
+//     primaryText: { color: '#212529' },
+//     secondaryText: { color: '#6c757d' },
+//     inputBackground: { backgroundColor: '#f1f3f5' },
+//     inputText: { color: '#333' },
+//     segmentControl: { tintColor: '#007bff', backgroundColor: '#e9ecef', activeTextColor: '#007bff', inactiveTextColor: '#495057' },
+//     chipBackground: '#e9ecef',
+//     chipText: '#495057',
+//     chipActiveBackground: '#007bff',
+//     chipActiveText: '#ffffff',
+//     priceInputBorder: '#ced4da',
+//     priceInputBackground: '#ffffff',
+//     dateButtonBackground: '#e9ecef',
+//     dateButtonTextColor: '#495057',
+//     filterTitleText: '#495057',
+//     segmentButtonActiveBackground: '#ffffff',
+//     segmentButtonIconColor: '#666',
+//     selectionHeaderBackground: '#ffffff',
+//     selectionHeaderText: '#495057',
+//     selectionButtonTextColor: '#007bff',
+//   }
+// };
+
+// const themeColorsDark = {
+//   colors: {
+//     primary: '#007bff',
+//     secondary: '#adb5bd',
+//     text: '#f8f9fa',
+//     background: '#121212',
+//     placeholder: '#adb5bd',
+//     icon: '#ced4da',
+//     activeText: '#121212',
+//     inactiveText: '#007bff',
+//     itemRowBackground: '#1e1e1e',
+//     itemRowBorder: '#333333',
+//     itemSelectedBackground: '#003f6b',
+//     itemName: '#f8f9fa',
+//     itemContainerText: '#adb5bd',
+//     footerBackground: '#1e1e1e',
+//     footerBorder: '#333333',
+//     buttonText: '#ffffff',
+//     noResultsBackground: '#121212',
+//     noResultsText: '#adb5bd',
+//     loadingText: '#adb5bd',
+//     errorText: '#ff4d4d',
+//     errorDetails: '#ff6b6b',
+//     danger: '#f8d7da', // Added danger color (light red for dark theme)
+//     primaryText: { color: '#f8f9fa' },
+//     secondaryText: { color: '#adb5bd' },
+//     inputBackground: { backgroundColor: '#2a2a2a' },
+//     inputText: { color: '#e0e0e0' },
+//     segmentControl: { tintColor: '#007bff', backgroundColor: '#333333', activeTextColor: '#007bff', inactiveTextColor: '#adb5bd' },
+//     chipBackground: '#333333',
+//     chipText: '#adb5bd',
+//     chipActiveBackground: '#007bff',
+//     chipActiveText: '#ffffff',
+//     priceInputBorder: '#555555',
+//     priceInputBackground: '#2a2a2a',
+//     dateButtonBackground: '#333333',
+//     dateButtonTextColor: '#adb5bd',
+//     filterTitleText: '#adb5bd',
+//     segmentButtonActiveBackground: '#1e1e1e',
+//     segmentButtonIconColor: '#adb5bd',
+//     selectionHeaderBackground: '#1e1e1e',
+//     selectionHeaderText: '#adb5bd',
+//     selectionButtonTextColor: '#007bff',
+//   }
+// };
 
 interface Filters {
   categoryId: number | null;
-  containerId: number | null;
+  containerId: number | null | 'none';
   minPrice: string;
   maxPrice: string;
   startDate: Date | null;
@@ -28,16 +121,13 @@ interface Filters {
   status: 'all' | 'available' | 'sold';
 }
 
-interface InventoryData {
-  items: Item[];
+interface StaticFilterData {
   categories: Category[];
   containers: Container[];
 }
 
-// Removed unused type
-
 const QUERY_KEYS = {
-  allData: 'allData'
+  staticFilterData: 'staticFilterData'
 } as const;
 
 const CACHE_CONFIG = {
@@ -46,12 +136,29 @@ const CACHE_CONFIG = {
   retry: 3,
 } as const;
 
+type SelectOption<TValue = number | 'none' | null> = {
+  value: TValue;
+  label: string;
+};
+
 const LabelScreenContent = () => {
+  const router = useRouter();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  const selectStyles = useMemo(() => customReactSelectStyles(activeTheme), [activeTheme]);
+
+  // Generate stable IDs for select components
+  const categorySelectId = useId();
+  const containerSelectId = useId();
+
+  // Au lieu de stocker juste les IDs, on stocke les objets complets
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [selectedContainers, setSelectedContainers] = useState<Set<number>>(new Set());
+
+  // Maps pour stocker les détails complets des articles/conteneurs sélectionnés
+  const [selectedItemsMap, setSelectedItemsMap] = useState<Map<number, Item>>(new Map());  
+  const [selectedContainersMap, setSelectedContainersMap] = useState<Map<number, Container>>(new Map());
   const [showContainers, setShowContainers] = useState(false);
-  const [showAlgoliaFilters, setShowAlgoliaFilters] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState<'start' | 'end' | null>(null);
   
   const [filters, setFilters] = useState<Filters>({
     categoryId: null,
@@ -63,35 +170,18 @@ const LabelScreenContent = () => {
     status: 'all'
   });
 
-  const prevFiltersRef = useRef<Filters>(filters);
-  useEffect(() => {
-    const prevFilters = prevFiltersRef.current;
-    const changedProps = Object.entries(filters).filter(
-      ([key, value]) => prevFilters[key as keyof Filters] !== value
-    );
-    if (changedProps.length > 0) {
-      prevFiltersRef.current = { ...filters };
-    }
-  }, [filters]);
-
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const isSearchActive = !!searchQuery;
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // --- LOGIQUE ALGOLIA UNIQUEMENT SI RECHERCHE ACTIVE ---
-  let algoliaStatus = '';
-  let hits: any[] = [];
-  if (isSearchActive) {
-    // Monter InstantSearch et hooks Algolia uniquement si recherche active
-    const algolia = useInstantSearch();
-    algoliaStatus = algolia.status;
-    hits = (useHits().hits as any[]);
-  }
+  const [searchResults, setSearchResults] = useState<Item[]>([]);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
 
   const { 
-    isLoading: isLoadingStaticData
-  } = useQuery<InventoryData, Error>({
-    queryKey: [QUERY_KEYS.allData],
+    data: staticData,
+    isLoading: isLoadingStaticData,
+    error: staticDataError,
+  } = useQuery<StaticFilterData, Error>({
+    queryKey: [QUERY_KEYS.staticFilterData],
     queryFn: async () => {
       try {
         const [categoriesData, containersDataFromDB] = await Promise.all([
@@ -99,7 +189,6 @@ const LabelScreenContent = () => {
           database.getContainers()
         ]);
         return {
-          items: [],
           categories: categoriesData || [],
           containers: containersDataFromDB || []
         };
@@ -113,874 +202,1124 @@ const LabelScreenContent = () => {
     ...CACHE_CONFIG
   });
 
-  const displayedListFromAlgolia = useMemo(() => {
-    // DEBUG: Indiquer le type de filtre appliqué
-    console.log("LABELS DEBUG - Filtre appliqué:", showContainers ? "container" : "item");
-    console.log("LABELS DEBUG - Total hits Algolia:", (hits as any[]).length);
-    
-    const filteredHits = (hits as any[]).filter((hit: any) => {
-      // DEBUG: Log détaillé du filtrage
-      if (hit.doc_type === undefined) {
-        console.log("LABELS DEBUG - Hit sans doc_type:", hit.objectID);
-      }
-      return hit.doc_type === (showContainers ? 'container' : 'item');
-    });
-    
-    // DEBUG: Log des résultats du filtrage
-    console.log("LABELS DEBUG - Résultats filtrés:", filteredHits.length);
-
-    // Ensuite on mappe comme avant
-    const result = filteredHits.map((hit: any) => {
-      // Fonction de parsing sécurisé des dates
-      const parseDateSafe = (dateString: string | null | undefined) => {
-        if (!dateString) return new Date().toISOString();
-        try {
-          // Parse la date au format PostgreSQL "2025-05-09 16:13:28.294+00"
-          return new Date(dateString).toISOString();
-        } catch (error) {
-          console.log("LABELS DEBUG - Erreur de parsing de date:", dateString);
-          return new Date().toISOString();
-        }
+  const performSearch = useCallback(async (currentSearchQuery: string, currentFilters: Filters) => {
+    setIsLoadingSearch(true);
+    try {
+      const supabaseFilters: SearchFilters = {
+        search: currentSearchQuery.trim() || undefined, 
+        status: currentFilters.status === 'all' ? undefined : currentFilters.status,
+        pageSize: 1000, 
       };
 
-      const commonMappedFields = {
-        id: Number(hit.objectID),
-        name: hit.name || '',
-        description: hit.description || '',
-        qrCode: hit.qr_code || null,
-        createdAt: parseDateSafe(hit.created_at),
-        updatedAt: parseDateSafe(hit.updated_at),
-        photoStorageUrl: hit.photo_storage_url || null, 
-      };
-
-      if (showContainers) {
-        return {
-          ...commonMappedFields,
-          number: hit.number?.toString() || '',
-        } as Container;
-      } else {
-        return {
-          ...commonMappedFields,
-          sellingPrice: typeof hit.selling_price === 'string' ? parseFloat(hit.selling_price) : (typeof hit.selling_price === 'number' ? hit.selling_price : 0),
-          purchasePrice: typeof hit.purchase_price === 'string' ? parseFloat(hit.purchase_price) : (typeof hit.purchase_price === 'number' ? hit.purchase_price : 0),
-          categoryId: hit.category_id ? Number(hit.category_id) : null,
-          categoryName: hit.category_name || '',
-          containerId: hit.container_id ? Number(hit.container_id) : null,
-          status: (hit.status || 'available') as 'available' | 'sold',
-        } as Item;
+      if (currentFilters.categoryId) {
+        supabaseFilters.categoryId = currentFilters.categoryId;
       }
-    });
-
-    console.log("LABELS DEBUG - Liste finale après mapping:", result.length);
-    return result;
-  }, [hits, showContainers]);
-
-  // DEBUG: Vérifier la liste finale après mapping
-  if (displayedListFromAlgolia.length > 0) {
-    console.log("LABELS DEBUG - Premier élément mappé:", JSON.stringify(displayedListFromAlgolia[0]));
-  }
-
-  const stableCallbacks = useRef({
-    handleCategoryChange: (categoryId: number | undefined) => {
-      setFilters(prev => ({ ...prev, categoryId: categoryId || null, containerId: null }));
-    },
-    handleContainerChange: (containerId: number | 'none' | undefined) => {
-      const newContainerId = containerId === 'none' ? null : containerId || null;
-      setFilters(prev => ({ ...prev, containerId: newContainerId, categoryId: null }));
-    },
-    handleStatusChange: (status: 'all' | 'available' | 'sold') => {
-      setFilters(prev => ({ ...prev, status }));
-    },
-    handlePriceChange: (min: number | undefined, max: number | undefined) => {
-      const minStr = min?.toString() || '';
-      const maxStr = max?.toString() || '';
-      setFilters(prev => ({ ...prev, minPrice: minStr, maxPrice: maxStr }));
-    },
-    handleToggleItem: (itemId: number) => {
-      if (showContainers) {
-        console.log("LABELS DEBUG - handleToggleItem (Containers) - ID clicked:", itemId);
-        setSelectedContainers(prev => {
-          const newSelected = new Set(prev);
-          const isCurrentlySelected = newSelected.has(itemId);
-          if (isCurrentlySelected) {
-            newSelected.delete(itemId);
-            console.log("LABELS DEBUG - handleToggleItem (Containers) - Désélection de l'ID:", itemId);
-          } else {
-            newSelected.add(itemId);
-            console.log("LABELS DEBUG - handleToggleItem (Containers) - Sélection de l'ID:", itemId);
-          }
-          console.log("LABELS DEBUG - handleToggleItem (Containers) - Nouveau state selectedContainers (size):", newSelected.size);
-          return newSelected;
-        });
-      } else {
-        setSelectedItems(prev => {
-          const newSelected = new Set(prev);
-          if (newSelected.has(itemId)) newSelected.delete(itemId); else newSelected.add(itemId);
-          return newSelected;
-        });
+      
+      if (currentFilters.containerId === 'none') {
+        supabaseFilters.containerId = 'none';
+      } else if (currentFilters.containerId) {
+        supabaseFilters.containerId = currentFilters.containerId;
       }
-    },
-    handleDeselectAll: () => {
-      if (showContainers) {
-        setSelectedContainers(new Set());
-        console.log("LABELS - Désélection de tous les containers");
-      } else {
-        setSelectedItems(new Set());
-        console.log("LABELS - Désélection de tous les items");
-      }
-    },
-    handleDateChange: (_event: any, selectedDate: Date | null | undefined) => {
-      if (Platform.OS === 'android') setShowDatePicker(null);
-      if (selectedDate) {
-        setFilters(prev => ({ ...prev, [showDatePicker === 'start' ? 'startDate' : 'endDate']: selectedDate }));
-      } else if (selectedDate === null) {
-        setFilters(prev => ({ ...prev, [showDatePicker === 'start' ? 'startDate' : 'endDate']: null }));
-      }
-    },
-    handleResetDate: (type: 'start' | 'end') => {
-      setFilters(prev => ({ ...prev, [type === 'start' ? 'startDate' : 'endDate']: null }));
-    },
-  }).current;
 
-  // Définir la fonction handleToggleItem en dehors du useRef
-  const handleToggleItem = useCallback((itemId: number) => {
-    if (showContainers) {
-      console.log("LABELS DEBUG - handleToggleItem (Containers) - ID clicked:", itemId);
-      setSelectedContainers(prev => {
-        const newSelected = new Set(prev);
-        const isCurrentlySelected = newSelected.has(itemId);
-        if (isCurrentlySelected) {
-          newSelected.delete(itemId);
-          console.log("LABELS DEBUG - handleToggleItem (Containers) - Désélection de l'ID:", itemId);
-        } else {
-          newSelected.add(itemId);
-          console.log("LABELS DEBUG - handleToggleItem (Containers) - Sélection de l'ID:", itemId);
-        }
-        console.log("LABELS DEBUG - handleToggleItem (Containers) - Nouveau state selectedContainers (size):", newSelected.size);
-        return newSelected;
-      });
-    } else {
-      setSelectedItems(prev => {
-        const newSelected = new Set(prev);
-        if (newSelected.has(itemId)) newSelected.delete(itemId); else newSelected.add(itemId);
-        return newSelected;
-      });
+      const minPriceNum = parseFloat(currentFilters.minPrice);
+      if (!isNaN(minPriceNum)) {
+        supabaseFilters.minPrice = minPriceNum;
+      }
+      const maxPriceNum = parseFloat(currentFilters.maxPrice);
+      if (!isNaN(maxPriceNum)) {
+        supabaseFilters.maxPrice = maxPriceNum;
+      }
+      const result = await searchItems(supabaseFilters);
+      setSearchResults(result.items || []);
+    } catch (error) {
+      Sentry.captureException(error, { tags: { type: 'labels_supabase_search_error' } });
+      setSearchResults([]);
+      Alert.alert('Erreur de recherche', 'Une erreur est survenue lors de la recherche des articles.');
+    } finally {
+      setIsLoadingSearch(false);
     }
-  }, [showContainers, setSelectedContainers, setSelectedItems]);
-
-  // Définir la fonction handleSelectAll en dehors du useRef pour avoir accès aux dernières valeurs de hits
-  const handleSelectAll = useCallback(() => {
-    // Debug pour vérifier les hits disponibles
-    console.log("LABELS DEBUG - Nombre de hits disponibles:", (hits as any[]).length);
-    
-    if (showContainers) {
-      // Filtre pour containers
-      const allContainers = (hits as any[])
-        .filter((hit: any) => hit.doc_type === 'container' && hit.objectID)
-        .map((hit: any) => Number(hit.objectID));
-      
-      console.log("LABELS DEBUG - Total containers trouvés:", allContainers.length);
-      
-      if (allContainers.length > 0) {
-        const newSelected = new Set(allContainers);
-        setSelectedContainers(newSelected);
-        console.log("LABELS - Sélection de tous les containers:", newSelected.size);
-      }
-    } else {
-      // Debuggons les valeurs doc_type pour comprendre le problème
-      console.log("LABELS DEBUG - 5 premiers hits:", (hits as any[]).slice(0, 5));
-      
-      // Utiliser une condition plus souple pour identifier les items
-      const allItems = (hits as any[])
-        .filter((hit: any) => {
-          const isItem = hit.doc_type !== 'container';
-          return isItem && hit.objectID;
-        })
-        .map((hit: any) => Number(hit.objectID));
-      
-      console.log("LABELS DEBUG - Total items trouvés:", allItems.length);
-      
-      if (allItems.length > 0) {
-        const newSelected = new Set(allItems);
-        setSelectedItems(newSelected);
-        console.log("LABELS - Sélection de tous les items:", newSelected.size);
-      }
-    }
-  }, [hits, showContainers, setSelectedItems, setSelectedContainers]);
-
-  const handleDeselectAll = useCallback(() => {
-    stableCallbacks.handleDeselectAll();
-  }, [stableCallbacks]);
-
-  const webDateInputStyle: React.CSSProperties = {
-    flex: 1,
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#333',
-    fontSize: '14px',
-    cursor: 'pointer',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    outline: 'none',
-    minWidth: '120px',
-  };
+  }, []);
 
   useEffect(() => {
-    if (showContainers) setSelectedItems(new Set()); else setSelectedContainers(new Set());
-  }, [showContainers]);
+    performSearch(debouncedSearchQuery, filters);
+  }, [debouncedSearchQuery, filters, performSearch]);
 
-  const getItemsToGenerate = () => {
-    const listToUse = displayedListFromAlgolia;
-    if (showContainers) {
-      return listToUse
-        .filter(container => selectedContainers.has((container as Container).id!))
-        .map(c => {
-          const container = c as Container;
-          return {
-          id: container.id!,
-          name: container.name,
-          description: container.description,
-          number: container.number?.toString() || '',
-          qrCode: container.qrCode || `CONT_${container.id.toString().padStart(4, '0')}`
-          };
-        }) || [];
-    }
-    return listToUse
-      .filter(item => selectedItems.has((item as Item).id!))
-      .map(i => {
-        const item = i as Item;
-        return {
-        id: item.id!,
-        name: item.name,
-        description: item.description,
-        sellingPrice: item.sellingPrice,
-        qrCode: item.qrCode || `ART_${item.id.toString().padStart(4, '0')}`
-        };
+  const displayedList = useMemo(() => {
+    let itemsToDisplay: Item[] = searchResults;
+
+    if (filters.startDate || filters.endDate) {
+      itemsToDisplay = itemsToDisplay.filter(item => {
+        if (!item.createdAt) return false;
+        const itemDate = new Date(item.createdAt);
+        if (filters.startDate && itemDate < filters.startDate) return false;
+        if (filters.endDate) {
+          const endOfDay = new Date(filters.endDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          if (itemDate > endOfDay) return false;
+        }
+        return true;
       });
+    }
+    
+    let finalDisplayList: (Item | Container)[] = []; 
+    if (showContainers) {
+      if (staticData?.containers) {
+        if (debouncedSearchQuery) {
+          finalDisplayList = staticData.containers.filter(c => 
+            c.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+          );
+        } else {
+          finalDisplayList = staticData.containers;
+        }
+      } else {
+        finalDisplayList = []; 
+      }
+    } else {
+      finalDisplayList = itemsToDisplay;
+    }
+    return finalDisplayList;
+  }, [searchResults, filters, showContainers, staticData, debouncedSearchQuery]);
+
+  const itemsToDisplayInList = useMemo(() => {
+    if (showContainers) {
+      return (displayedList as Container[]).map(c => ({ ...c, type: 'container' as const }));
+    }
+    return (displayedList as Item[]).map(i => ({ ...i, type: 'item' as const }));
+  }, [displayedList, showContainers]);
+
+  const handleCategoryChange = useCallback(
+    (selectedOption: SingleValue<SelectOption<number | null>>, _actionMeta: ActionMeta<SelectOption<number | null>>) => {
+      setFilters(prev => ({ ...prev, categoryId: selectedOption ? selectedOption.value : null }));
+    },
+    []
+  );
+
+  const handleContainerChange = useCallback(
+    (selectedOption: SingleValue<SelectOption<number | 'none' | null>>, _actionMeta: ActionMeta<SelectOption<number | 'none' | null>>) => {
+      setFilters(prev => ({ ...prev, containerId: selectedOption ? selectedOption.value : null }));
+    },
+    []
+  );
+
+  const handleStatusChange = (status: 'all' | 'available' | 'sold') => {
+    setFilters(prev => ({ ...prev, status }));
   };
 
-  // État pour suivre si le composant web est monté
-  const isWebComponentMounted = Platform.OS === 'web' ? true : false;
+  const handlePriceChange = (min: string, max: string) => {
+    setFilters(prev => ({ ...prev, minPrice: min, maxPrice: max }));
+  };
 
-  // --- CHARGEMENT SUPABASE PAR DÉFAUT ---
-  const { 
-    data: supabaseData, 
-    isLoading: isLoadingSupabase
-  } = useQuery<InventoryData, Error>({
-    queryKey: ['labels_supabase', filters, searchQuery],
-    queryFn: async () => {
-      if (searchQuery) return { items: [], categories: [], containers: [] }; // On laisse Algolia gérer
-      try {
-        const [categoriesData, containersData, allItems] = await Promise.all([
-          database.getCategories(),
-          database.getContainers(),
-          database.getItems()
-        ]);
-        // Filtres locaux
-        let filteredItems = allItems;
-        if (filters.categoryId) filteredItems = filteredItems.filter(i => i.categoryId === filters.categoryId);
-        if (filters.containerId) filteredItems = filteredItems.filter(i => i.containerId === filters.containerId);
-        if (filters.status && filters.status !== 'all') filteredItems = filteredItems.filter(i => i.status === filters.status);
-        // TODO: Ajouter filtres prix/dates si besoin
-        return {
-          items: filteredItems,
-          categories: categoriesData || [],
-          containers: containersData || []
-        };
-      } catch (error) {
-        if (error instanceof Error) {
-          Sentry.captureException(error, { tags: { type: 'labels_supabase_fetch_error' } });
-        }
-        throw error;
+  const handleDateChange = (_event: any, selectedDate: Date | null | undefined, type: 'start' | 'end') => {
+    if (selectedDate !== undefined) { 
+        setFilters(prev => ({ ...prev, [type === 'start' ? 'startDate' : 'endDate']: selectedDate }));
+    }
+  };
+
+  const handleResetDate = (type: 'start' | 'end') => {
+    setFilters(prev => ({ ...prev, [type === 'start' ? 'startDate' : 'endDate']: null }));
+  };
+
+  const handleToggleItem = (itemId: number) => {
+    const item = (displayedList as Item[]).find(i => i.id === itemId);
+    if (!item) {
+      console.warn(`[LabelsScreen] Item with ID ${itemId} not found in displayedList`);
+      return;
+    }
+
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+        
+        const newItemsMap = new Map(selectedItemsMap);
+        newItemsMap.delete(itemId);
+        setSelectedItemsMap(newItemsMap);
+      } else {
+        newSet.add(itemId);
+        
+        const newItemsMap = new Map(selectedItemsMap);
+        newItemsMap.set(itemId, item);
+        setSelectedItemsMap(newItemsMap);
       }
-    },
-    ...CACHE_CONFIG
-  });
+      console.log('[LabelsScreen] handleToggleItem - new selectedItems:', newSet);
+      return newSet;
+    });
+  };
 
-  // --- LOGIQUE DE SÉLECTION DE LA SOURCE DE DONNÉES ---
-  const itemsToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.items || []);
-  const containersToDisplay = isSearchActive ? displayedListFromAlgolia : (supabaseData?.containers || []);
-  const isLoading = isSearchActive ? (isLoadingStaticData || algoliaStatus === 'loading' || algoliaStatus === 'stalled') : isLoadingSupabase;
+  const handleToggleContainer = (containerId: number) => {
+    const container = (displayedList as Container[]).find(c => c.id === containerId);
+    if (!container) {
+      console.warn(`[LabelsScreen] Container with ID ${containerId} not found in displayedList`);
+      return;
+    }
 
-  // --- SEARCHBOX ADAPTÉE ---
-  const SearchBox = () => (
-    <View style={styles.searchBoxContainer}>
-      <TextInput
-        style={styles.searchBoxInput}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder={Platform.OS === 'web' ? "Rechercher articles/containers..." : "Rechercher..."}
-        placeholderTextColor="#999"
-        clearButtonMode="always"
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </View>
-  );
+    setSelectedContainers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(containerId)) {
+        newSet.delete(containerId);
+        
+        const newContainersMap = new Map(selectedContainersMap);
+        newContainersMap.delete(containerId);
+        setSelectedContainersMap(newContainersMap);
+      } else {
+        newSet.add(containerId);
+        
+        const newContainersMap = new Map(selectedContainersMap);
+        newContainersMap.set(containerId, container);
+        setSelectedContainersMap(newContainersMap);
+      }
+      console.log('[LabelsScreen] handleToggleContainer - new selectedContainers:', newSet);
+      return newSet;
+    });
+  };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.topBar}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.push('/(stack)/settings')}
-        >
-          <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
-          <Text style={styles.backButtonText}>Retour</Text>
-        </TouchableOpacity>
-      </View>
+  const handleDeselectAll = () => {
+    if (showContainers) {
+      setSelectedContainers(new Set());
+      setSelectedContainersMap(new Map());
+    } else {
+      setSelectedItems(new Set());
+      setSelectedItemsMap(new Map());
+    }
+  };
 
-      <View style={styles.segmentedControl}>
-        <TouchableOpacity
-          style={[styles.segmentButton, !showContainers && styles.segmentButtonActive]}
-          onPress={() => setShowContainers(false)}
-        >
-          <MaterialIcons name="shopping-bag" size={20} color={!showContainers ? '#007AFF' : '#666'} style={styles.segmentIcon} />
-          <Text style={[styles.segmentButtonText, !showContainers && styles.segmentButtonTextActive]}>
-            Articles ({showContainers ? 0 : selectedItems.size})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.segmentButton, showContainers && styles.segmentButtonActive]}
-          onPress={() => setShowContainers(true)}
-        >
-          <MaterialIcons name="inbox" size={20} color={showContainers ? '#007AFF' : '#666'} style={styles.segmentIcon} />
-          <Text style={[styles.segmentButtonText, showContainers && styles.segmentButtonTextActive]}>
-            Containers ({showContainers ? selectedContainers.size : 0})
-          </Text>
-        </TouchableOpacity>
-      </View>
+  const handleSelectAll = () => {
+    if (showContainers) {
+      const containers = displayedList as Container[];
+      const allContainerIds = containers.map(c => c.id);
+      setSelectedContainers(new Set(allContainerIds));
+      
+      const newContainersMap = new Map(selectedContainersMap);
+      containers.forEach(container => {
+        newContainersMap.set(container.id, container);
+      });
+      setSelectedContainersMap(newContainersMap);
+    } else {
+      const items = displayedList as Item[];
+      const allItemIds = items.map(i => i.id);
+      setSelectedItems(new Set(allItemIds));
+      
+      const newItemsMap = new Map(selectedItemsMap);
+      items.forEach(item => {
+        newItemsMap.set(item.id, item);
+      });
+      setSelectedItemsMap(newItemsMap);
+    }
+  };
 
-      <View style={styles.filterSection}>
-        <SearchBox />
-        {isSearchActive && (
-          <TouchableOpacity style={styles.filtersToggleHeaderAlgolia} onPress={() => setShowAlgoliaFilters(!showAlgoliaFilters)}>
-            <Text style={styles.filtersToggleHeaderTextAlgolia}>Filtrer par attributs</Text>
-          </TouchableOpacity>
-        )}
-        {isSearchActive && showAlgoliaFilters && (
-          <View style={styles.filtersContainerAlgolia}>
-            <RefinementListFilter attribute="category_name" title="Catégorie" />
-            <RefinementListFilter attribute="container_reference" title="Container" />
-            <RefinementListFilter attribute="status" title="Disponibilité" />
-          </View>
-        )}
-        <View style={styles.dateFilters}>
-          {Platform.OS === 'web' && isWebComponentMounted ? (
-            <>
-              <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
-                <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
-                <input
-                  type="date"
-                  style={webDateInputStyle}
-                  value={filters.startDate ? format(filters.startDate, 'yyyy-MM-dd') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const date = value ? new Date(value + "T00:00:00.000Z") : null;
-                    stableCallbacks.handleDateChange(e, date);
-                  }}
-                  placeholder="Date début"
-                />
-                {filters.startDate && (
-                  <TouchableOpacity onPress={() => stableCallbacks.handleResetDate('start')}>
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={[styles.dateButton, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e9ecef' }]}>
-                <MaterialIcons name="calendar-today" size={20} color="#007AFF" />
-                <input
-                  type="date"
-                  style={webDateInputStyle}
-                  value={filters.endDate ? format(filters.endDate, 'yyyy-MM-dd') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    let date = null;
-                    if (value) {
-                      date = new Date(value + "T00:00:00.000Z");
-                      date.setUTCHours(23, 59, 59, 999);
-                    }
-                    stableCallbacks.handleDateChange(e, date);
-                  }}
-                  placeholder="Date fin"
-                />
-                {filters.endDate && (
-                  <TouchableOpacity onPress={() => stableCallbacks.handleResetDate('end')}>
-                    <MaterialIcons name="close" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker('start')}> 
-                <MaterialIcons name="calendar-today" size={20} color="#666" />
-                <Text style={styles.dateButtonText}>{filters.startDate ? format(filters.startDate, 'dd/MM/yyyy', { locale: fr }) : 'Date début'}</Text>
-                {filters.startDate && <TouchableOpacity onPress={() => stableCallbacks.handleResetDate('start')} style={{ padding: 4 }}><MaterialIcons name="close" size={20} color="#666" /></TouchableOpacity>}
-                  </TouchableOpacity>
-              <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker('end')}>
-                <MaterialIcons name="calendar-today" size={20} color="#666" />
-                <Text style={styles.dateButtonText}>{filters.endDate ? format(filters.endDate, 'dd/MM/yyyy', { locale: fr }) : 'Date fin'}</Text>
-                {filters.endDate && <TouchableOpacity onPress={() => stableCallbacks.handleResetDate('end')} style={{ padding: 4 }}><MaterialIcons name="close" size={20} color="#666" /></TouchableOpacity>}
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
+  type LabelData = {
+    id: number;
+    name: string;
+    description?: string | null;
+    sellingPrice?: number | null; 
+    number?: string | null; 
+    qrCode: string;
+  };
 
-      <View style={styles.selectionHeader}>
-        <Text style={styles.sectionTitle}>
-          {showContainers ? 'Containers' : 'Articles'} sélectionnés ({showContainers ? selectedContainers.size : selectedItems.size})
-        </Text>
-        <View style={styles.selectionActions}>
-          <TouchableOpacity style={styles.selectionButton} onPress={handleSelectAll}>
-            <MaterialIcons name="check-box" size={18} color="#007AFF" />
-            <Text style={styles.selectionButtonText}>Tout sélectionner</Text>
-          </TouchableOpacity>
-          <Text style={styles.selectionSeparator}>•</Text>
-          <TouchableOpacity style={styles.selectionButton} onPress={handleDeselectAll}>
-            <MaterialIcons name="check-box-outline-blank" size={18} color="#FF3B30" />
-            <Text style={[styles.selectionButtonText, styles.deselectButtonText]}>Tout désélectionner</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+  const getItemsToGenerate = useCallback((): LabelData[] => {
+    console.log('[LabelsScreen] getItemsToGenerate called.');
+    console.log('[LabelsScreen] showContainers:', showContainers);
+    console.log('[LabelsScreen] selectedItemsMap size:', selectedItemsMap.size);
+    console.log('[LabelsScreen] selectedContainersMap size:', selectedContainersMap.size);
 
-      <ScrollView 
-        style={styles.selectionSection}
-        contentContainerStyle={styles.itemListContent}
-      >
-        {(showContainers ? containersToDisplay : itemsToDisplay).map((item, index) => (
-          <TouchableOpacity
-            key={item.id?.toString() || index}
-            style={[
-              styles.itemRow,
-              (showContainers ? selectedContainers : selectedItems).has(item.id!) && styles.itemRowSelected
-            ]}
-            onPress={() => {
-              console.log("LABELS DEBUG - TouchableOpacity pressed for ID:", item.id!);
-              handleToggleItem(item.id!);
-            }}
-          >
-            <View style={styles.itemInfo}>
-              <Text style={[
-                styles.itemName,
-                (showContainers ? selectedContainers : selectedItems).has(item.id!) && styles.itemNameSelected
-              ]}>
-                {item.name}
-                {__DEV__ && <Text style={{ fontSize: 10, color: '#999' }}> (#{index})</Text>}
-              </Text>
-              {!showContainers && (item as Item).containerId && (
-                <Text style={styles.itemContainer}>
-                  {containersToDisplay?.find(c => c.id === (item as Item).containerId)?.name || 'Sans container'}
-                </Text>
-              )}
-            </View>
-            <MaterialIcons
-              name={(showContainers ? selectedContainers : selectedItems).has(item.id!) ? "check-circle" : "radio-button-unchecked"}
-              size={22}
-              color={(showContainers ? selectedContainers : selectedItems).has(item.id!) ? "#007AFF" : "#CCC"}
-            />
-          </TouchableOpacity>
-        ))}
-        {(showContainers ? containersToDisplay : itemsToDisplay).length === 0 && !isLoading && hits && (
-          <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>
-              {`Aucun ${showContainers ? 'container' : 'article'} trouvé.`}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+    if (showContainers) {
+      const containers = Array.from(selectedContainersMap.values());
+      console.log('[LabelsScreen] Selected containers from Map:', containers);
+      
+      return containers.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        number: c.number?.toString() || '',
+        qrCode: c.qrCode || `CONT_${c.id.toString().padStart(4, '0')}`
+      }));
+    } else {
+      const items = Array.from(selectedItemsMap.values());
+      console.log('[LabelsScreen] Selected items from Map:', items);
+      
+      return items.map(i => ({
+        id: i.id,
+        name: i.name,
+        description: i.description,
+        sellingPrice: i.sellingPrice,
+        qrCode: i.qrCode || `ART_${i.id.toString().padStart(4, '0')}`
+      }));
+    }
+  }, [showContainers, selectedItemsMap, selectedContainersMap]);
 
-      {((showContainers ? selectedContainers.size : selectedItems.size) > 0) && (
-        <View style={styles.generatorContainer}>
-          <LabelGenerator
-            items={getItemsToGenerate()}
-            onComplete={() => {
-              if (showContainers) setSelectedContainers(new Set()); else setSelectedItems(new Set());
-              router.replace('/(stack)/settings');
-            }}
-            onError={(error) => {
-              console.error(error);
-              Alert.alert('Erreur', 'Une erreur est survenue lors de la génération des étiquettes');
-            }}
-            mode={showContainers ? 'containers' : 'items'}
-            compact={true}
-          />
-        </View>
-      )}
+  type RenderableListItem = typeof itemsToDisplayInList[number];
 
-      {showDatePicker && Platform.OS !== 'web' && (
-        <BlurView intensity={80} tint="light" style={styles.datePickerContainer}>
-          <Text style={styles.datePickerLabel}>
-            {showDatePicker === 'start' ? 'Date de début' : 'Date de fin'}
-          </Text>
-          <Text style={styles.datePickerSubLabel}>
-            {showDatePicker === 'start' 
-              ? 'Sélectionnez la date à partir de laquelle filtrer'
-              : 'Sélectionnez la date jusqu\'à laquelle filtrer'
-            }
-          </Text>
-          <DateTimePicker
-            value={showDatePicker === 'start' ? filters.startDate || new Date() : filters.endDate || new Date()}
-            mode="date"
-            display="spinner"
-            onChange={stableCallbacks.handleDateChange}
-            textColor="#000"
-          />
-          <TouchableOpacity
-            style={styles.closeDatePickerButton}
-            onPress={() => setShowDatePicker(null)}
-          >
-            <Text style={styles.closeDatePickerButtonText}>Fermer</Text>
-          </TouchableOpacity>
-        </BlurView>
-      )}
-    </View>
-  );
-}
+  const renderItem = ({ item }: { item: RenderableListItem }) => {
+    const isSelected = item.type === 'item'
+      ? selectedItems.has(item.id)
+      : selectedContainers.has(item.id);
 
-export default function LabelScreen() {
-  // Monter InstantSearch uniquement si recherche active
-  const [searchQuery] = useState('');
-  const isSearchActive = !!searchQuery;
-  if (isSearchActive) {
-    // Use type assertion to fix SearchClient type mismatch
+    const onPress = () => {
+      if (item.type === 'item') {
+        handleToggleItem(item.id);
+      } else {
+        handleToggleContainer(item.id);
+      }
+    };
+
     return (
-      <InstantSearch 
-        searchClient={searchClient as any} 
-        indexName={INDEX_NAME}
-      >
-        <Configure hitsPerPage={100} />
-        <LabelScreenContent />
-      </InstantSearch>
+      <TouchableOpacity onPress={onPress} style={[styles.itemRow, isSelected && styles.itemRowSelected]}>
+        <View style={styles.itemContent}>
+          <View style={styles.itemTextContainer}>
+            <Text style={[styles.itemName, isSelected && styles.itemNameSelected]}>{item.name}</Text>
+            {item.type === 'item' && (
+              <>
+                {item.description && (
+                  <Text style={[styles.itemDescription, isSelected && styles.itemDescriptionSelected]} numberOfLines={1}>
+                    {item.description}
+                  </Text>
+                )}
+                <Text style={[styles.itemContainerName, isSelected && styles.itemContainerNameSelected]}>
+                  Conteneur: {staticData?.containers?.find(c => c.id === (item as Item).containerId)?.name || 'N/A'}
+                </Text> 
+                {typeof (item as Item).sellingPrice === 'number' && (
+                  <Text style={[styles.itemPrice, isSelected && styles.itemPriceSelected]}>Prix: {(item as Item).sellingPrice.toFixed(2)} €</Text>
+                )}
+              </>
+            )}
+            {item.type === 'container' && (item as Container).number && (
+              <Text style={[styles.itemDescription, isSelected && styles.itemDescriptionSelected]}>
+                Numéro: {(item as Container).number}
+              </Text>
+            )}
+          </View>
+          <MaterialIcons
+            name={isSelected ? "check-box" : "check-box-outline-blank"}
+            size={24}
+            color={isSelected ? activeTheme.primary : activeTheme.text.secondary}
+          />
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const ListEmptyComponent = () => {
+    if (isLoadingSearch) {
+      return (
+        <View style={styles.centeredLoading}>
+          <ActivityIndicator size="large" color={activeTheme.primary} />
+          <Text style={styles.loadingText}>Recherche en cours...</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.noResultsContainer}>
+        <MaterialIcons name="search-off" size={48} color={activeTheme.text.secondary} />
+        <Text style={styles.noResultsText}>
+          Aucun {showContainers ? 'conteneur trouvé' : 'article trouvé'}.
+          {Platform.OS !== 'web' && '\n'}Essayez d'ajuster vos filtres ou votre recherche.
+        </Text>
+      </View>
+    );
+  };
+
+  const { categoryOptions, containerOptions } = useMemo(() => {
+    const baseCategoryOptions: SelectOption<number | null>[] = [
+      { value: null, label: 'Toutes les catégories' },
+      ...(staticData?.categories.map(cat => ({ value: cat.id, label: cat.name })) || [])
+    ];
+
+    const baseContainerOptions: SelectOption<number | 'none' | null>[] = [
+      { value: null, label: 'Tous les conteneurs (articles)' },
+      { value: 'none', label: 'Aucun conteneur (articles hors conteneur)' },
+      ...(staticData?.containers.map(con => ({ value: con.id, label: con.name })) || [])
+    ];
+    
+    return { 
+      categoryOptions: baseCategoryOptions,
+      containerOptions: baseContainerOptions
+    };
+  }, [staticData?.categories, staticData?.containers]);
+
+  const CustomDateInput = React.forwardRef<
+    React.ElementRef<typeof TouchableOpacity>, 
+    { value?: string; onClick?: () => void; type: 'start' | 'end'; hasValue?: boolean }
+  >(({ value, onClick, type, hasValue }, ref) => (
+    <TouchableOpacity style={styles.dateButton} onPress={onClick} ref={ref}>
+      <View style={styles.dateButtonContentView}> 
+        <MaterialIcons name="calendar-today" size={20} color={activeTheme.text.secondary} style={styles.dateButtonIcon} />
+        <Text style={styles.dateButtonTextValue}>{value || (type === 'start' ? 'Date début' : 'Date fin')}</Text>
+        {hasValue && (
+          <TouchableOpacity 
+            onPress={(e) => { 
+              e.stopPropagation(); 
+              handleResetDate(type); 
+            }} 
+            style={styles.dateClearButton}
+          >
+            <MaterialIcons name="close" size={18} color={activeTheme.text.secondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  ));
+
+  if (isLoadingStaticData && !staticData) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.topBarContainer}> 
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
+          >
+            <MaterialIcons 
+              name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+              size={24} 
+              color={activeTheme.primary} 
+              style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
+            />
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+          <Text style={styles.topBarTitle}>Générer Étiquettes</Text>
+          <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
+        </View>
+        <View style={styles.centeredLoading}>
+          <ActivityIndicator size="large" color={activeTheme.primary} />
+          <Text style={styles.loadingText}>Chargement des filtres...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
-  return <LabelScreenContent />;
+
+  if (staticDataError) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.topBarContainer}> 
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
+          >
+            <MaterialIcons 
+              name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+              size={24} 
+              color={activeTheme.primary} 
+              style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
+            />
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+          <Text style={styles.topBarTitle}>Erreur</Text>
+          <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
+        </View>
+        <View style={styles.centeredLoading}>
+          <MaterialIcons name="error-outline" size={48} color={activeTheme.danger.main} />
+          <Text style={styles.errorText}>Erreur de chargement des données.</Text>
+          <Text style={styles.errorDetails}>{staticDataError.message}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.topBarContainer}> 
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
+        >
+          <MaterialIcons 
+            name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+            size={24} 
+            color={activeTheme.primary} 
+            style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
+          />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle}>Générer Étiquettes</Text>
+        <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
+      </View>
+
+      <View style={styles.segmentContainer}>
+        <TouchableOpacity 
+          style={[styles.tabButton, !showContainers && styles.tabButtonActive]} 
+          onPress={() => setShowContainers(false)} >
+          <Text style={[styles.tabButtonText, !showContainers && styles.tabButtonTextActive]}>Articles</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tabButton, showContainers && styles.tabButtonActive]} 
+          onPress={() => setShowContainers(true)} >
+          <Text style={[styles.tabButtonText, showContainers && styles.tabButtonTextActive]}>Conteneurs</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.searchBarContainer}>
+        <MaterialIcons name="search" size={24} color={activeTheme.text.secondary} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={showContainers ? "Rechercher conteneurs..." : "Rechercher articles..."}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor={activeTheme.text.secondary}
+          autoCapitalize="none"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+            <MaterialIcons name="close" size={20} color={activeTheme.text.secondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {!showContainers && (
+        <View style={styles.filtersSectionContainer}>
+          <View style={styles.filterDropdownsRow}>
+            <View style={styles.dropdownWrapper}> 
+              <Text style={styles.filterTitle}>Catégorie:</Text>
+              <Select<SelectOption<number | null>, false, GroupBase<SelectOption<number | null>>>
+                instanceId={`category-select-${categorySelectId}`}
+                options={categoryOptions}
+                value={categoryOptions.find(opt => opt.value === filters.categoryId)}
+                onChange={handleCategoryChange}
+                placeholder="Catégorie"
+                styles={selectStyles}
+                isClearable
+                menuPortalTarget={document.body} 
+              />
+            </View>
+            <View style={styles.dropdownWrapper}>
+              <Text style={styles.filterTitle}>Conteneur (Article):</Text>
+              <Select<SelectOption<number | 'none' | null>, false, GroupBase<SelectOption<number | 'none' | null>>>
+                instanceId={`container-select-${containerSelectId}`}
+                options={containerOptions as ReadonlyArray<SelectOption<number | 'none' | null> | GroupBase<SelectOption<number | 'none' | null>>>}
+                value={containerOptions.find(opt => opt.value === filters.containerId) as SelectOption<number | 'none' | null> | undefined}
+                onChange={handleContainerChange}
+                placeholder="Sélectionner conteneur"
+                styles={selectStyles}
+                isClearable
+                menuPortalTarget={document.body} 
+              />
+            </View>
+          </View>
+
+          <View style={styles.filtersBar}>
+            <View style={styles.priceInputsContainer}>
+              <View style={styles.priceInputWrapper}>
+                <TextInput
+                  style={styles.priceInput}
+                  value={filters.minPrice}
+                  onChangeText={(text) => handlePriceChange(text, filters.maxPrice)}
+                  placeholder="Prix min"
+                  keyboardType="numeric"
+                  placeholderTextColor={activeTheme.text.secondary}
+                />
+              </View>
+              <View style={styles.priceSeparator} />
+              <View style={styles.priceInputWrapper}>
+                <TextInput
+                  style={styles.priceInput}
+                  value={filters.maxPrice}
+                  onChangeText={(text) => handlePriceChange(filters.minPrice, text)}
+                  placeholder="Prix max"
+                  keyboardType="numeric"
+                  placeholderTextColor={activeTheme.text.secondary}
+                />
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.filtersBar}>
+            <Text style={styles.filterTitle}>Statut:</Text>
+            {(['all', 'available', 'sold'] as const).map(statusValue => (
+              <TouchableOpacity 
+                key={statusValue} 
+                style={[styles.filterChip, filters.status === statusValue && styles.filterChipActive]} 
+                onPress={() => handleStatusChange(statusValue)}>
+                <Text style={[styles.filterChipText, filters.status === statusValue && styles.filterChipTextActive]}>
+                  {statusValue === 'all' ? 'Tous' : statusValue === 'available' ? 'Disponibles' : 'Vendus'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.dateFiltersContainer}>
+            <View style={styles.datePickerWrapper}> 
+              <DatePicker
+                selected={filters.startDate}
+                onChange={(date) => handleDateChange(null, date, 'start')}
+                customInput={<CustomDateInput type="start" hasValue={!!filters.startDate} />}
+                locale="fr"
+                dateFormat="P"
+                popperPlacement="bottom-start"
+                placeholderText="Date début"
+                isClearable={false}
+                portalId="datepicker-portal" 
+              />
+            </View>
+            <View style={styles.datePickerWrapper}> 
+              <DatePicker
+                selected={filters.endDate}
+                onChange={(date) => handleDateChange(null, date, 'end')}
+                customInput={<CustomDateInput type="end" hasValue={!!filters.endDate} />}
+                locale="fr"
+                dateFormat="P"
+                popperPlacement="bottom-start"
+                placeholderText="Date fin"
+                isClearable={false}
+                minDate={filters.startDate ? filters.startDate : undefined}
+                portalId="datepicker-portal" 
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
+      <FlatList
+        data={itemsToDisplayInList}
+        renderItem={renderItem}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        ListEmptyComponent={ListEmptyComponent}
+        contentContainerStyle={styles.listContentContainer}
+        style={{ backgroundColor: 'transparent' }} 
+        extraData={showContainers ? selectedContainers : selectedItems}
+      />
+
+      <View style={styles.selectionHeader}>
+        <Text style={styles.selectionCountText}>
+          {showContainers ? selectedContainers.size : selectedItems.size} {showContainers ? 'conteneur(s)' : 'article(s)'} sélectionné(s)
+        </Text>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity style={styles.selectionButton} onPress={handleSelectAll}>
+            <MaterialIcons name="done-all" size={18} color={activeTheme.primary} />
+            <Text style={styles.selectionButtonText}>Tout Sél.</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.selectionButton} onPress={handleDeselectAll}>
+            <MaterialIcons name="deselect" size={18} color="#777" />
+            <Text style={styles.selectionButtonText}>Tout Désél.</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity 
+          style={styles.clearAllButton} 
+          onPress={handleDeselectAll} 
+        >
+          <MaterialIcons name="delete-sweep" size={20} color={activeTheme.primary} style={styles.buttonIcon} />
+          <Text style={styles.clearAllButtonText}>Tout Vider</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.generateButton} 
+          onPress={() => {
+            const itemsToGen = getItemsToGenerate();
+            console.log('[LabelsScreen] onPress - itemsToGen:', itemsToGen);
+
+            if (itemsToGen.length === 0) {
+              Alert.alert('Aucune sélection', 'Veuillez sélectionner des articles ou des conteneurs pour générer des étiquettes.');
+              return;
+            }
+            
+            const mode = showContainers ? 'containers' : 'items';
+            console.log('[LabelsScreen] Navigating to /label-preview with params:', { items: JSON.stringify(itemsToGen), mode });
+            router.push({ 
+              pathname: '/label-preview', 
+              params: { items: JSON.stringify(itemsToGen), mode }
+            });
+          }}
+        >
+          <MaterialIcons name="label" size={20} color="#fff" style={styles.buttonIcon} />
+          <Text style={styles.generateButtonText}>Générer Étiquettes ({showContainers ? selectedContainers.size : selectedItems.size})</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
 }
 
-const styles = StyleSheet.create({
-  container: {
+const LabelScreen = () => {
+  return <LabelScreenContent />;
+};
+
+const getThemedStyles = (theme: any) => StyleSheet.create({
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.background,
   },
-  topBar: {
-    height: Platform.OS === 'ios' ? 44 : 56,
+  topBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    height: Platform.OS === 'ios' ? 44 : 56, 
+    backgroundColor: theme.background, 
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.border,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    marginLeft: -8,
+    paddingVertical: 10, 
+    paddingHorizontal: 8,
+    minWidth: Platform.OS === 'ios' ? 80 : 50, 
+    justifyContent: 'flex-start',
   },
-  backButtonText: {
+  backButtonText: { 
+    color: theme.primary,
     fontSize: 17,
-    color: '#007AFF',
-    marginLeft: -4,
+    marginLeft: 5,
   },
-  segmentedControl: {
-    flexDirection: 'row',
-    margin: 16,
-    marginTop: 8,
-    backgroundColor: '#f1f3f5',
-    borderRadius: 8,
-    padding: 4,
+  topBarTitle: {
+    fontSize: 17,
+    fontWeight: Platform.OS === 'ios' ? '600' : '500',
+    color: theme.text.primary,
+    textAlign: 'center',
+    flexShrink: 1, 
   },
-  filterSection: {
-    padding: 16,
-    paddingTop: 8,
-    position: 'relative',
-  },
-  selectionSection: {
+  container: {
     flex: 1,
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
-    elevation: 2,
+    backgroundColor: theme.background,
   },
-  selectionHeader: {
-    flexDirection: 'column',
-    padding: 16,
-    paddingBottom: 12,
-    marginHorizontal: 16,
-    marginTop: 8,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    gap: 8,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)',
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  selectionActions: {
+  searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: theme.surface,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 10,
+    marginVertical: 8, 
+    height: 40, 
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    fontSize: 16,
+    color: theme.text.primary,
+    height: '100%',
+  },
+  clearSearchButton: {
+    padding: 4,
+  },
+  filtersSectionContainer: { 
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  filterDropdownsRow: { 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dropdownWrapper: { 
+    flex: 1,
+    marginHorizontal: 4, // Added some spacing between dropdowns
+  },
+  filtersBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4, // Reduced padding for tighter filter bar
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  filterTitle: {
+    fontSize: 14,
+    color: theme.text.secondary,
+    marginRight: 8,
+    alignSelf: 'center',
+  },
+  priceInputsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priceInputWrapper: {
+    flex: 1,
+    maxWidth: '50%',
+  },
+  priceSeparator: {
+    width: 12,
+  },
+  priceInput: {
+    height: 38,
+    width: '100%',
+    borderColor: theme.border,
+    borderWidth: 1,
+    borderRadius: 4,
+    backgroundColor: theme.surface,
+    fontSize: 14,
+    color: theme.text.primary,
+    paddingHorizontal: 10,
+  },
+  dateFiltersContainer: {
+    flexDirection: 'row', // Added
+    alignItems: 'center', // Added
+    // justifyContent: 'space-around', // Removed or changed
+    marginVertical: 8, // Added some vertical margin for spacing
+  },
+  datePickerWrapper: { // Added new style
+    flex: 1,
+    marginHorizontal: 4, // Add some space between date pickers
+  },
+  dateButton: {  
+    backgroundColor: theme.surface,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    height: 38, // Match react-select height
+    justifyContent: 'center',
+    width: '100%', // Added to ensure the button fills the wrapper
+  },
+  dateButtonContentView: { // ADDED: dateButtonContentView style definition
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%', // Ensure this view also spans the full width of the button
+  },
+  dateButtonIcon: { // ADDED: dateButtonIcon style definition
+    marginRight: 6, 
+  },
+  dateButtonTextValue: { // ADDED: dateButtonTextValue style definition
+    fontSize: 14,
+    color: theme.text.secondary,
+    flex: 1,
+  },
+  dateClearButton: { // ADDED: dateClearButton style definition
+    paddingLeft: 8, 
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterChip: { // ADDED: filterChip style definition
+    paddingHorizontal: 12,
+    paddingVertical: 8, // Increased vertical padding for better touch area
+    borderRadius: 16,
+    backgroundColor: theme.surface,
+    marginHorizontal: 4, // Consistent margin
+    borderWidth: 1,
+    borderColor: 'transparent',
+    height: 38, // Match other filter controls
+    justifyContent: 'center',
+  },
+  filterChipActive: { // ADDED: filterChipActive style definition
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  filterChipText: { // ADDED: filterChipText style definition
+    color: theme.text.secondary,
+    fontSize: 14,
+  },
+  filterChipTextActive: { // ADDED: filterChipTextActive style definition
+    color: theme.text.onPrimary,
+    fontWeight: '500',
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.surface, 
+    borderRadius: 8,
+    marginHorizontal: 10,
+    marginTop: 10,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.surface, 
+    borderRadius: 8, 
+  },
+  tabButtonActive: {
+    backgroundColor: theme.primary, 
+  },
+  tabButtonText: {
+    fontSize: 15,
+    color: theme.text.primary, 
+    fontWeight: '500',
+  },
+  tabButtonTextActive: {
+    color: theme.text.onPrimary,
+    fontWeight: 'bold',
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  selectionCountText: {
+    fontSize: 14,
+    color: theme.text.secondary,
+    fontWeight: '500',
   },
   selectionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  selectionSeparator: {
-    marginHorizontal: 8,
-    color: '#CCC',
-    fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 8,
   },
   selectionButtonText: {
-    fontSize: 15,
-    color: '#007AFF',
+    marginLeft: 4,
+    fontSize: 14,
+    color: theme.text.primary,
     fontWeight: '500',
   },
-  deselectButtonText: {
-    color: '#FF3B30',
+  filterButton: {
+    padding: 10,
+    backgroundColor: theme.primary,
+    borderRadius: 8,
   },
-  itemListContent: {
-    padding: 8,
-    paddingTop: 0,
+  datePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  dateInputContainer: {
+    alignItems: 'center',
+  },
+  dateLabel: {
+    fontSize: 14,
+    color: theme.text.primary,
+    marginBottom: 4,
+  },
+  dateText: {
+    fontSize: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 4,
+    color: theme.text.primary,
+    minWidth: 100,
+    textAlign: 'center',
+  },
+  itemCountText: {
+    textAlign: 'center',
+    marginVertical: 8,
+    fontSize: 14,
+    color: theme.text.secondary,
+  },
+  listContentContainer: {
+    paddingBottom: 80,
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 4,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: theme.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
   },
   itemRowSelected: {
-    backgroundColor: '#f0f9ff',
-    borderColor: '#007AFF',
-  },
-  generatorContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'transparent',
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  dateFilters: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f1f3f5',
-    padding: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  dateButtonText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  datePickerContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    zIndex: 1000,
-  },
-  closeDatePickerButton: {
-    alignItems: 'center',
-    padding: 16,
-  },
-  closeDatePickerButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
+    backgroundColor: theme.primaryLight,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.primary,
   },
   itemInfo: { flex: 1, marginRight: 12 },
-  itemName: { fontSize: 16, marginBottom: 4, color: '#212529', fontWeight: '500' },
-  itemNameSelected: { color: '#007AFF' },
-  itemContainer: { fontSize: 14, color: '#666' },
-  segmentIcon: { marginRight: 6 },
-  segmentButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 8, borderRadius: 6 },
-  segmentButtonActive: { backgroundColor: '#fff', boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.05)', elevation: 2 },
-  segmentButtonText: { fontSize: 15, color: '#666' },
-  segmentButtonTextActive: { color: '#007AFF', fontWeight: '600' },
-  datePickerLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  datePickerSubLabel: {
+  itemName: { fontSize: 16, marginBottom: 4, color: theme.text.primary, fontWeight: 'bold' },
+  itemNameSelected: { color: theme.primary },
+  itemDescription: {
     fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 12,
+    color: theme.text.secondary, 
+    marginTop: 2,
   },
-  searchBoxContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f8f9fa',
+  itemDescriptionSelected: {
+    color: theme.primary, 
   },
-  searchBoxInput: {
-    backgroundColor: '#fff',
-    height: 40,
+  itemContainerName: { 
+    fontSize: 12,
+    color: theme.text.secondary, 
+    marginTop: 4,
+  },
+  itemContainerNameSelected: {
+    color: theme.primary,
+  },
+  itemContent: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+  },
+  itemTextContainer: { 
+    flex: 1,
+    marginRight: 8, // Add some space before the checkbox
+  },
+  itemPrice: { 
+    fontSize: 14,
+    color: theme.text.primary,
+    marginTop: 2,
+  },
+  itemPriceSelected: { 
+    color: theme.primary,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: Platform.OS === 'ios' ? 20 : 16,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+    backgroundColor: theme.surface,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+  },
+  clearAllButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#ced4da',
-    color: '#333',
+    borderColor: theme.primary,
+    marginRight: 10, 
+    flex: 1,
+  },
+  clearAllButtonText: {
+    color: theme.primary,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  generateButton: {
+    backgroundColor: theme.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    flex: 1, 
+  },
+  generateButtonText: {
+    color: theme.text.onPrimary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   noResultsContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    marginTop: 50,
+    backgroundColor: theme.surface,
   },
   noResultsText: {
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
     textAlign: 'center',
-  },
-  filtersToggleHeaderAlgolia: {
-    padding: Platform.OS === 'web' ? 12 : 8,
-    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    lineHeight: 24,
     marginTop: 8,
-    marginBottom: 0,
-    borderRadius: 8,
-    paddingHorizontal: 12,
   },
-  filtersToggleHeaderTextAlgolia: {
+  centeredLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: theme.background,
+  },
+  loadingText: {
+    marginTop: 10,
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    color: theme.text.secondary,
   },
-  filtersContainerAlgolia: {
-    paddingVertical: 8,
-    paddingHorizontal: Platform.OS === 'web' ? 0 : 0,
-    backgroundColor: Platform.OS === 'web' ? 'transparent' : 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  filterSectionAlgolia: {
+  errorText: {
+    fontSize: 18,
+    color: theme.danger.main,
+    fontWeight: 'bold',
     marginBottom: 8,
   },
-  filterTitleAlgolia: {
+  errorDetails: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-  },
-  filterOptionsContainerAlgolia: {
-    paddingVertical: 4,
-  },
-  filterButtonAlgolia: {
-    backgroundColor: '#e0e0e0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  filterButtonActiveAlgolia: {
-    backgroundColor: '#007AFF',
-    borderColor: '#005ecb',
-  },
-  filterButtonTextAlgolia: {
-    fontSize: 13,
-    color: '#333',
-  },
-  filterButtonTextActiveAlgolia: {
-    color: '#fff',
-    fontWeight: '500',
-  },
-  toggleFilterContainerAlgolia: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingRight: 8,
-  },
+    color: theme.text.secondary,
+    textAlign: 'center',
+  }
 });
 
-const RefinementListFilter = ({ attribute, title }: { attribute: string; title: string }) => {
-  const { items, refine, canRefine } = useRefinementList({ attribute });
+const customReactSelectStyles = (theme: any) => ({
+  control: (provided: any, state: any) => ({
+    ...provided,
+    backgroundColor: theme.surface,
+    borderColor: state.isFocused ? theme.primary : theme.border,
+    '&:hover': {
+      borderColor: theme.primary,
+    },
+    minHeight: 38, 
+    height: 38,
+    boxShadow: 'none',
+  }),
+  valueContainer: (provided: any) => ({
+    ...provided,
+    height: 38,
+    paddingLeft: 8, 
+    paddingRight: 8,
+    alignItems: 'center', 
+  }),
+  input: (provided: any) => ({
+    ...provided,
+    color: theme.text.primary,
+    margin: 0,
+    padding: 0,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  }),
+  placeholder: (provided: any) => ({
+    ...provided,
+    color: theme.text.secondary,
+    marginLeft: 2,
+    marginRight: 2,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  }),
+  singleValue: (provided: any) => ({
+    ...provided,
+    color: theme.text.primary,
+    marginLeft: 2,
+    marginRight: 2,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  }),
+  menu: (provided: any) => ({
+    ...provided,
+    backgroundColor: theme.background,
+    borderRadius: 4,
+    marginTop: 4,
+  }),
+  menuPortal: (base: any) => ({ 
+    ...base, 
+  }), 
+  option: (provided: any, state: any) => ({
+    ...provided,
+    backgroundColor: state.isSelected ? theme.primary : state.isFocused ? theme.primaryLight : theme.background,
+    color: state.isSelected ? theme.text.onPrimary : theme.text.primary,
+    paddingTop: 8,
+    paddingBottom: 8,
+    fontSize: 14,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    '&:active': {
+      backgroundColor: theme.primary,
+    },
+  }),
+  dropdownIndicator: (provided: any) => ({
+    ...provided,
+    color: theme.text.secondary,
+    padding: 6,
+  }),
+  clearIndicator: (provided: any) => ({
+    ...provided,
+    color: theme.text.secondary,
+    padding: 6,
+  }),
+});
 
-  useEffect(() => {
-    console.log(`[RefinementListFilter] ${title} - canRefine: ${canRefine}, items:`, items);
-  }, [canRefine, items, title]);
-
-  if (!canRefine) {
-    return null;
-  }
-
-  return (
-    <View style={styles.filterSectionAlgolia}>
-      <Text style={styles.filterTitleAlgolia}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterOptionsContainerAlgolia}>
-        {items.map((item) => (
-          <TouchableOpacity
-            key={item.value}
-            style={[styles.filterButtonAlgolia, item.isRefined && styles.filterButtonActiveAlgolia]}
-            onPress={() => refine(item.value)}
-          >
-            <Text style={[styles.filterButtonTextAlgolia, item.isRefined && styles.filterButtonTextActiveAlgolia]}>
-              {item.label} ({item.count})
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-};
+export default LabelScreen;

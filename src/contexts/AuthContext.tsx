@@ -16,7 +16,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: () => Promise<boolean>;
   signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
 }
 
@@ -127,6 +127,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
+        // Nettoyer l'état après une déconnexion réussie
+        setUser(null);
+        setSession(null);
+        return true; // Indiquer que la déconnexion a réussi
+      } catch (error) {
+        console.error('Erreur lors de la déconnexion:', error);
+        throw error; // Propager l'erreur pour une gestion ultérieure
       } finally {
         setIsLoading(false);
       }

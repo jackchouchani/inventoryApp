@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import * as Sentry from '@sentry/react-native';
 import { handleNetworkError } from '../../src/utils/errorHandler';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
 
 const QUERY_KEYS = {
   containers: 'containers',
@@ -35,6 +36,7 @@ const AddScreenContent: React.FC = () => {
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
+  const { activeTheme } = useAppTheme();
 
   const { data: containers = [], isLoading: containersLoading, error: containersError } = useQuery<Container[], QueryError>({
     queryKey: [QUERY_KEYS.containers, refreshTimestamp],
@@ -110,9 +112,9 @@ const AddScreenContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: activeTheme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={activeTheme.primary} />
         </View>
       </SafeAreaView>
     );
@@ -124,7 +126,7 @@ const AddScreenContent: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: activeTheme.background }]}>
       <View style={styles.content}>
         <ItemForm 
           containers={containers} 
@@ -154,7 +156,7 @@ export default function AddScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    // backgroundColor sera défini par le thème
     paddingBottom: Platform.OS === 'ios' ? 0 : 0,
   },
   content: {
@@ -172,19 +174,19 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   errorText: {
-    color: '#FF3B30',
+    // color sera défini par le thème
     textAlign: 'center',
     fontSize: 16,
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: '#007AFF',
+    // backgroundColor sera défini par le thème
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    // color sera défini par le thème
     fontSize: 16,
     fontWeight: '600',
   },

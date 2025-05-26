@@ -1,13 +1,15 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
-import { MaterialIcons } from '@expo/vector-icons';
+import 'material-icons/iconfont/material-icons.css';
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
+import { useAppTheme } from "../../src/contexts/ThemeContext";
 
 export default function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
+  const { activeTheme } = useAppTheme();
 
   // Si l'utilisateur n'est pas authentifié, ne pas rendre les onglets
   // La redirection sera gérée par le layout racine
@@ -20,24 +22,44 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: true,
         headerTitle: 'Comptoir Vintage',
-        headerTitleStyle: styles.headerTitle,
+        headerTitleStyle: [styles.headerTitle, { color: activeTheme.text.primary }],
         headerTitleAlign: 'center',
+        headerStyle: {
+          height: 60,
+          backgroundColor: activeTheme.surface,
+        },
         headerLeft: () => (
-          <View style={styles.headerButtonsContainer}>
+          <View style={[styles.headerButtonsContainer, { backgroundColor: `${activeTheme.primary}15` }]}>
             <TouchableOpacity
               onPress={() => router.push('/(stack)/scanner-info')}
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <MaterialIcons name="qr-code-scanner" size={22} color="#007AFF" />
+              <span
+                className="material-icons"
+                style={{
+                  fontSize: 22,
+                  color: activeTheme.primary
+                }}
+              >
+                qr_code_scanner
+              </span>
             </TouchableOpacity>
-            <View style={styles.separator} />
+            <View style={[styles.separator, { backgroundColor: `${activeTheme.primary}33` }]} />
             <TouchableOpacity
               onPress={() => router.push('/(stack)/stats')}
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <MaterialIcons name="bar-chart" size={22} color="#007AFF" />
+              <span
+                className="material-icons"
+                style={{
+                  fontSize: 22,
+                  color: activeTheme.primary
+                }}
+              >
+                bar_chart
+              </span>
             </TouchableOpacity>
           </View>
         ),
@@ -48,18 +70,23 @@ export default function TabLayout() {
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <MaterialIcons name="settings" size={24} color="#007AFF" />
+              <span
+                className="material-icons"
+                style={{
+                  fontSize: 22,
+                  color: activeTheme.primary
+                }}
+              >
+                settings
+              </span>
             </TouchableOpacity>
           </View>
         ),
-        headerStyle: {
-          height: 60,
-        },
         headerStatusBarHeight: 0,
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: activeTheme.surface,
           borderTopWidth: 1,
-          borderTopColor: '#e5e5e5',
+          borderTopColor: activeTheme.border,
           height: 65,
           position: 'absolute',
           bottom: 0,
@@ -69,8 +96,8 @@ export default function TabLayout() {
           paddingBottom: Platform.OS === 'ios' ? 45 : 0,
           paddingTop: 8,
         },
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#8E8E93',
+        tabBarActiveTintColor: activeTheme.primary,
+        tabBarInactiveTintColor: activeTheme.text.secondary,
         tabBarLabelStyle: {
           fontSize: 13,
           paddingBottom: Platform.OS === 'ios' ? 8 : 0,
@@ -87,10 +114,18 @@ export default function TabLayout() {
         options={{
           title: "Stock",
           headerStyle: {
-            backgroundColor: '#f5f5f5',
+            backgroundColor: activeTheme.background,
           },
           tabBarIcon: ({ color, size }: { color: string, size: number }) => (
-            <MaterialIcons name="inventory" size={size} color={color} />
+            <span
+              className="material-icons"
+              style={{
+                fontSize: size,
+                color: color
+              }}
+            >
+              inventory
+            </span>
           ),
         }}
       />
@@ -99,7 +134,15 @@ export default function TabLayout() {
         options={{
           title: "Ajouter",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="add-circle-outline" size={size} color={color} />
+            <span
+              className="material-icons"
+              style={{
+                fontSize: size,
+                color: color
+              }}
+            >
+              add_circle_outline
+            </span>
           ),
         }}
       />
@@ -108,7 +151,15 @@ export default function TabLayout() {
         options={{
           title: "Scanner",
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="qr-code" size={size} color={color} />
+              <span
+              className="material-icons"
+              style={{
+                fontSize: size,
+                color: color
+              }}
+            >
+              qr_code
+            </span>
           ),
         }}
       />
@@ -120,14 +171,14 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000',
+    // color sera défini par le thème
   },
   rightButtonContainer: {
     marginRight: 15,
   },
   headerButtonsContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 122, 255, 0.08)',
+    // backgroundColor sera défini par le thème
     borderRadius: 20,
     padding: 4,
     marginLeft: 15,
@@ -142,8 +193,7 @@ const styles = StyleSheet.create({
   separator: {
     width: 1,
     height: 20,
-    backgroundColor: 'rgba(0, 122, 255, 0.2)',
+    // backgroundColor sera défini par le thème
     marginVertical: 2,
   },
-
 });

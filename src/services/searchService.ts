@@ -29,7 +29,7 @@ export const searchItems = async (filters: SearchFilters): Promise<SearchRespons
 
     // Application des filtres
     if (filters.search) {
-      query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`); // Restored original OR condition
     }
 
     if (filters.categoryId) {

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal, TextStyle, ViewStyle } from 'react-native';
+import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 import ItemList from '../../src/components/ItemList';
 // import { FilterBar } from '../../src/components/FilterBar'; // Temporarily remove or replace
 import { useDispatch } from 'react-redux';
@@ -58,6 +59,8 @@ const SellingPriceInputModal: React.FC<{
     onConfirm: (price: string) => void; // Accepte la saisie comme string
     onCancel: () => void;
 }> = ({ initialPrice, onConfirm, onCancel }) => {
+    const { activeTheme } = useAppTheme();
+    const styles = getThemedStyles(activeTheme);
     const [localEditableSalePrice, setLocalEditableSalePrice] = useState(initialPrice);
 
     // Met à jour l'état local si le prix initial change (quand le modal s'ouvre pour un nouvel item)
@@ -80,7 +83,7 @@ const SellingPriceInputModal: React.FC<{
                 onChangeText={handleLocalPriceChange}
                 placeholder="Prix de vente"
                 keyboardType="numeric"
-                placeholderTextColor="#999"
+                placeholderTextColor={activeTheme.text.secondary}
             />
             <View style={styles.datePickerButtonsContainer}>
                 <TouchableOpacity
@@ -100,24 +103,31 @@ const SellingPriceInputModal: React.FC<{
 
 // --- Nouvelle SearchBox ---
 // Utilise l'interface SearchBoxProps pour typer les props
-const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) => (
-  <View style={styles.searchBoxContainer}>
-    <TextInput
-      style={styles.searchBoxInput}
-      value={searchQuery}
-      // Quand le texte change, on met à jour l'état local.
-      // L'effet secondaire (useEffect) gérera l'appel debounced à algoliaSearch.
-      onChangeText={setSearchQuery}
-      placeholder="Rechercher des articles..."
-      placeholderTextColor="#999"
-      clearButtonMode="always"
-      autoCapitalize="none"
-      autoCorrect={false}
-    />
-  </View>
-);
+const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = getThemedStyles(activeTheme);
+  
+  return (
+    <View style={styles.searchBoxContainer}>
+      <TextInput
+        style={styles.searchBoxInput}
+        value={searchQuery}
+        // Quand le texte change, on met à jour l'état local.
+        // L'effet secondaire (useEffect) gérera l'appel debounced à algoliaSearch.
+        onChangeText={setSearchQuery}
+        placeholder="Rechercher des articles..."
+        placeholderTextColor={activeTheme.text.secondary}
+        clearButtonMode="always"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </View>
+  );
+};
 
 const StockScreenContent = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   // --- STATES ---
@@ -538,10 +548,10 @@ export default function StockScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
     paddingBottom: Platform.OS === 'ios' ? 85 : 65,
   },
   errorContainer: {
@@ -549,15 +559,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   errorText: {
     fontSize: 16,
-    color: '#FF3B30',
+    color: theme.danger.main,
     textAlign: 'center',
   },
   errorDetails: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
     textAlign: 'center',
     marginTop: 8,
   },
@@ -566,135 +577,140 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   loadingText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: theme.primary,
     marginTop: 12,
     textAlign: 'center',
   },
   searchBoxContainer: {
     padding: Platform.OS === 'web' ? 12 : 8,
-    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
+    backgroundColor: Platform.OS === 'web' ? theme.surface : theme.background,
     borderBottomWidth: Platform.OS === 'web' ? 1 : 0,
-    borderBottomColor: Platform.OS === 'web' ? '#eee' : 'transparent',
+    borderBottomColor: Platform.OS === 'web' ? theme.border : 'transparent',
   },
   searchBoxInput: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     height: 40,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.md,
     paddingHorizontal: 12,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
+    color: theme.text.primary,
   },
   noResultsContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   noResultsText: {
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
   },
   filtersContainer: {
     paddingVertical: 8,
     paddingHorizontal: Platform.OS === 'web' ? 12 : 8,
-    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
+    backgroundColor: Platform.OS === 'web' ? theme.surface : theme.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.border,
   },
   filterSection: {
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
   filterTitle: {
-    fontSize: 14,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
+    color: theme.text.primary,
+    marginBottom: theme.spacing.xs,
   },
   filterOptionsContainer: {
-    paddingVertical: 4,
+    paddingVertical: theme.spacing.xs,
   },
   filterButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.backgroundSecondary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 15,
-    marginRight: 8,
+    marginRight: theme.spacing.sm,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   filterButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#005ecb',
+    backgroundColor: theme.primary,
+    borderColor: theme.primaryLight,
   },
   filterButtonText: {
     fontSize: 13,
-    color: '#333',
+    color: theme.text.primary,
   },
   filterButtonTextActive: {
-    color: '#fff',
+    color: theme.text.inverse,
     fontWeight: '500',
   },
   toggleFilterContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingRight: 8,
+    paddingRight: theme.spacing.sm,
   },
   filtersToggleHeader: {
     padding: Platform.OS === 'web' ? 12 : 8,
-    backgroundColor: Platform.OS === 'web' ? '#fff' : '#f5f5f5',
+    backgroundColor: Platform.OS === 'web' ? theme.surface : theme.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: theme.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   filtersToggleHeaderText: {
-    fontSize: 16,
+    fontSize: theme.typography.h2.fontSize,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
   },
   datePickerModalContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Standard overlay, theme.overlay if defined
   },
   datePickerModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
+    backgroundColor: theme.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
     width: 300,
     alignItems: 'center',
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 5,
+    // Consider using theme.shadows.md for platform-specific shadows
+    ...(Platform.OS === 'web' ? { boxShadow: theme.shadows.md.boxShadow } : { elevation: theme.shadows.md.elevation }),
   },
   datePickerModalTitle: {
-    fontSize: 18,
+    fontSize: theme.typography.h2.fontSize,
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: theme.spacing.md,
+    color: theme.text.primary,
   },
   salePriceInputLabel: {
-    marginTop: 15,
-    marginBottom: 5,
-    fontSize: 16,
-    color: '#333',
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.text.primary,
     alignSelf: 'flex-start',
   },
   salePriceInput: {
     height: 40,
-    borderColor: '#ccc',
+    borderColor: theme.border,
     borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 15,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
     width: '100%',
-    backgroundColor: '#fff',
-    fontSize: 16,
+    backgroundColor: theme.surface,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.text.primary,
   },
   datePickerButtonsContainer: {
     flexDirection: 'row',
@@ -702,22 +718,21 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   datePickerButton: {
-    padding: 10,
-    borderRadius: 5,
+    padding: theme.spacing.sm,
+    borderRadius: theme.borderRadius.sm,
     minWidth: 100,
     alignItems: 'center',
   },
-  datePickerCancelButton: {
-  },
+  datePickerCancelButton: {},
   datePickerConfirmButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
   },
   datePickerButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
+    fontSize: theme.typography.body.fontSize,
+    color: theme.primary,
   },
   datePickerConfirmButtonText: {
-    color: '#fff',
+    color: theme.text.inverse,
     fontWeight: 'bold',
   },
 });

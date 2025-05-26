@@ -5,7 +5,7 @@ import { checkNetworkConnection } from '../utils/networkUtils';
 import { useRouter } from 'expo-router';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { captureException } from '@sentry/react-native';
-import { useTheme } from '../hooks/useTheme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 // Import dynamique des dépendances lourdes
 let html2canvas: any;
@@ -67,7 +67,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   mode,
   compact = false
 }) => {
-  const theme = useTheme();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme, compact), [activeTheme, compact]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const router = useRouter();
@@ -399,7 +400,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   }, [validItems, handleComplete, onError, getQRCodeImage]);
 
   return (
-    <View style={[styles.container, compact && styles.containerCompact]}>
+    <View style={styles.container}>
       <div 
         ref={codeContainerRef}
         style={{ 
@@ -420,27 +421,23 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       )}
       
       {loading && (
-        <View style={[styles.loadingContainer, compact && styles.loadingContainerCompact]}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator 
             size={compact ? "small" : "large"} 
-            color={theme.colors.primary}
+            color={activeTheme.primary}
           />
-          <Text style={[styles.progressText, compact && styles.progressTextCompact]}>
+          <Text style={styles.progressText}>
             {Math.round(progress)}%
           </Text>
         </View>
       )}
 
       <TouchableOpacity
-        style={[
-          styles.button, 
-          loading && styles.buttonDisabled,
-          compact && styles.buttonCompact
-        ]}
+        style={styles.button}
         onPress={mode === 'containers' ? generateContainerPDF : generateItemsPDF}
         disabled={loading || validItems.length === 0}
       >
-        <Text style={[styles.buttonText, compact && styles.buttonTextCompact]}>
+        <Text style={styles.buttonText}>
           {loading 
             ? 'Génération...' 
             : `Générer ${validItems.length} étiquette${validItems.length > 1 ? 's' : ''}`
@@ -448,78 +445,53 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         </Text>
       </TouchableOpacity>
 
-      <Text style={[styles.infoText, compact && styles.infoTextCompact]}>
+      <Text style={styles.infoText}>
         {validItems.length} étiquette{validItems.length > 1 ? 's' : ''} à générer
       </Text>
     </View>
   );
 });
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: ReturnType<typeof useAppTheme>['activeTheme'], compact: boolean) => StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
-  },
-  containerCompact: {
-    padding: 8,
-    borderRadius: 8,
-    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-    elevation: 2,
+    padding: compact ? 8 : 20,
+    backgroundColor: theme.surface,
+    borderRadius: compact ? 8 : 10,
+    boxShadow: compact ? '0px 1px 2px rgba(0, 0, 0, 0.05)' : '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    elevation: compact ? 2 : 3,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
-    color: '#000000',
+    color: theme.text.primary,
   },
   loadingContainer: {
     alignItems: 'center',
-    marginVertical: 20,
-  },
-  loadingContainerCompact: {
-    marginVertical: 8,
+    marginVertical: compact ? 8 : 20,
   },
   progressText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666666',
-  },
-  progressTextCompact: {
-    marginTop: 4,
-    fontSize: 12,
+    marginTop: compact ? 4 : 10,
+    fontSize: compact ? 12 : 16,
+    color: theme.text.secondary,
   },
   button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: theme.primary,
+    padding: compact ? 10 : 15,
+    borderRadius: compact ? 6 : 8,
     alignItems: 'center',
-  },
-  buttonCompact: {
-    padding: 10,
-    borderRadius: 6,
-  },
-  buttonDisabled: {
-    backgroundColor: '#cccccc',
+    opacity: 1,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: theme.text.onPrimary,
+    fontSize: compact ? 14 : 16,
     fontWeight: '600',
-  },
-  buttonTextCompact: {
-    fontSize: 14,
   },
   infoText: {
     marginTop: 10,
     textAlign: 'center',
-    color: '#666666',
-    fontSize: 14,
+    color: theme.text.secondary,
+    fontSize: compact ? 12 : 14,
   },
-  infoTextCompact: {
-    fontSize: 12,
-  },
-}); 
+});

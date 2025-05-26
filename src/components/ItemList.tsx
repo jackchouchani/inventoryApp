@@ -1,4 +1,4 @@
-import React, { useCallback, memo, useEffect, useRef } from 'react';
+import React, { useCallback, memo, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { Item } from '../types/item';
 import { Container } from '../types/container';
@@ -11,6 +11,7 @@ import { selectAllContainers } from '../store/containersSlice';
 import { Skeleton } from './Skeleton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import ItemCard from './ItemCard';
+import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 
 interface ItemListProps {
   items: Item[];
@@ -34,6 +35,8 @@ const ItemListModal: React.FC<{
   categories: Category[];
   containers: Container[];
 }> = ({ selectedItem, onSuccess, onCancel, categories: propCategories, containers: propContainers }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
   // Récupérer les catégories et containers depuis le store Redux
   const storeCategories = useSelector(selectAllCategories);
   const storeContainers = useSelector(selectAllContainers);
@@ -88,6 +91,8 @@ const ItemRow = memo(({
   onMarkAsAvailable?: (id: number) => void;
   onPress?: () => void;
 }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
   const handleMarkAsSold = () => {
     if (onMarkAsSold) onMarkAsSold(item.id);
   };
@@ -130,18 +135,23 @@ const ItemRow = memo(({
   );
 });
 
-const ItemLoadingSkeleton = memo(() => (
-  <View style={styles.skeletonContainer}>
-    {Array.from({ length: 5 }).map((_, index) => (
-      <View key={index} style={styles.skeletonRow}>
-        <Skeleton style={styles.skeletonName} />
-        <Skeleton style={styles.skeletonPrice} />
-        <Skeleton style={styles.skeletonStatus} />
-        <Skeleton style={styles.skeletonButton} />
-      </View>
-    ))}
-  </View>
-));
+const ItemLoadingSkeleton = memo(() => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  
+  return (
+    <View style={styles.skeletonContainer}>
+      {Array.from({ length: 5 }).map((_, index) => (
+        <View key={index} style={styles.skeletonRow}>
+          <Skeleton style={styles.skeletonName} />
+          <Skeleton style={styles.skeletonPrice} />
+          <Skeleton style={styles.skeletonStatus} />
+          <Skeleton style={styles.skeletonButton} />
+        </View>
+      ))}
+    </View>
+  );
+});
 
 const ItemListItemComponent: React.FC<{ 
   item: Item; 
@@ -199,6 +209,8 @@ const ItemList: React.FC<ItemListProps> = ({
   onEndReached,
   isLoadingMore
 }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
   const renderItem = ({ item }: { item: Item }) => {
     
     return (
@@ -231,8 +243,8 @@ const ItemList: React.FC<ItemListProps> = ({
     
     return (
       <View style={styles.loadingMoreContainer}>
-        <ActivityIndicator size="small" color="#007AFF" />
-        <Text style={styles.loadingMoreText}>Chargement d'articles supplémentaires...</Text>
+        <ActivityIndicator size="small" color={activeTheme.primary} />
+        <Text style={styles.loadingMoreText}>Chargement...</Text>
       </View>
     );
   };
@@ -274,37 +286,42 @@ const ItemList: React.FC<ItemListProps> = ({
   );
 };
 
-const ItemListWithErrorBoundary = (props: ItemListProps) => (
-  <ErrorBoundary
+const ItemListWithErrorBoundary: React.FC<ItemListProps> = (props) => {
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  
+  return (
+    <ErrorBoundary
     fallbackRender={({ error }) => (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Une erreur est survenue lors du chargement de la liste</Text>
-        <Text style={styles.errorDetails}>{error.message}</Text>
-      </View>
-    )}
-  >
-    <ItemList {...props} />
-  </ErrorBoundary>
-);
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Une erreur est survenue lors du chargement des articles.</Text>
+          <Text style={styles.errorDetails}>{error.message}</Text>
+        </View>
+      )}
+    >
+      <ItemList {...props} />
+    </ErrorBoundary>
+  );
+};
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   searchBar: {
     flexDirection: 'row',
     padding: 10,
     gap: 10,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: theme.border,
   },
   searchInput: {
     flex: 1,
     height: 40,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     borderRadius: 5,
     paddingHorizontal: 10,
   },
@@ -313,14 +330,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     borderRadius: 5,
   },
   filtersContainer: {
     padding: 10,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: theme.border,
     maxHeight: '50%',
   },
   filterSection: {
@@ -330,7 +347,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: theme.text.primary,
   },
   filterOptions: {
     flexDirection: 'row',
@@ -341,22 +358,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 15,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderWidth: 1,
-    borderColor: '#ddd',
-    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
+    borderColor: theme.border,
+    boxShadow: theme.shadows.sm.boxShadow,
+    elevation: theme.shadows.sm.elevation,
   },
   filterOptionSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   filterOptionText: {
     fontSize: 12,
-    color: '#333',
+    color: theme.text.primary,
   },
   filterOptionTextSelected: {
-    color: '#fff',
+    color: theme.text.inverse,
     fontWeight: 'bold',
   },
   priceInputs: {
@@ -368,13 +385,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     borderRadius: 5,
     paddingHorizontal: 10,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
   },
   priceSeparator: {
-    color: '#666',
+    color: theme.text.secondary,
     fontSize: 16,
   },
   emptyContainer: {
@@ -384,62 +401,68 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
   },
   modalContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    padding: 20,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '90%',
-    padding: 0,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: theme.surface,
+    borderRadius: theme.borderRadius.md,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  modalCloseButton: {
-    padding: 8,
-  },
-  itemRow: {
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
-    marginVertical: 6,
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '90%',
+    boxShadow: theme.shadows.md.boxShadow,
+    elevation: theme.shadows.md.elevation,
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.text.primary,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalCloseButton: {
+    padding: 8,
+  },
+  itemRow: {
+    backgroundColor: theme.surface,
+    marginHorizontal: 12,
+    marginVertical: 6,
+    borderRadius: theme.borderRadius.md,
+    padding: 16,
+    boxShadow: theme.shadows.md.boxShadow,
+    elevation: theme.shadows.md.elevation,
     marginBottom: 8,
   },
   itemInfo: {
     flex: 1,
   },
   itemName: {
-    fontSize: 16,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
   },
   itemDescription: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.text.secondary,
     marginBottom: 4,
   },
   itemDetails: {
@@ -448,9 +471,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   itemPrice: {
-    fontSize: 18,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   itemStatus: {
     paddingHorizontal: 8,
@@ -460,12 +483,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   availableStatus: {
-    backgroundColor: '#E8F5E9',
-    color: '#2E7D32',
+    backgroundColor: theme.success,
+    color: theme.text.primary,
   },
   soldStatus: {
-    backgroundColor: '#FFEBEE',
-    color: '#C62828',
+    backgroundColor: theme.danger.background,
+    color: theme.danger.text,
   },
   itemActions: {
     marginTop: 12,
@@ -475,19 +498,19 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    boxShadow: '0px 2px 2px rgba(0, 0, 0, 0.1)',
-    elevation: 1,
+    boxShadow: theme.shadows.sm.boxShadow,
+    elevation: theme.shadows.sm.elevation,
   },
   restoreButton: {
-    backgroundColor: '#FF9800',
+    backgroundColor: theme.warning,
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 14,
+    color: theme.text.inverse,
+    fontSize: theme.typography.caption.fontSize,
     fontWeight: '500',
     marginLeft: 8,
   },
@@ -496,9 +519,9 @@ const styles = StyleSheet.create({
   },
   skeletonRow: {
     height: 120,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     marginVertical: 6,
-    borderRadius: 12,
+    borderRadius: theme.borderRadius.md,
     padding: 16,
   },
   skeletonName: {
@@ -523,13 +546,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   itemCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     marginHorizontal: 12,
     marginVertical: 6,
-    borderRadius: 12,
+    borderRadius: theme.borderRadius.md,
     padding: 16,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
+    boxShadow: theme.shadows.md.boxShadow,
+    elevation: theme.shadows.md.elevation,
   },
   itemContent: {
     flexDirection: 'row',
@@ -545,13 +568,13 @@ const styles = StyleSheet.create({
   noImagePlaceholder: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.sm,
     marginRight: 12,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: theme.border,
   },
   itemDetailsContainer: {
     flex: 1,
@@ -563,12 +586,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   itemCategory: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.text.secondary,
   },
   itemContainer: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.text.secondary,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -582,19 +605,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   statusAvailable: {
-    backgroundColor: '#e6f4ea',
+    backgroundColor: theme.success,
   },
   statusSold: {
-    backgroundColor: '#fce8e6',
+    backgroundColor: theme.danger.background,
   },
   itemNameText: {
-    fontSize: 16,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
+    color: theme.text.primary,
     marginBottom: 4,
   },
   itemPriceText: {
-    fontSize: 14,
-    color: '#2196f3',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.primary,
     fontWeight: '600',
     marginBottom: 4,
   },
@@ -603,28 +627,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   errorText: {
-    fontSize: 16,
-    color: '#e53935',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.danger.text,
     marginBottom: 8,
     textAlign: 'center',
   },
   errorDetails: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.text.secondary,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.sm,
     marginTop: 16,
   },
   retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    color: theme.text.inverse,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
   },
   loadingMoreContainer: {
@@ -634,8 +659,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   loadingMoreText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: theme.typography.caption.fontSize,
+    color: theme.text.secondary,
     marginLeft: 10,
   },
 });

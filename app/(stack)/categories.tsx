@@ -1,4 +1,4 @@
-import React, { useCallback, type FC, useState } from 'react';
+import React, { useCallback, type FC, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { checkNetworkConnection } from '../../src/utils/networkUtils';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
 import ConfirmationDialog from '../../src/components/ConfirmationDialog';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
 
 const FLATLIST_CONFIG = {
   INITIAL_NUM_TO_RENDER: 10,
@@ -35,6 +36,10 @@ interface CategoryCardProps {
   category: Category;
   onEdit: (category: Category) => void;
   onDelete: (category: Category) => void;
+  styles: Pick<StylesType, 'categoryCard' | 'categoryContent' | 'iconContainer' | 'categoryInfo' | 'categoryName' | 'categoryDescription' | 'categoryActions' | 'actionButton' | 'deleteButton'>;
+  iconColor: string;
+  editIconColor: string;
+  deleteIconColor: string;
 }
 
 interface StylesType {
@@ -71,7 +76,11 @@ interface StylesType {
 const CategoryCard: FC<CategoryCardProps> = React.memo(({ 
   category, 
   onEdit, 
-  onDelete 
+  onDelete, 
+  styles, 
+  iconColor, 
+  editIconColor, 
+  deleteIconColor 
 }) => {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(1) }],
@@ -85,7 +94,7 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
           <MaterialIcons
             name={(category.icon as MaterialIconName) || 'folder'}
             size={24}
-            color="#007AFF"
+            color={iconColor}
           />
         </View>
         <View style={styles.categoryInfo}>
@@ -102,13 +111,13 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
           style={styles.actionButton}
           onPress={() => onEdit(category)}
         >
-          <MaterialIcons name="edit" size={20} color="#007AFF" />
+          <MaterialIcons name="edit" size={20} color={editIconColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete(category)}
         >
-          <MaterialIcons name="delete" size={20} color="#FF3B30" />
+          <MaterialIcons name="delete" size={20} color={deleteIconColor} />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -117,6 +126,9 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
 
 const CategoryScreen: FC = () => {
   const router = useRouter();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+
   const { categories, isLoading, error, handleDeleteCategory } = useCategories();
   const [confirmDialog, setConfirmDialog] = useState<{
     visible: boolean;
@@ -146,7 +158,7 @@ const CategoryScreen: FC = () => {
     });
   }, [router]);
 
-  const confirmDeleteCategory = useCallback(async (category: Category) => {
+  const promptDeleteCategory = useCallback(async (category: Category) => {
     if (!category.id) {
       Toast.show({
         type: 'error',
@@ -182,8 +194,8 @@ const CategoryScreen: FC = () => {
         text1: 'Succès',
         text2: 'Catégorie supprimée avec succès'
       });
-    } catch (error) {
-      Sentry.captureException(error, {
+    } catch (err) {
+      Sentry.captureException(err, {
         extra: {
           categoryId: confirmDialog.category.id,
           categoryName: confirmDialog.category.name,
@@ -208,9 +220,23 @@ const CategoryScreen: FC = () => {
     <CategoryCard 
       category={item} 
       onEdit={handleEditCategory} 
-      onDelete={confirmDeleteCategory}
+      onDelete={promptDeleteCategory}
+      styles={{
+        categoryCard: styles.categoryCard,
+        categoryContent: styles.categoryContent,
+        iconContainer: styles.iconContainer,
+        categoryInfo: styles.categoryInfo,
+        categoryName: styles.categoryName,
+        categoryDescription: styles.categoryDescription,
+        categoryActions: styles.categoryActions,
+        actionButton: styles.actionButton,
+        deleteButton: styles.deleteButton,
+      }}
+      iconColor={activeTheme.primary}
+      editIconColor={activeTheme.primary}
+      deleteIconColor={activeTheme.danger.main}
     />
-  ), [handleEditCategory, confirmDeleteCategory]);
+  ), [handleEditCategory, promptDeleteCategory, styles, activeTheme]);
 
   const keyExtractor = useCallback((item: Category) => 
     item.id?.toString() || Math.random().toString()
@@ -308,19 +334,19 @@ const CategoryScreen: FC = () => {
   );
 };
 
-const styles = StyleSheet.create<StylesType>({
+const getThemedStyles = (theme: ReturnType<typeof useAppTheme>['activeTheme']): StylesType => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
   },
   topBar: {
     height: Platform.OS === 'ios' ? 44 : 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: theme.border,
     marginTop: Platform.OS === 'ios' ? 47 : 0,
   },
   backButton: {
@@ -331,32 +357,32 @@ const styles = StyleSheet.create<StylesType>({
   },
   backButtonText: {
     fontSize: 17,
-    color: '#007AFF',
+    color: theme.primary,
     marginLeft: -4,
   },
   header: {
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    borderBottomColor: theme.border,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#000',
+    color: theme.text.primary,
     marginBottom: 16,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     padding: 12,
     borderRadius: 12,
     boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   addButtonText: {
-    color: '#fff',
+    color: '#FFFFFF', // Use static white for text on primary button
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
@@ -365,7 +391,7 @@ const styles = StyleSheet.create<StylesType>({
     padding: 16,
   },
   categoryCard: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     marginHorizontal: 16,
     marginVertical: 8,
@@ -381,7 +407,7 @@ const styles = StyleSheet.create<StylesType>({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F0F8FF',
+    backgroundColor: theme.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -392,12 +418,12 @@ const styles = StyleSheet.create<StylesType>({
   categoryName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
     marginBottom: 4,
   },
   categoryDescription: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
   },
   categoryActions: {
     flexDirection: 'row',
@@ -408,21 +434,21 @@ const styles = StyleSheet.create<StylesType>({
   actionButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#F0F8FF',
+    backgroundColor: theme.primaryLight,
   },
   deleteButton: {
-    backgroundColor: '#FFF0F0',
+    backgroundColor: theme.danger.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
   },
   emptyState: {
     flex: 1,
@@ -433,12 +459,12 @@ const styles = StyleSheet.create<StylesType>({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#666',
+    color: theme.text.secondary,
     marginTop: 16,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#999',
+    color: theme.text.secondary,
     marginTop: 8,
     textAlign: 'center',
   },
@@ -447,27 +473,28 @@ const styles = StyleSheet.create<StylesType>({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   errorTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
     marginTop: 16,
     marginBottom: 8,
   },
   errorText: {
-    color: '#FF3B30',
+    color: theme.danger.main,
     fontSize: 14,
     marginTop: 4,
   },
   retryButton: {
     marginTop: 16,
     padding: 12,
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#fff',
+    color: '#FFFFFF', // Use static white for text on primary button
     fontSize: 16,
     fontWeight: '600',
   },

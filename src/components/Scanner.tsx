@@ -26,9 +26,10 @@ import Reanimated, {
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
-import { theme } from '../utils/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
+import QrScanner from 'qr-scanner';
 
 // Types
 export type ScanMode = 'container' | 'items';
@@ -75,11 +76,614 @@ type ScannerState =
 // Composants animés
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
+// Fonction pour créer les styles thématiques
+const getThemedStyles = (theme: any) => StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#000',
+    },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+  },
+  statusSubtext: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  icon: {
+    marginBottom: 20,
+  },
+  permissionText: {
+    color: '#fff',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  permissionButton: {
+    backgroundColor: theme.primary,
+    padding: 15,
+    borderRadius: 12,
+    width: '80%',
+    marginVertical: 10,
+    elevation: 2,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  cancelButton: {
+    backgroundColor: theme.error,
+    },
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'space-between',
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    },
+    closeButton: {
+        padding: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 30,
+    },
+    resetButton: {
+        padding: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 30,
+    },
+    modeIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        padding: 12,
+        borderRadius: 25,
+        gap: 8,
+    },
+    modeText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    scannerFrame: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scannerContainer: {
+        width: SCANNER_SIZE,
+        height: SCANNER_SIZE,
+        position: 'relative',
+    },
+    scanner: {
+        width: '100%',
+        height: '100%',
+        borderWidth: 2,
+        borderColor: '#fff',
+        borderRadius: 20,
+        position: 'relative',
+    },
+    scannerCorner: {
+        position: 'absolute',
+        width: 20,
+        height: 20,
+    borderColor: theme.primary,
+        borderWidth: 3,
+    },
+    topRight: {
+        top: -2,
+        right: -2,
+        borderLeftWidth: 0,
+        borderBottomWidth: 0,
+        borderTopRightRadius: 20,
+    },
+    bottomLeft: {
+        bottom: -2,
+        left: -2,
+        borderRightWidth: 0,
+        borderTopWidth: 0,
+        borderBottomLeftRadius: 20,
+    },
+    bottomRight: {
+        bottom: -2,
+        right: -2,
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        borderBottomRightRadius: 20,
+    },
+    scanLine: {
+        position: 'absolute',
+        left: 0,
+        width: '100%',
+        height: 2,
+    backgroundColor: theme.primary,
+  },
+  successOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    },
+    footer: {
+        padding: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+    },
+    containerInfo: {
+        alignItems: 'center',
+        marginBottom: 16,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 15,
+        borderRadius: 12,
+    },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  listHeaderText: {
+    color: '#fff',
+    fontSize: 14,
+    fontStyle: 'italic',
+    opacity: 0.8,
+    },
+    containerTitle: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    itemCount: {
+        color: '#fff',
+        fontSize: 14,
+        opacity: 0.8,
+    },
+    scannedItemsContainer: {
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    scannedItemsList: {
+    maxHeight: SCREEN_HEIGHT * 0.3,
+    },
+    scannedItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    justifyContent: 'space-between',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 12,
+        marginVertical: 4,
+        marginHorizontal: 8,
+        borderRadius: 8,
+    },
+  itemSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    marginVertical: 2,
+    marginHorizontal: 12,
+    },
+    scannedItemInfo: {
+        flex: 1,
+        marginRight: 12,
+    },
+    scannedItemName: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    scannedItemPrice: {
+        color: '#fff',
+        fontSize: 14,
+        opacity: 0.8,
+    },
+  scannedItemTime: {
+        fontSize: 12,
+    opacity: 0.7,
+    },
+    removeItemButton: {
+    padding: 10,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,59,48,0.2)',
+    },
+    finishButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    backgroundColor: theme.success,
+        padding: 16,
+        margin: 12,
+        borderRadius: 12,
+        gap: 8,
+    },
+    finishButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    confirmationWrapper: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    confirmationContainer: {
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: 24,
+        borderRadius: 16,
+        alignItems: 'center',
+        width: '90%',
+        maxWidth: 400,
+        elevation: 5,
+        boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.25)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    confirmationHeader: {
+        alignItems: 'center',
+        marginBottom: 16,
+        gap: 12,
+    },
+    confirmationTitle: {
+        color: '#fff',
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    confirmationText: {
+        color: '#fff',
+        fontSize: 18,
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+  buttonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 20,
+    width: '100%',
+    paddingHorizontal: 20,
+    },
+    button: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 14,
+        borderRadius: 12,
+        gap: 8,
+        minWidth: 140,
+        justifyContent: 'center',
+        elevation: 8,
+        boxShadow: '0px 4px 4.65px rgba(0, 0, 0, 0.3)',
+    },
+    confirmButton: {
+    backgroundColor: theme.success,
+        borderWidth: 1,
+        borderColor: '#43A047',
+    },
+  progressBarContainer: {
+        width: '100%',
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 4,
+    marginVertical: 20,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: theme.success,
+  },
+  progressText: {
+        color: '#fff',
+    fontSize: 14,
+    opacity: 0.8,
+    marginBottom: 10,
+  },
+  emptyState: {
+    padding: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: 'rgba(255,255,255,0.7)',
+        fontSize: 16,
+        textAlign: 'center',
+    marginTop: 10,
+  },
+  // Styles pour la disposition en deux colonnes
+  splitContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  scannerColumn: {
+    width: '48%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: 10,
+  },
+  listColumn: {
+    width: '48%',
+    padding: 10,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  scannerContainerSplit: {
+    width: SCANNER_SIZE * 0.8,
+    height: SCANNER_SIZE * 0.8,
+    position: 'relative',
+        marginBottom: 20,
+    },
+  containerInfoSplit: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 15,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 250,
+    },
+  buttonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+});
+
+// Composant caméra web avec scanner QR intégré
+const WebCamera: React.FC<{ 
+  onBarcodeScanned: (result: BarcodeScanningResult) => void;
+  onCameraReady: () => void;
+}> = ({ onBarcodeScanned, onCameraReady }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const qrScannerRef = useRef<QrScanner | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { activeTheme } = useAppTheme();
+
+  useEffect(() => {
+    let mounted = true;
+    let initializationTimeout: NodeJS.Timeout;
+
+    const initializeScanner = async () => {
+      if (!videoRef.current || qrScannerRef.current) return;
+
+      try {
+        console.log("Initialisation du scanner QR...");
+        
+        // Vérifier si on est en HTTPS ou localhost
+        const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+        if (!isSecure) {
+          throw new Error('HTTPS est requis pour l\'accès à la caméra. Veuillez utiliser: npx expo start --web --https');
+        }
+        
+        // Créer une instance de QrScanner
+        const qrScanner = new QrScanner(
+          videoRef.current,
+          (result) => {
+            console.log("Code QR détecté:", result.data);
+            // Convertir le résultat de qr-scanner au format attendu par expo-camera
+            onBarcodeScanned({
+              type: 'qr',
+              data: result.data,
+              raw: result.data,
+              bounds: {
+                origin: { x: 0, y: 0 },
+                size: { width: 0, height: 0 }
+              }
+            } as BarcodeScanningResult);
+          },
+          {
+            onDecodeError: (error) => {
+              // Ne pas logger tous les erreurs de décodage car c'est normal
+              // console.log("Pas de QR code détecté dans cette frame");
+            },
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
+            preferredCamera: 'environment'
+          }
+        );
+
+        qrScannerRef.current = qrScanner;
+
+        // Démarrer le scanner avec un délai pour éviter les conflits
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await qrScanner.start();
+        
+        if (mounted) {
+          console.log("Scanner QR démarré avec succès!");
+          setIsReady(true);
+          setError(null);
+          onCameraReady();
+        }
+
+      } catch (error) {
+        console.error('Erreur lors de l\'initialisation du scanner:', error);
+        if (mounted) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage?.includes('HTTPS')) {
+            setError('HTTPS requis. Démarrez avec: npx expo start --web --https');
+          } else {
+            setError('Impossible d\'accéder à la caméra. Veuillez vérifier les permissions.');
+          }
+        }
+      }
+    };
+
+    // Délai pour éviter les initialisations multiples rapides
+    initializationTimeout = setTimeout(() => {
+      if (mounted) {
+        initializeScanner();
+      }
+    }, 200);
+
+    return () => {
+      mounted = false;
+      clearTimeout(initializationTimeout);
+      
+      if (qrScannerRef.current) {
+        console.log("Arrêt du scanner QR...");
+        try {
+          qrScannerRef.current.stop();
+          qrScannerRef.current.destroy();
+        } catch (e) {
+          console.log("Nettoyage du scanner (normal)");
+        }
+        qrScannerRef.current = null;
+      }
+    };
+  }, []); // Dépendances vides pour éviter les re-rendus
+
+  if (error) {
+    return (
+      <View style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        padding: 20,
+      }}>
+        <MaterialIcons name="error" size={48} color="#FF3B30" />
+        <Text style={{
+          color: '#fff',
+          fontSize: 16,
+          textAlign: 'center',
+          marginVertical: 20,
+        }}>{error}</Text>
+        <TouchableOpacity 
+          style={{
+            backgroundColor: activeTheme.primary,
+            paddingHorizontal: 20,
+            paddingVertical: 12,
+            borderRadius: 8,
+            marginTop: 10,
+          }}
+          onPress={() => {
+            setError(null);
+            window.location.reload();
+          }}
+        >
+          <Text style={{
+            color: '#fff',
+            fontSize: 16,
+            fontWeight: '600',
+            textAlign: 'center',
+          }}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      {Platform.OS === 'web' && (
+        <video
+          ref={videoRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
+          }}
+        />
+      )}
+      {!isReady && !error && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          zIndex: 10,
+        }}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{
+            color: '#fff',
+            fontSize: 16,
+            marginTop: 12,
+            textAlign: 'center',
+          }}>
+            Initialisation du scanner QR...
+          </Text>
+          <Text style={{
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: 14,
+            marginTop: 8,
+            textAlign: 'center',
+          }}>
+            Veuillez autoriser l'accès à la caméra
+          </Text>
+        </View>
+      )}
+      {isReady && (
+        <View style={{
+          position: 'absolute',
+          bottom: 100,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          padding: 12,
+          borderRadius: 8,
+          alignItems: 'center',
+        }}>
+          <Text style={{
+            color: '#fff',
+            fontSize: 14,
+            textAlign: 'center',
+            fontWeight: '500',
+          }}>
+            Pointez la caméra vers un code QR
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 export const Scanner: React.FC<ScannerProps> = ({
   onClose,
   onScan,
   onFinishScan
 }) => {
+  const { activeTheme } = useAppTheme();
+  
+  // Obtenir les styles avec le thème actuel - déclaré tôt pour accès global
+  const styles = getThemedStyles(activeTheme);
+  
   // État de la machine à états
   const [scannerState, setScannerState] = useState<ScannerState>({ status: 'initializing' });
   
@@ -152,6 +756,11 @@ export const Scanner: React.FC<ScannerProps> = ({
       setScannerState(newState);
     }
   }, []);
+
+  // Synchroniser la ref avec l'état React
+  useEffect(() => {
+    scannerStateRef.current = scannerState;
+  }, [scannerState]);
   
   // Effet pour l'animation de la ligne de scan
   useEffect(() => {
@@ -203,13 +812,25 @@ export const Scanner: React.FC<ScannerProps> = ({
 
   // Vérification des permissions de caméra
     useEffect(() => {
+        // Éviter les appels multiples si déjà vérifié
+        if (hasCheckedPermission) return;
+
         const checkStoredPermission = async () => {
             try {
         console.log("Vérification des permissions de caméra...");
+                
+                // Sur le web, les permissions sont gérées automatiquement par le navigateur
+                if (Platform.OS === 'web') {
+                    console.log("Plateforme web détectée, initialisation directe");
+                    setHasCheckedPermission(true);
+                    updateScannerState({ status: 'ready', mode: 'container' });
+                    return;
+                }
+                
+                // Logique mobile
                 if (permission?.granted) {
           console.log("Permission de caméra déjà accordée, passage à l'état ready");
                     setHasCheckedPermission(true);
-          // Utiliser updateScannerState au lieu de setScannerState
           updateScannerState({ status: 'ready', mode: 'container' });
                     return;
                 }
@@ -223,7 +844,6 @@ export const Scanner: React.FC<ScannerProps> = ({
                     if (result.granted) {
             console.log("Permission accordée, passage à l'état ready");
                         await AsyncStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
-            // Utiliser updateScannerState au lieu de setScannerState
             updateScannerState({ status: 'ready', mode: 'container' });
                     } else {
             console.log("Permission refusée");
@@ -236,34 +856,60 @@ export const Scanner: React.FC<ScannerProps> = ({
             } catch (error) {
                 console.error('Erreur lors de la vérification des permissions:', error);
                 setHasCheckedPermission(true);
+                
+                // En cas d'erreur sur web, on procède quand même
+                if (Platform.OS === 'web') {
+                    updateScannerState({ status: 'ready', mode: 'container' });
+                }
             }
         };
 
         checkStoredPermission();
-  }, [permission?.granted, requestPermission, updateScannerState]);
+  }, [hasCheckedPermission, permission?.granted, requestPermission, updateScannerState]);
 
   // Effet pour synchroniser l'état de la caméra avec l'état du scanner
   useEffect(() => {
     console.log(`État actuel du scanner: ${scannerState.status} (ref: ${scannerStateRef.current.status})`);
     
+    // Éviter les initialisations multiples
+    if (scannerStateRef.current.status !== 'initializing') {
+      return;
+    }
+    
     // Si la caméra est prête mais que l'état est toujours "initializing"
-    if (isCameraReady && scannerStateRef.current.status === 'initializing' && permission?.granted) {
+    const shouldInitialize = Platform.OS === 'web' 
+      ? isCameraReady
+      : isCameraReady && permission?.granted;
+      
+    if (shouldInitialize) {
       console.log("Caméra prête, initialisation du scanner avec délai de sécurité...");
       
       // Ajout d'un délai de sécurité pour l'initialisation
       const timer = setTimeout(() => {
-        console.log("Délai d'initialisation terminé, passage à l'état ready");
-        updateScannerState({ status: 'ready', mode: 'container' });
-      }, 1000); // Délai de 1 seconde pour s'assurer que tout est bien initialisé
+        // Vérifier une dernière fois l'état avant de faire le changement
+        if (scannerStateRef.current.status === 'initializing') {
+          console.log("Délai d'initialisation terminé, passage à l'état ready");
+          updateScannerState({ status: 'ready', mode: 'container' });
+        }
+      }, 500); // Délai réduit pour le web
       
       return () => clearTimeout(timer);
     }
-  }, [isCameraReady, scannerState.status, permission?.granted, updateScannerState]);
+  }, [isCameraReady, scannerState.status, permission?.granted]);
 
   // Demander la permission d'utiliser la caméra
     const handleRequestPermission = async () => {
         try {
       console.log("Demande de permission de caméra initiée par l'utilisateur");
+      
+      // Sur le web, passer directement à l'état ready
+      if (Platform.OS === 'web') {
+        console.log("Plateforme web - initialisation directe du scanner");
+        updateScannerState({ status: 'ready', mode: 'container' });
+        return;
+      }
+      
+      // Logique mobile
             const result = await requestPermission();
             if (result.granted) {
         console.log("Permission accordée par l'utilisateur, initialisation du scanner...");
@@ -305,7 +951,9 @@ export const Scanner: React.FC<ScannerProps> = ({
             }
         } catch (error) {
             console.error('Erreur lors de la demande de permission:', error);
-            await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
+            if (Platform.OS !== 'web') {
+                await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
+            }
         }
     };
 
@@ -330,16 +978,23 @@ export const Scanner: React.FC<ScannerProps> = ({
     
     // Vérifications de sécurité pour éviter les scans redondants
     const currentStatus = scannerStateRef.current.status;
+    console.log(`État actuel du scanner: ${currentStatus}`);
     if (currentStatus !== 'ready' && currentStatus !== 'scanning_items') {
+      console.log(`État non compatible avec le scan: ${currentStatus}`);
       return; // État non compatible avec le scan
     }
     
     const now = Date.now();
-    if (now - lastScanTime < SCAN_DELAY) {
+    const timeSinceLastScan = now - lastScanTime;
+    console.log(`Temps depuis le dernier scan: ${timeSinceLastScan}ms (délai requis: ${SCAN_DELAY}ms)`);
+    if (timeSinceLastScan < SCAN_DELAY) {
+      console.log(`Scan trop rapide, ignoré`);
       return; // Trop rapide entre deux scans
     }
     
+    console.log(`Code précédent: "${lastScannedCode.current}", Code actuel: "${scannedData}"`);
     if (scannedData === lastScannedCode.current) {
+      console.log(`Même code que précédemment, ignoré`);
       return; // Même code que précédemment
     }
 
@@ -445,15 +1100,46 @@ export const Scanner: React.FC<ScannerProps> = ({
 
   // Retirer un élément de la liste des articles scannés
   const handleRemoveItem = useCallback((itemId: number) => {
-    updateScannerState((prev: ScannerState) => {
-      if (prev.status !== 'scanning_items') return prev;
-      
-      return {
-            ...prev,
-        items: prev.items.filter((item: Item) => item.id !== itemId)
-      };
+    console.log(`[handleRemoveItem] Tentative de suppression de l'article avec ID: ${itemId}, type: ${typeof itemId}`);
+    console.log(`[handleRemoveItem] État actuel du scanner: ${scannerState.status}`);
+    console.log(`[handleRemoveItem] État de la ref: ${scannerStateRef.current.status}`);
+    
+    if ((scannerState.status as any) !== 'scanning_items') {
+      console.log(`[handleRemoveItem] État du scanner non compatible pour la suppression: ${scannerState.status}`);
+      return;
+    }
+    
+    const scanningState = scannerState as any; // Contournement temporaire pour TypeScript
+    console.log(`[handleRemoveItem] Items actuels dans le state:`, scanningState.items.map((item: any) => ({ id: item.id, name: item.name })));
+    
+    const itemToRemove = scanningState.items.find((item: any) => {
+      console.log(`[handleRemoveItem] Comparaison: ${item.id} (${typeof item.id}) === ${itemId} (${typeof itemId}) = ${item.id === itemId}`);
+      return item.id === itemId;
     });
-  }, [updateScannerState]);
+    
+    if (!itemToRemove) {
+      console.log(`[handleRemoveItem] Article avec ID ${itemId} non trouvé dans la liste`);
+      console.log(`[handleRemoveItem] IDs disponibles:`, scanningState.items.map((item: any) => item.id));
+      return;
+    }
+    
+    console.log(`[handleRemoveItem] Article trouvé pour suppression: ${itemToRemove.name} (ID: ${itemId})`);
+    const filteredItems = scanningState.items.filter((item: any) => {
+      const shouldKeep = item.id !== itemId;
+      console.log(`[handleRemoveItem] Garder item ${item.id} (${item.name}): ${shouldKeep}`);
+      return shouldKeep;
+    });
+    console.log(`[handleRemoveItem] Nombre d'articles après suppression: ${filteredItems.length}`);
+    
+    // Utiliser updateScannerState avec un objet directement au lieu d'une fonction
+    updateScannerState({
+      status: 'scanning_items',
+      container: scanningState.container,
+      items: filteredItems
+    });
+    
+    console.log(`[handleRemoveItem] Mise à jour de l'état effectuée`);
+  }, [updateScannerState, scannerState]);
 
   // Finaliser le processus de scan et enregistrer les modifications
   const handleFinalizeScan = useCallback(async () => {
@@ -520,19 +1206,34 @@ export const Scanner: React.FC<ScannerProps> = ({
 
   // Rendu du contenu en fonction de l'état
   const renderContent = () => {
-    if (!hasCheckedPermission) {
+    // États d'initialisation - être plus spécifique pour éviter les boucles
+    const isInitializing = !hasCheckedPermission || 
+                          (scannerState.status === 'initializing' && Platform.OS !== 'web') ||
+                          (Platform.OS !== 'web' && !isCameraReady && permission?.granted);
+    
+    if (isInitializing) {
         return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="large" color={activeTheme.primary} />
           <Text style={styles.statusText}>Initialisation de la caméra...</Text>
-            </View>
+          <Text style={styles.statusSubtext}>
+            {!hasCheckedPermission 
+              ? "Vérification des permissions..." 
+              : Platform.OS !== 'web' && !permission?.granted 
+                ? "En attente d'autorisation de la caméra" 
+                : Platform.OS !== 'web' && !isCameraReady 
+                  ? "Préparation de la caméra..." 
+                  : "Finalisation de l'initialisation..."}
+          </Text>
+        </View>
         );
     }
 
-    if (!permission?.granted) {
+    // Sur mobile, vérifier les permissions. Sur web, les permissions sont gérées automatiquement
+    if (Platform.OS !== 'web' && !permission?.granted) {
         return (
         <View style={styles.centerContainer}>
-          <MaterialIcons name="camera-alt" size={64} color={theme.colors.primary} style={styles.icon} />
+          <MaterialIcons name="camera-alt" size={64} color={activeTheme.primary} style={styles.icon} />
                 <Text style={styles.permissionText}>
                     Nous avons besoin de votre permission pour utiliser la caméra
                 </Text>
@@ -553,27 +1254,33 @@ export const Scanner: React.FC<ScannerProps> = ({
     }
 
     // Mode spécial pour la disposition en deux colonnes quand on scanne des articles
-    if (scannerStateRef.current.status === 'scanning_items') {
-      const scanningState = scannerStateRef.current as { 
-        status: 'scanning_items'; 
-        container: Container; 
-        items: ScannedItem[] 
-      };
+    if (scannerState.status === 'scanning_items' as any) {
+      const scanningState = scannerState as any;
       
       return (
         <View style={StyleSheet.absoluteFill}>
-          <CameraView
-            style={StyleSheet.absoluteFill}
-            onBarcodeScanned={handleBarcodeScan}
-            barcodeScannerSettings={{
-              barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_e', 'itf14', 'datamatrix', 'codabar', 'pdf417'],
-            }}
-            onCameraReady={() => {
-              console.log("Caméra prête!");
-              setIsCameraReady(true);
-            }}
-          >
-            <AnimatedView style={[styles.overlay, overlayStyle]}>
+          {Platform.OS === 'web' ? (
+            <WebCamera 
+              onBarcodeScanned={handleBarcodeScan}
+              onCameraReady={() => {
+                console.log("Caméra web prête!");
+                setIsCameraReady(true);
+              }}
+            />
+          ) : (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              onBarcodeScanned={handleBarcodeScan}
+              barcodeScannerSettings={{
+                barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_e', 'itf14', 'datamatrix', 'codabar', 'pdf417'],
+              }}
+              onCameraReady={() => {
+                console.log("Caméra mobile prête!");
+                setIsCameraReady(true);
+              }}
+            />
+          )}
+          <AnimatedView style={[styles.overlay, overlayStyle]}>
               {/* En-tête avec bouton de fermeture et indicateur de mode */}
               <View style={styles.header}>
                 <TouchableOpacity
@@ -652,14 +1359,31 @@ export const Scanner: React.FC<ScannerProps> = ({
             <TouchableOpacity
                 style={styles.removeItemButton}
                             onPress={() => {
-                              Alert.alert(
-                                'Retirer l\'article',
-                                `Êtes-vous sûr de vouloir retirer "${item.name}" de la liste?`,
-                                [
-                                  { text: 'Annuler', style: 'cancel' },
-                                  { text: 'Retirer', style: 'destructive', onPress: () => handleRemoveItem(item.id!) }
-                                ]
-                              );
+                              console.log(`[TouchableOpacity] Clic sur le bouton X pour l'article: ${item.name} (ID: ${item.id})`);
+                              
+                              if (Platform.OS === 'web') {
+                                // Utiliser window.confirm sur le web
+                                const confirmed = window.confirm(`Êtes-vous sûr de vouloir retirer "${item.name}" de la liste?`);
+                                if (confirmed) {
+                                  console.log(`[Confirm] Utilisateur a confirmé la suppression pour l'article ${item.id}`);
+                                  handleRemoveItem(item.id!);
+                                } else {
+                                  console.log('[Confirm] Utilisateur a annulé la suppression');
+                                }
+                              } else {
+                                // Utiliser Alert.alert sur mobile
+                                Alert.alert(
+                                  'Retirer l\'article',
+                                  `Êtes-vous sûr de vouloir retirer "${item.name}" de la liste?`,
+                                  [
+                                    { text: 'Annuler', style: 'cancel', onPress: () => console.log('[Alert] Utilisateur a cliqué sur Annuler') },
+                                    { text: 'Retirer', style: 'destructive', onPress: () => {
+                                      console.log(`[Alert] Utilisateur a cliqué sur Retirer pour l'article ${item.id}`);
+                                      handleRemoveItem(item.id!);
+                                    }}
+                                  ]
+                                );
+                              }
                             }}
             >
                 <MaterialIcons name="close" size={20} color="#FF3B30" />
@@ -693,7 +1417,6 @@ export const Scanner: React.FC<ScannerProps> = ({
                 </View>
               </View>
             </AnimatedView>
-          </CameraView>
         </View>
     );
     }
@@ -701,24 +1424,34 @@ export const Scanner: React.FC<ScannerProps> = ({
     // Mode standard pour les autres états
     return (
       <View style={StyleSheet.absoluteFill}>
-                <CameraView
-                    style={StyleSheet.absoluteFill}
-          onBarcodeScanned={handleBarcodeScan}
-                    barcodeScannerSettings={{
-            barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_e', 'itf14', 'datamatrix', 'codabar', 'pdf417'],
-          }}
-          onCameraReady={() => {
-            console.log("Caméra prête!");
-            setIsCameraReady(true);
-                    }}
-                >
-                    <AnimatedView style={[styles.overlay, overlayStyle]}>
+        {Platform.OS === 'web' ? (
+          <WebCamera 
+            onBarcodeScanned={handleBarcodeScan}
+            onCameraReady={() => {
+              console.log("Caméra web prête!");
+              setIsCameraReady(true);
+            }}
+          />
+        ) : (
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            onBarcodeScanned={handleBarcodeScan}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_e', 'itf14', 'datamatrix', 'codabar', 'pdf417'],
+            }}
+            onCameraReady={() => {
+              console.log("Caméra mobile prête!");
+              setIsCameraReady(true);
+            }}
+          />
+        )}
+        <AnimatedView style={[styles.overlay, overlayStyle]}>
             {/* En-tête avec bouton de fermeture et indicateur de mode */}
                         <View style={styles.header}>
                             <TouchableOpacity
                                 style={styles.closeButton}
                                 onPress={onClose}
-                disabled={scannerState.status !== 'ready' && scannerState.status !== 'scanning_items' && scannerState.status !== 'error'}
+                disabled={scannerState.status !== 'ready' && (scannerState.status as any) !== 'scanning_items' && scannerState.status !== 'error'}
                             >
                                 <MaterialIcons name="close" size={24} color="#fff" />
                             </TouchableOpacity>
@@ -730,8 +1463,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                                     color="#fff" 
                                 />
                                 <Text style={styles.modeText}>
-                  {scannerState.status === 'initializing' ? 'Initialisation...' :
-                   scannerState.status === 'ready' ? 'Scanner un container' : 
+                  {scannerState.status === 'ready' ? 'Scanner un container' : 
                    scannerState.status === 'container_confirmation' ? 'Confirmer le container' :
                    scannerState.status === 'processing' ? 'Traitement en cours...' :
                    scannerState.status === 'success' ? 'Opération réussie !' :
@@ -739,7 +1471,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                                 </Text>
                             </View>
 
-              {scannerState.status === 'scanning_items' && (
+              {(scannerState.status as any) === 'scanning_items' && (
                                 <TouchableOpacity
                                     style={styles.resetButton}
                   onPress={() => updateScannerState({ status: 'ready', mode: 'container' })}
@@ -749,30 +1481,10 @@ export const Scanner: React.FC<ScannerProps> = ({
                             )}
                         </View>
 
-            {/* Message d'initialisation en cours */}
-            {(scannerState.status === 'initializing' || !isCameraReady) && (
-              <View style={styles.initializingContainer}>
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.initializingText}>
-                  Initialisation du scanner...
-                </Text>
-                <Text style={styles.initializingSubtext}>
-                  {!permission?.granted 
-                    ? "En attente d'autorisation de la caméra" 
-                    : !isCameraReady 
-                      ? "Préparation de la caméra..." 
-                      : "Finalisation de l'initialisation..."}
-                </Text>
-                <Text style={styles.initializingDebug}>
-                  État: {scannerState.status} | Caméra: {isCameraReady ? "Prête" : "En préparation"}
-                </Text>
-              </View>
-            )}
-
             {/* Zone centrale pour le scan */}
-            {scannerState.status !== 'initializing' && isCameraReady && (
+            {(
                         <View style={styles.scannerFrame}>
-                {(scannerState.status === 'ready' || scannerState.status === 'scanning_items') && (
+                {(scannerState.status === 'ready' || (scannerState.status as any) === 'scanning_items') && (
                                 <AnimatedView style={[styles.scannerContainer, scannerContainerStyle]}>
                                     <View style={styles.scanner}>
                                         <View style={styles.scannerCorner} />
@@ -827,7 +1539,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                   <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
                     <View style={styles.confirmationContainer}>
                       <View style={styles.confirmationHeader}>
-                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                        <ActivityIndicator size="large" color={activeTheme.primary} />
                         <Text style={styles.confirmationTitle}>
                           Traitement en cours...
                                     </Text>
@@ -878,11 +1590,10 @@ export const Scanner: React.FC<ScannerProps> = ({
                       </Text>
                     </View>
                   </BlurView>
-                )}
-                            </View>
-                        )}
+                                            )}
+                        </View>
+                    )}
                     </AnimatedView>
-                </CameraView>
             </View>
     );
   };
@@ -895,409 +1606,3 @@ export const Scanner: React.FC<ScannerProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#000',
-    },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 12,
-  },
-  icon: {
-    marginBottom: 20,
-  },
-  permissionText: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-  },
-  permissionButton: {
-    backgroundColor: theme.colors.primary,
-    padding: 15,
-    borderRadius: 12,
-    width: '80%',
-    marginVertical: 10,
-    elevation: 2,
-  },
-  permissionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.error,
-    },
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'space-between',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 20,
-        paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    },
-    closeButton: {
-        padding: 12,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        borderRadius: 30,
-    },
-    resetButton: {
-        padding: 12,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        borderRadius: 30,
-    },
-    modeIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        padding: 12,
-        borderRadius: 25,
-        gap: 8,
-    },
-    modeText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    scannerFrame: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    scannerContainer: {
-        width: SCANNER_SIZE,
-        height: SCANNER_SIZE,
-        position: 'relative',
-    },
-    scanner: {
-        width: '100%',
-        height: '100%',
-        borderWidth: 2,
-        borderColor: '#fff',
-        borderRadius: 20,
-        position: 'relative',
-    },
-    scannerCorner: {
-        position: 'absolute',
-        width: 20,
-        height: 20,
-    borderColor: theme.colors.primary,
-        borderWidth: 3,
-    },
-    topRight: {
-        top: -2,
-        right: -2,
-        borderLeftWidth: 0,
-        borderBottomWidth: 0,
-        borderTopRightRadius: 20,
-    },
-    bottomLeft: {
-        bottom: -2,
-        left: -2,
-        borderRightWidth: 0,
-        borderTopWidth: 0,
-        borderBottomLeftRadius: 20,
-    },
-    bottomRight: {
-        bottom: -2,
-        right: -2,
-        borderLeftWidth: 0,
-        borderTopWidth: 0,
-        borderBottomRightRadius: 20,
-    },
-    scanLine: {
-        position: 'absolute',
-        left: 0,
-        width: '100%',
-        height: 2,
-    backgroundColor: theme.colors.primary,
-  },
-  successOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    },
-    footer: {
-        padding: 20,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-    },
-    containerInfo: {
-        alignItems: 'center',
-        marginBottom: 16,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        padding: 15,
-        borderRadius: 12,
-    },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-    gap: 8,
-  },
-  listHeaderText: {
-    color: '#fff',
-    fontSize: 14,
-    fontStyle: 'italic',
-    opacity: 0.8,
-    },
-    containerTitle: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 4,
-    },
-    itemCount: {
-        color: '#fff',
-        fontSize: 14,
-        opacity: 0.8,
-    },
-    scannedItemsContainer: {
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        borderRadius: 12,
-        overflow: 'hidden',
-    },
-    scannedItemsList: {
-    maxHeight: SCREEN_HEIGHT * 0.3,
-    },
-    scannedItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    justifyContent: 'space-between',
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        padding: 12,
-        marginVertical: 4,
-        marginHorizontal: 8,
-        borderRadius: 8,
-    },
-  itemSeparator: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    marginVertical: 2,
-    marginHorizontal: 12,
-    },
-    scannedItemInfo: {
-        flex: 1,
-        marginRight: 12,
-    },
-    scannedItemName: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    scannedItemPrice: {
-        color: '#fff',
-        fontSize: 14,
-        opacity: 0.8,
-    },
-  scannedItemTime: {
-        fontSize: 12,
-    opacity: 0.7,
-    },
-    removeItemButton: {
-    padding: 10,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,59,48,0.2)',
-    },
-    finishButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-    backgroundColor: theme.colors.success,
-        padding: 16,
-        margin: 12,
-        borderRadius: 12,
-        gap: 8,
-    },
-    finishButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    confirmationWrapper: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    confirmationContainer: {
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        padding: 24,
-        borderRadius: 16,
-        alignItems: 'center',
-        width: '90%',
-        maxWidth: 400,
-        elevation: 5,
-        boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.25)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    confirmationHeader: {
-        alignItems: 'center',
-        marginBottom: 16,
-        gap: 12,
-    },
-    confirmationTitle: {
-        color: '#fff',
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    confirmationText: {
-        color: '#fff',
-        fontSize: 18,
-        marginBottom: 24,
-        textAlign: 'center',
-    },
-  buttonGroup: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginTop: 20,
-    width: '100%',
-    paddingHorizontal: 20,
-    },
-    button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-        minWidth: 140,
-        justifyContent: 'center',
-        elevation: 8,
-        boxShadow: '0px 4px 4.65px rgba(0, 0, 0, 0.3)',
-    },
-    confirmButton: {
-    backgroundColor: theme.colors.success,
-        borderWidth: 1,
-        borderColor: '#43A047',
-    },
-  progressBarContainer: {
-        width: '100%',
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4,
-    marginVertical: 20,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: theme.colors.success,
-  },
-  progressText: {
-        color: '#fff',
-    fontSize: 14,
-    opacity: 0.8,
-    marginBottom: 10,
-  },
-  emptyState: {
-    padding: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    color: 'rgba(255,255,255,0.7)',
-        fontSize: 16,
-        textAlign: 'center',
-    marginTop: 10,
-  },
-  initializingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    zIndex: 10,
-  },
-  initializingText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  initializingSubtext: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  initializingDebug: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-    marginTop: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  // Styles pour la disposition en deux colonnes
-  splitContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  scannerColumn: {
-    width: '48%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingLeft: 10,
-  },
-  listColumn: {
-    width: '48%',
-    padding: 10,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-  },
-  scannerContainerSplit: {
-    width: SCANNER_SIZE * 0.8,
-    height: SCANNER_SIZE * 0.8,
-    position: 'relative',
-        marginBottom: 20,
-    },
-  containerInfoSplit: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-        padding: 15,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 250,
-    },
-  buttonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-});

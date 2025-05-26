@@ -15,7 +15,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { updateItem, setItems } from '../../src/store/itemsActions';
 import { selectAllItems } from '../../src/store/itemsAdapter';
 import { RootState } from '../../src/store/store';
-import { theme } from '../../src/utils/theme';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import { useContainerManagement } from '../../src/hooks/useContainerManagement';
 import { useSearchDebounce } from '../../src/hooks/useSearchDebounce';
@@ -46,41 +46,6 @@ const ContainerInfo: React.FC<ContainerInfoProps> = ({ containerId, containers, 
   return <Text style={style}>{containerText}</Text>;
 };
 
-interface ItemListProps {
-  item: Item;
-  onPress: (id: number) => void;
-  categories: Array<{ id: number; name: string }>;
-  containers: Container[];
-}
-
-const ItemListItem: React.FC<ItemListProps> = React.memo(({ item, onPress, categories, containers }) => {
-  const categoryName = React.useMemo(() => 
-    categories.find(c => c.id === item.categoryId)?.name || 'Sans catégorie', 
-    [categories, item.categoryId]
-  );
-  
-  return (
-    <TouchableOpacity
-      style={styles.itemCard}
-      onPress={() => item.id && onPress(item.id)}
-    >
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <View style={styles.itemMetaContainer}>
-          <Text style={styles.itemCategory}>{categoryName}</Text>
-          <ContainerInfo 
-            containerId={item.containerId ?? null} 
-            containers={containers} 
-            style={[styles.itemContainer, !item.containerId && styles.noContainer]}
-          />
-        </View>
-        <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
-      </View>
-      <MaterialIcons name="add-circle-outline" size={24} color={theme.colors.success} />
-    </TouchableOpacity>
-  );
-});
-
 const ContainerScreen = () => {
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
@@ -108,6 +73,7 @@ const ContainerScreen = () => {
     visible: false,
     containerId: null
   });
+  const { activeTheme, themeMode } = useAppTheme();
 
   useEffect(() => {
     if (initialItems?.length > 0) {
@@ -365,8 +331,441 @@ const ContainerScreen = () => {
       onPress={handleAddToContainer}
       categories={categories}
       containers={containers}
+      itemListItemIconColor={activeTheme.success}
     />
-  ), [categories, handleAddToContainer, containers]);
+  ), [categories, handleAddToContainer, containers, activeTheme.success]);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: activeTheme.background,
+    },
+    topBar: {
+      height: Platform.OS === 'ios' ? 44 : 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      backgroundColor: activeTheme.backgroundSecondary,
+      borderBottomWidth: 1,
+      borderBottomColor: activeTheme.border,
+      marginTop: Platform.OS === 'ios' ? 47 : 0,
+    },
+    backButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    backButtonText: {
+      fontSize: 17,
+      color: activeTheme.success,
+      marginLeft: -4,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: activeTheme.background,
+    },
+    loadingText: {
+      marginTop: 10,
+      color: activeTheme.text.secondary,
+    },
+    emptyStateContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: activeTheme.background,
+    },
+    emptyStateText: {
+      fontSize: 18,
+      color: activeTheme.text.secondary,
+      marginTop: 16,
+      marginBottom: 24,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: activeTheme.primary,
+      padding: 15,
+      margin: 10,
+      borderRadius: 12,
+      elevation: 2, // For Android shadow
+    },
+    addIcon: {
+      marginRight: 8,
+    },
+    addButtonText: {
+      color: activeTheme.text.onPrimary,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    modalContent: {
+      flex: 1,
+      backgroundColor: activeTheme.background,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 16,
+      backgroundColor: activeTheme.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: activeTheme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: activeTheme.text.primary,
+    },
+    headerSpacer: {
+      width: 70,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      gap: 16,
+    },
+    cancelButton: {
+      padding: 8,
+    },
+    cancelButtonText: {
+      color: activeTheme.success,
+      fontSize: 16,
+    },
+    actionButton: {
+      padding: 8,
+    },
+    deleteButton: {
+      marginLeft: 8,
+    },
+    formWrapper: {
+      flex: 1,
+      padding: 20,
+      backgroundColor: activeTheme.surface,
+    },
+    containerDetails: {
+      backgroundColor: activeTheme.surface,
+      padding: 16,
+      marginBottom: 8,
+    },
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    detailLabel: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: activeTheme.text.secondary,
+      width: 100,
+    },
+    detailValue: {
+      fontSize: 16,
+      color: activeTheme.text.primary,
+      flex: 1,
+    },
+    containerContent: {
+      flex: 1,
+      backgroundColor: activeTheme.surface,
+    },
+    contentTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      padding: 16,
+      backgroundColor: activeTheme.backgroundSecondary,
+      borderBottomWidth: 1,
+      borderBottomColor: activeTheme.border,
+    },
+    emptyContent: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    emptyContentText: {
+      fontSize: 16,
+      color: activeTheme.text.secondary,
+      fontStyle: 'italic',
+    },
+    itemsContainer: {
+      flex: 1,
+      padding: 16,
+    },
+    listsContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: 16,
+    },
+    listSection: {
+      flex: 1,
+      borderRadius: 12,
+      backgroundColor: activeTheme.backgroundSecondary,
+      padding: 12,
+    },
+    itemsList: {
+      flex: 1,
+    },
+    itemCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: activeTheme.surface,
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 8,
+      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      elevation: 2,
+      borderLeftWidth: 4,
+      borderLeftColor: activeTheme.success,
+    },
+    availableItem: {
+      borderLeftColor: activeTheme.success,
+    },
+    itemInfo: {
+      flex: 1,
+    },
+    itemName: {
+      fontSize: 16,
+      fontWeight: '500',
+      marginBottom: 4,
+      color: activeTheme.text.primary, 
+    },
+    itemPrice: {
+      fontSize: 14,
+      color: activeTheme.text.secondary,
+    },
+    filterSection: {
+      marginBottom: 16,
+    },
+    searchInput: {
+      backgroundColor: activeTheme.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      fontSize: 16,
+      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      elevation: 2,
+      color: activeTheme.text.primary,
+    },
+    categoryFilter: {
+      flexGrow: 0,
+      marginBottom: 8,
+    },
+    categoryChip: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: activeTheme.surface,
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: activeTheme.border,
+    },
+    categoryChipSelected: {
+      backgroundColor: activeTheme.primary,
+      borderColor: activeTheme.primary,
+    },
+    categoryChipText: {
+      fontSize: 14,
+      color: activeTheme.text.secondary,
+    },
+    categoryChipTextSelected: {
+      color: activeTheme.text.onPrimary,
+      fontWeight: '500',
+    },
+    itemMetaContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 6,
+      marginTop: 6,
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    itemCategory: {
+      fontSize: 12,
+      color: activeTheme.text.secondary,
+      backgroundColor: activeTheme.surface,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: activeTheme.border,
+      overflow: 'hidden',
+    },
+    itemContainer: {
+      fontSize: 12,
+      color: activeTheme.text.secondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: activeTheme.surface,
+      borderWidth: 1,
+      borderColor: activeTheme.border,
+      overflow: 'hidden',
+    },
+    noContainer: {
+      backgroundColor: activeTheme.error,
+      borderColor: activeTheme.error,
+      color: activeTheme.text.onPrimary, 
+    },
+    containerScrollView: {
+      flex: 1,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: activeTheme.text.secondary,
+      marginBottom: 12,
+    },
+    containerInfo: {
+      fontSize: 12,
+      color: activeTheme.success,
+      marginBottom: 4,
+      fontStyle: 'italic'
+    },
+    formScrollContent: {
+      flexGrow: 1,
+    },
+    errorStateContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: activeTheme.background,
+      padding: 20,
+    },
+    errorStateText: {
+      fontSize: 18,
+      color: activeTheme.error,
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    retryButton: {
+      backgroundColor: activeTheme.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: activeTheme.text.onPrimary,
+    },
+    listContentContainer: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      marginVertical: 6,
+      backgroundColor: activeTheme.surface,
+      borderRadius: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: themeMode === 'dark' ? 0.5 : 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    itemTextContainer: {
+      flex: 1,
+      marginRight: 10,
+      color: activeTheme.text.primary,
+    },
+    itemDetails: {
+      fontSize: 13,
+      color: activeTheme.text.secondary,
+      marginTop: 4,
+    },
+    itemDate: {
+      fontSize: 12,
+      color: activeTheme.text.disabled,
+      marginTop: 4,
+    },
+    modalContainer: { 
+    },
+    modalView: {
+      margin: 20,
+      width: '80%',
+      backgroundColor: activeTheme.surface,
+      borderRadius: 10,
+      padding: 20,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: themeMode === 'dark' ? 0.75 : 0.25,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    modalInput: {
+      width: '100%',
+      height: 40,
+      borderColor: activeTheme.border,
+      borderWidth: 1,
+      borderRadius: 5,
+      paddingHorizontal: 10,
+      marginBottom: 20,
+      color: activeTheme.text.primary,
+    },
+    modalButtonContainer: {
+      flexDirection: 'row',
+    },
+    modalButton: {
+      borderRadius: 5,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      elevation: 2,
+      marginHorizontal: 10,
+    },
+    modalButtonSave: {
+      backgroundColor: activeTheme.primary,
+    },
+    modalButtonCancel: {
+      backgroundColor: activeTheme.backgroundSecondary,
+      borderWidth: 1,
+      borderColor: activeTheme.border,
+    },
+    modalButtonTextSave: {
+      color: activeTheme.text.onPrimary,
+      fontWeight: 'bold',
+    },
+    modalButtonTextCancel: {
+      color: activeTheme.text.primary,
+      fontWeight: 'bold',
+    },
+  }), [activeTheme, themeMode]);
+
+  interface ItemListProps {
+    item: Item;
+    onPress: (id: number) => void;
+    categories: Array<{ id: number; name: string }>;
+    containers: Container[];
+    itemListItemIconColor: string;
+  }
+
+  const ItemListItem: React.FC<ItemListProps> = React.memo(({ item, onPress, categories, containers, itemListItemIconColor }) => {
+    const categoryName = React.useMemo(() => 
+      categories.find((c: { id: number; name: string }) => c.id === item.categoryId)?.name || 'Sans catégorie', 
+      [categories, item.categoryId]
+    );
+    
+    return (
+      <TouchableOpacity
+        style={styles.itemCard}
+        onPress={() => item.id && onPress(item.id)}
+      >
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <View style={styles.itemMetaContainer}>
+            <Text style={styles.itemCategory}>{categoryName}</Text>
+            <ContainerInfo 
+              containerId={item.containerId ?? null} 
+              containers={containers} 
+              style={[styles.itemContainer, !item.containerId && styles.noContainer]}
+            />
+          </View>
+          <Text style={styles.itemPrice}>{item.sellingPrice !== null && item.sellingPrice !== undefined ? `${item.sellingPrice}€` : ''}</Text>
+        </View>
+        <MaterialIcons name="add-circle-outline" size={24} color={itemListItemIconColor} />
+      </TouchableOpacity>
+    );
+  });
 
   if (isLoadingInventory) {
     return (
@@ -719,297 +1118,5 @@ const ContainerScreen = () => {
     </ErrorBoundary>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  topBar: {
-    height: Platform.OS === 'ios' ? 44 : 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    marginLeft: -8,
-  },
-  backButtonText: {
-    fontSize: 17,
-    color: '#007AFF',
-    marginLeft: -4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyStateContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#007AFF',
-    padding: 15,
-    margin: 10,
-    borderRadius: 12,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
-  },
-  addIcon: {
-    marginRight: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalContent: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-  },
-  headerSpacer: {
-    width: 70,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  cancelButton: {
-    padding: 8,
-  },
-  cancelButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  deleteButton: {
-    marginLeft: 8,
-  },
-  formWrapper: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  containerDetails: {
-    backgroundColor: '#fff',
-    padding: 16,
-    marginBottom: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666',
-    width: 100,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: '#000',
-    flex: 1,
-  },
-  containerContent: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  contentTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  emptyContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyContentText: {
-    fontSize: 16,
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  itemsContainer: {
-    flex: 1,
-    padding: 16,
-  },
-  listsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 16,
-  },
-  listSection: {
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-  },
-  itemsList: {
-    flex: 1,
-  },
-  itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  availableItem: {
-    borderLeftColor: '#4CAF50',
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  itemPrice: {
-    fontSize: 14,
-    color: '#666',
-  },
-  filterSection: {
-    marginBottom: 16,
-  },
-  searchInput: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
-  },
-  categoryFilter: {
-    flexGrow: 0,
-    marginBottom: 8,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  categoryChipSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  categoryChipText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  categoryChipTextSelected: {
-    color: '#fff',
-  },
-  itemMetaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    marginTop: 6,
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  itemCategory: {
-    fontSize: 12,
-    color: '#666',
-    backgroundColor: '#e8f4fd',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d0e8f7',
-    overflow: 'hidden',
-  },
-  itemContainer: {
-    fontSize: 12,
-    color: '#666',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#e0f7e0',
-    borderWidth: 1,
-    borderColor: '#cceacc',
-    overflow: 'hidden',
-  },
-  noContainer: {
-    backgroundColor: '#f9e8e8',
-    borderColor: '#eacccc',
-    color: '#af7676',
-  },
-  containerScrollView: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 12,
-  },
-  containerInfo: {
-    fontSize: 12,
-    color: '#FF9500',
-    marginBottom: 4,
-    fontStyle: 'italic'
-  },
-  formScrollContent: {
-    flexGrow: 1,
-  },
-});
 
 export default React.memo(ContainerScreen);

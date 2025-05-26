@@ -15,7 +15,9 @@
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "plugins": [
       "expo-router",
       [
@@ -42,14 +44,18 @@
         {
           "microphonePermission": "L'application nécessite l'accès au microphone pour les retours sonores."
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.inventoryApp",
       "buildNumber": "1.0.0",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
         "NSCameraUsageDescription": "L'application nécessite l'accès à la caméra pour scanner les QR codes et prendre des photos.",
         "NSPhotoLibraryUsageDescription": "L'application nécessite l'accès à vos photos pour sauvegarder les images des articles.",
         "NSPhotoLibraryAddUsageDescription": "L'application nécessite l'accès à vos photos pour sauvegarder les images des articles.",
@@ -64,7 +70,11 @@
         "foregroundImage": "./assets/Logo.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["CAMERA", "RECORD_AUDIO", "USE_BIOMETRIC"],
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "USE_BIOMETRIC"
+      ],
       "package": "com.anonymous.inventoryApp",
       "versionCode": 1
     },

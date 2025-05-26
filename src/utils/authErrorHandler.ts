@@ -1,5 +1,12 @@
 import { AuthError } from '@supabase/supabase-js';
-import { handleError, ErrorType } from './errorHandler';
+import { handleError } from './errorHandler';
+import { getLocales } from 'expo-localization';
+
+// Fonction utilitaire pour obtenir la langue de l'utilisateur
+const getUserLanguage = (): 'fr' | 'en' => {
+  const locales = getLocales();
+  return locales[0]?.languageCode === 'fr' ? 'fr' : 'en';
+};
 import * as Sentry from '@sentry/react-native';
 
 // Messages d'erreur spécifiques à l'authentification
@@ -57,12 +64,19 @@ export const handleAuthenticationError = (error: AuthError | Error, context?: st
     en: 'An authentication error occurred.'
   };
 
-  return handleError(error, ErrorType.AUTHENTICATION, {
-    context,
-    additionalData: { errorCode },
-    shouldNotify: true,
-    customMessage: errorMessage
-  });
+  const userLanguage = getUserLanguage();
+  const message = errorMessage[userLanguage as keyof typeof errorMessage] || errorMessage.en;
+  
+  return handleError(
+    error,
+    message,
+    {
+      source: context,
+      additionalData: { errorCode },
+      showAlert: true,
+      logToSentry: true
+    }
+  );
 };
 
 // Fonction utilitaire pour les erreurs de validation du formulaire d'authentification
@@ -87,14 +101,17 @@ export const handleAuthValidationError = (field: string, context?: string) => {
     en: 'Invalid field.'
   };
 
+  const userLanguage = getUserLanguage();
+  const messageText = message[userLanguage as keyof typeof message] || message.en;
+  
   return handleError(
     new Error(`Invalid ${field}`),
-    ErrorType.VALIDATION,
+    messageText,
     {
-      context,
+      source: context,
       additionalData: { field },
-      shouldNotify: true,
-      customMessage: message
+      showAlert: true,
+      logToSentry: true
     }
   );
 };

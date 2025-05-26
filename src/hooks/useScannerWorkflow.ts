@@ -83,11 +83,32 @@ export const useScannerWorkflow = (
       // 3. Traiter les différents types de codes
       if (type === 'CONTAINER') {
         console.log('Code container détecté, recherche dans les containers...');
-        // Rechercher le container correspondant
-        const container = containers.find(c => c.qrCode === scannedData);
+        console.log(`Containers en mémoire (${containers.length}):`, containers.map(c => ({ id: c.id, name: c.name, qrCode: c.qrCode })));
+        
+        // D'abord chercher dans les containers en mémoire
+        let container = containers.find(c => c.qrCode === scannedData);
         
         if (!container) {
-          console.log('Container non trouvé dans la base de données');
+          console.log('Container non trouvé en mémoire, tentative de recherche en base de données...');
+          
+          try {
+            // Recherche directe en base de données
+            const foundContainer = await databaseInterface.getContainerByQRCode(scannedData);
+            
+            if (foundContainer) {
+              container = foundContainer;
+              console.log(`Container trouvé en base de données: ${container.name} (ID: ${container.id})`);
+            }
+          } catch (error) {
+            console.error('Erreur lors de la recherche en base:', error);
+          }
+        } else {
+          console.log(`Container trouvé en mémoire: ${container.name} (ID: ${container.id})`);
+        }
+        
+        if (!container) {
+          console.log('Container non trouvé ni en mémoire ni en base de données');
+          console.log(`QR Code recherché: "${scannedData}"`);
           Alert.alert('Container non trouvé', 'Ce container n\'est pas enregistré dans la base de données.');
           return {
             success: false,

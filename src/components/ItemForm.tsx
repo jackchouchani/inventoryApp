@@ -17,6 +17,7 @@ import { usePhoto } from '../hooks/usePhoto';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { checkPhotoPermissions } from '../utils/permissions';
 import { useRouter } from 'expo-router';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 const FORM_VALIDATION = {
     NAME_MAX_LENGTH: 100,
@@ -83,18 +84,33 @@ const INITIAL_STATE: ItemFormState = {
 /**
  * Composant d'option de conteneur mémoïsé
  */
-const ContainerOption = memo(({ container, isSelected, onSelect }: ContainerOptionProps) => (
+const ContainerOption = memo(({ container, isSelected, onSelect, theme }: ContainerOptionProps & { theme: any }) => (
     <TouchableOpacity
-        style={[styles.option, isSelected && styles.optionSelected]}
+        style={[
+            {
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                borderWidth: 1,
+                backgroundColor: isSelected ? theme.primary : theme.surface,
+                borderColor: isSelected ? theme.primary : theme.border,
+            }
+        ]}
         onPress={() => onSelect(container.id)}
     >
         <MaterialIcons
             name="inbox"
             size={20}
-            color={isSelected ? '#fff' : '#666'}
-            style={styles.containerIcon}
+            color={isSelected ? theme.text.onPrimary : theme.text.secondary}
+            style={{ marginRight: 8 }}
         />
-        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+        <Text style={{
+            fontSize: 14,
+            color: isSelected ? theme.text.onPrimary : theme.text.primary,
+            fontWeight: isSelected ? '500' : 'normal'
+        }}>
             {container.name}
         </Text>
     </TouchableOpacity>
@@ -103,18 +119,33 @@ const ContainerOption = memo(({ container, isSelected, onSelect }: ContainerOpti
 /**
  * Composant d'option de catégorie mémoïsé
  */
-const CategoryOption = memo(({ category, isSelected, onSelect }: CategoryOptionProps) => (
+const CategoryOption = memo(({ category, isSelected, onSelect, theme }: CategoryOptionProps & { theme: any }) => (
     <TouchableOpacity
-        style={[styles.option, isSelected && styles.optionSelected]}
+        style={[
+            {
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                borderWidth: 1,
+                backgroundColor: isSelected ? theme.primary : theme.surface,
+                borderColor: isSelected ? theme.primary : theme.border,
+            }
+        ]}
         onPress={() => onSelect(category.id)}
     >
         <MaterialIcons
             name={(category.icon as MaterialIconName) || 'folder'}
             size={20}
-            color={isSelected ? '#fff' : '#666'}
-            style={styles.categoryIcon}
+            color={isSelected ? theme.text.onPrimary : theme.text.secondary}
+            style={{ marginRight: 8 }}
         />
-        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+        <Text style={{
+            fontSize: 14,
+            color: isSelected ? theme.text.onPrimary : theme.text.primary,
+            fontWeight: isSelected ? '500' : 'normal'
+        }}>
             {category.name}
         </Text>
     </TouchableOpacity>
@@ -123,33 +154,45 @@ const CategoryOption = memo(({ category, isSelected, onSelect }: CategoryOptionP
 /**
  * Composant de liste de conteneurs mémoïsé
  */
-const ContainerList = memo(({ containers, selectedId, onSelect, onAddNew }: {
+const ContainerList = memo(({ containers, selectedId, onSelect, onAddNew, theme }: {
     containers: Container[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
     onAddNew: () => void;
+    theme: any;
 }) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-        <View style={styles.optionsContainer}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 0 }}>
+        <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
             {containers.map((container) => (
                 <ContainerOption
                     key={container.id}
                     container={container}
                     isSelected={selectedId === container.id}
                     onSelect={onSelect}
+                    theme={theme}
                 />
             ))}
             <TouchableOpacity
-                style={styles.addNewOption}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.primary}15`,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: theme.primary,
+                }}
                 onPress={onAddNew}
             >
                 <MaterialIcons
                     name="add-circle"
                     size={20}
-                    color="#007AFF"
-                    style={styles.addIcon}
+                    color={theme.primary}
+                    style={{ marginRight: 8 }}
                 />
-                <Text style={styles.addNewText}>Ajouter un container</Text>
+                <Text style={{ fontSize: 14, color: theme.primary, fontWeight: '500' }}>Ajouter un container</Text>
             </TouchableOpacity>
         </View>
     </ScrollView>
@@ -158,33 +201,45 @@ const ContainerList = memo(({ containers, selectedId, onSelect, onAddNew }: {
 /**
  * Composant de liste de catégories mémoïsé
  */
-const CategoryList = memo(({ categories, selectedId, onSelect, onAddNew }: {
+const CategoryList = memo(({ categories, selectedId, onSelect, onAddNew, theme }: {
     categories: Category[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
     onAddNew: () => void;
+    theme: any;
 }) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-        <View style={styles.optionsContainer}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 0 }}>
+        <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
             {categories.map((category) => (
                 <CategoryOption
                     key={category.id}
                     category={category}
                     isSelected={selectedId === category.id}
                     onSelect={onSelect}
+                    theme={theme}
                 />
             ))}
             <TouchableOpacity
-                style={styles.addNewOption}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: `${theme.primary}15`,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: theme.primary,
+                }}
                 onPress={onAddNew}
             >
                 <MaterialIcons
                     name="add-circle"
                     size={20}
-                    color="#007AFF"
-                    style={styles.addIcon}
+                    color={theme.primary}
+                    style={{ marginRight: 8 }}
                 />
-                <Text style={styles.addNewText}>Ajouter une catégorie</Text>
+                <Text style={{ fontSize: 14, color: theme.primary, fontWeight: '500' }}>Ajouter une catégorie</Text>
             </TouchableOpacity>
         </View>
     </ScrollView>
@@ -193,17 +248,50 @@ const CategoryList = memo(({ categories, selectedId, onSelect, onAddNew }: {
 /**
  * Composant de fallback en cas d'erreur
  */
-const ItemFormErrorFallback: React.FC<FallbackProps> = ({ error, resetErrorBoundary }) => (
-    <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>
-            Une erreur est survenue lors du chargement du formulaire
-        </Text>
-        <Text style={styles.errorDetail}>{error.message}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={resetErrorBoundary}>
-            <Text style={styles.retryButtonText}>Réessayer</Text>
-        </TouchableOpacity>
-    </View>
-);
+const ItemFormErrorFallback: React.FC<FallbackProps & { theme?: any }> = ({ error, resetErrorBoundary, theme }) => {
+    const { activeTheme } = useAppTheme();
+    const currentTheme = theme || activeTheme;
+    
+    return (
+        <View style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 16,
+            backgroundColor: currentTheme.surface,
+        }}>
+            <Text style={{
+                fontSize: 16,
+                color: currentTheme.danger.main,
+                textAlign: 'center',
+                marginBottom: 16,
+            }}>
+                Une erreur est survenue lors du chargement du formulaire
+            </Text>
+            <Text style={{
+                fontSize: 14,
+                color: currentTheme.text.secondary,
+                textAlign: 'center',
+                marginBottom: 16,
+            }}>{error.message}</Text>
+            <TouchableOpacity
+                style={{
+                    backgroundColor: currentTheme.primary,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                }}
+                onPress={resetErrorBoundary}
+            >
+                <Text style={{
+                    color: currentTheme.text.onPrimary,
+                    fontSize: 16,
+                    fontWeight: '600',
+                }}>Réessayer</Text>
+            </TouchableOpacity>
+        </View>
+    );
+};
 
 const ItemFormWithErrorBoundary: React.FC<ItemFormProps> = (props) => (
     <ErrorBoundary
@@ -223,6 +311,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
     const { uploadPhoto } = usePhoto();
     const router = useRouter();
+    const { activeTheme } = useAppTheme();
     
     // État pour suivre l'upload en cours
     const [isUploading, setIsUploading] = useState(false);
@@ -587,6 +676,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
         }
     }, [queryClient, item.containerId, item.categoryId]);
 
+    const styles = getThemedStyles(activeTheme);
+
     return (
         <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
@@ -604,7 +695,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                         placeholder="Nom de l'article"
                         value={item.name}
                         onChangeText={(text) => setItem(prev => ({ ...prev, name: text }))}
-                        placeholderTextColor="#999"
+                        placeholderTextColor={activeTheme.text.secondary}
                     />
 
                     <TextInput
@@ -614,7 +705,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                         onChangeText={(text) => setItem(prev => ({ ...prev, description: text }))}
                         multiline
                         numberOfLines={4}
-                        placeholderTextColor="#999"
+                        placeholderTextColor={activeTheme.text.secondary}
                     />
                 </View>
 
@@ -629,7 +720,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                 value={item.purchasePrice}
                                 keyboardType="numeric"
                                 onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
-                                placeholderTextColor="#999"
+                                placeholderTextColor={activeTheme.text.secondary}
                             />
                         </View>
                         <View style={styles.priceWrapper}>
@@ -640,7 +731,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                 value={item.sellingPrice}
                                 keyboardType="numeric"
                                 onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
-                                placeholderTextColor="#999"
+                                placeholderTextColor={activeTheme.text.secondary}
                             />
                         </View>
                     </View>
@@ -659,7 +750,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                     resizeMode="cover"
                                     placeholder={
                                         <View style={styles.placeholderContainer}>
-                                            <MaterialIcons name="image" size={24} color="#ccc" />
+                                            <MaterialIcons name="image" size={24} color={activeTheme.text.secondary} />
                                         </View>
                                     }
                                 />
@@ -691,8 +782,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                 onPress={handleImagePreview}
                                 disabled={isUploading}
                             >
-                                <MaterialIcons name="add-photo-alternate" size={48} color={isUploading ? "#cccccc" : "#007AFF"} />
-                                <Text style={[styles.imagePickerText, isUploading && {color: "#cccccc"}]}>
+                                <MaterialIcons name="add-photo-alternate" size={48} color={isUploading ? activeTheme.text.disabled : activeTheme.primary} />
+                                <Text style={[styles.imagePickerText, isUploading && {color: activeTheme.text.disabled}]}>
                                     {isUploading ? "Upload en cours..." : "Sélectionner une image"}
                                 </Text>
                             </TouchableOpacity>
@@ -707,6 +798,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                         selectedId={item.containerId}
                         onSelect={handleContainerSelect}
                         onAddNew={navigateToAddContainer}
+                        theme={activeTheme}
                     />
                 </View>
 
@@ -717,6 +809,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                         selectedId={item.categoryId}
                         onSelect={handleCategorySelect}
                         onAddNew={navigateToAddCategory}
+                        theme={activeTheme}
                     />
                 </View>
             </ScrollView>
@@ -724,35 +817,35 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
     );
 };
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: any) => StyleSheet.create({
     modalContainer: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: theme.background,
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: '#fff',
+        backgroundColor: theme.surface,
         borderBottomWidth: 1,
-        borderBottomColor: '#e5e5e5',
+        borderBottomColor: theme.border,
         boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
         elevation: 2,
     },
     modalTitle: {
         fontSize: 20,
         fontWeight: '600',
-        color: '#000',
+        color: theme.text.primary,
     },
     saveButton: {
-        backgroundColor: '#007AFF',
+        backgroundColor: theme.primary,
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 8,
     },
     saveText: {
-        color: '#fff',
+        color: theme.text.onPrimary,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -763,7 +856,7 @@ const styles = StyleSheet.create({
         padding: 16,
     },
     formSection: {
-        backgroundColor: '#fff',
+        backgroundColor: theme.surface,
         borderRadius: 12,
         padding: 16,
         marginBottom: 16,
@@ -776,17 +869,17 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 17,
         fontWeight: '600',
-        color: '#000',
+        color: theme.text.primary,
         marginBottom: 12,
     },
     input: {
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.backgroundSecondary,
         borderRadius: 8,
         padding: 12,
         fontSize: 16,
-        color: '#000',
+        color: theme.text.primary,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
         marginBottom: 12,
     },
     textArea: {
@@ -802,7 +895,7 @@ const styles = StyleSheet.create({
     },
     priceLabel: {
         fontSize: 14,
-        color: '#666',
+        color: theme.text.secondary,
         marginBottom: 4,
     },
     priceInput: {
@@ -815,9 +908,9 @@ const styles = StyleSheet.create({
         aspectRatio: 4/3,
         borderRadius: 8,
         overflow: 'hidden',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.backgroundSecondary,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
         position: 'relative',
     },
     image: {
@@ -911,7 +1004,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        backgroundColor: '#007AFF',
+        backgroundColor: theme.primary,
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderTopLeftRadius: 8,
@@ -921,7 +1014,7 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     newImageText: {
-        color: '#FFFFFF',
+        color: theme.text.onPrimary,
         fontSize: 10,
         fontWeight: 'bold',
     },
@@ -945,16 +1038,16 @@ const styles = StyleSheet.create({
     imagePicker: {
         aspectRatio: 4/3,
         borderRadius: 8,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.backgroundSecondary,
         borderWidth: 1,
         borderStyle: 'dashed',
-        borderColor: '#007AFF',
+        borderColor: theme.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
     imagePickerText: {
         marginTop: 8,
-        color: '#007AFF',
+        color: theme.primary,
         fontSize: 16,
         fontWeight: '500',
     },

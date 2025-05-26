@@ -65,6 +65,6 @@ export const theme = {
       elevation: 5,
     }
   }
-} as const;
+}
 
 export type Theme = typeof theme;
