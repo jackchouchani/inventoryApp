@@ -1,6 +1,6 @@
-import React, { memo, useCallback } from 'react';
-import { Dimensions, View, Text, StyleSheet } from 'react-native';
-import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryLegend, VictoryVoronoiContainer, VictoryTooltip, VictoryScatter } from 'victory';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { Dimensions, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { TimeSeriesDataPoint } from '../hooks/useStats';
@@ -17,213 +17,290 @@ interface StatsChartProps {
   selectedPeriod: 'week' | 'month' | 'year';
 }
 
-// Format tooltip content based on period type
-const formatTooltipValue = (datum: any, selectedPeriod: 'week' | 'month' | 'year', profitData: Array<{x: Date, y: number, _dataType: string}>) => {
-  if (!datum || !datum.x) return '';
-  
-  const date = new Date(datum.x);
-  let dateLabel = '';
-  
-  switch (selectedPeriod) {
-    case 'week':
-      dateLabel = format(date, 'EEEE', { locale: fr }); // Full day name
-      break;
-    case 'month':
-      dateLabel = format(date, 'dd MMMM', { locale: fr }); // Day and month
-      break;
-    case 'year':
-      dateLabel = format(date, 'MMMM yyyy', { locale: fr }); // Month and year
-      break;
-  }
-  
-  // If this is a revenue data point, find the corresponding profit point
-  if (datum._dataType === 'revenue') {
-    const profitPoint = profitData.find((p: {x: Date}) => p.x.getTime() === date.getTime());
-    const profitValue = profitPoint ? formatCurrency(profitPoint.y) : 'N/A';
-    
-    return `${dateLabel}\n• CA: ${formatCurrency(datum.y)}\n• BÉNÉFICE: ${profitValue}`;
-  }
-  
-  // For profit data points, return empty string to avoid duplication
-  return '';
-};
+interface ChartDataPoint {
+  value: number;
+  date: Date;
+  label?: string;
+  labelTextStyle?: object;
+  dataPointText?: string;
+  textShiftY?: number;
+  textShiftX?: number;
+  showStrip?: boolean;
+  stripHeight?: number;
+  stripColor?: string;
+  stripOpacity?: number;
+  dataPointHeight?: number;
+  dataPointWidth?: number;
+  dataPointColor?: string;
+  dataPointRadius?: number;
+}
 
-const StatsChart: React.FC<StatsChartProps> = memo(({ 
+const StatsChart: React.FC<StatsChartProps> = memo(({
   data,
   width = Dimensions.get('window').width - 40,
   height = 220,
   onDataPointClick,
   selectedPeriod
 }) => {
-  // Helper function to create unique data points by date, ensuring x is a Date object
-  const createUniqueData = (points: TimeSeriesDataPoint[], dataType: string): Array<{ x: Date; y: number; _dataType: string }> => {
-    const uniqueDataMap = new Map<number, { x: Date; y: number; _dataType: string }>();
+  const [selectedDataPoint, setSelectedDataPoint] = useState<{
+    index: number;
+    value: number;
+    date: Date;
+    type: 'revenue' | 'profit';
+  } | null>(null);
+  const [showAnimations, setShowAnimations] = useState(true);
+
+  // Helper function to create unique data points by date
+  const createUniqueData = useCallback((points: TimeSeriesDataPoint[]): ChartDataPoint[] => {
+    const uniqueDataMap = new Map<number, ChartDataPoint>();
+
     for (const point of points) {
-      const date = new Date(point.x); // Ensure x is treated as a Date
+      const date = new Date(point.x);
       const time = date.getTime();
-      if (!uniqueDataMap.has(time)) { // Keep the first occurrence for a given timestamp
-        uniqueDataMap.set(time, { ...point, x: date, _dataType: dataType });
+
+      if (!uniqueDataMap.has(time)) {
+        uniqueDataMap.set(time, {
+          value: point.y,
+          date: date,
+          dataPointRadius: 4,
+          dataPointColor: 'transparent',
+          showStrip: false,
+        });
       }
     }
-    // Sort by date after ensuring uniqueness
-    return Array.from(uniqueDataMap.values()).sort((a, b) => a.x.getTime() - b.x.getTime());
-  };
 
-  // Préparation des données dédupliquées avec type de série identifié
-  const deDupRevenueData = createUniqueData(data.revenue, 'revenue');
-  const deDupProfitData = createUniqueData(data.profit, 'profit');
+    return Array.from(uniqueDataMap.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, []);
 
-  const formatXAxisTick = (tick: any) => {
-    if (!(tick instanceof Date)) return ''; // Should be a Date object
+  // Préparation des données optimisées
+  const { revenueData, profitData, maxValue, minValue } = useMemo(() => {
+    const revenue = createUniqueData(data.revenue);
+    const profit = createUniqueData(data.profit);
 
-    switch (selectedPeriod) {
-      case 'week':
-        return format(tick, 'EEE', { locale: fr }); // Ex: Lun, Mar
-      case 'month':
-        return format(tick, 'dd/MM', { locale: fr }); // Ex: 17/05
-      case 'year':
-        return format(tick, 'MMM yy', { locale: fr }); // Ex: Mai 24, Juin 24
-      default:
-        return '';
+    const allValues = [...revenue.map(d => d.value), ...profit.map(d => d.value)];
+    const max = Math.max(...allValues);
+    const min = Math.min(...allValues);
+
+    return {
+      revenueData: revenue,
+      profitData: profit,
+      maxValue: max,
+      minValue: min
+    };
+  }, [data.revenue, data.profit, createUniqueData]);
+
+  // Gestionnaire de clic sur les points de données
+  const handleDataPointClick = useCallback((index: number) => {
+    const revenuePoint = revenueData[index];
+
+    if (revenuePoint) {
+      setSelectedDataPoint({
+        index,
+        value: revenuePoint.value,
+        date: revenuePoint.date,
+        type: 'revenue'
+      });
+
+      onDataPointClick?.(index, revenuePoint.date.getTime(), revenuePoint.value);
     }
-  };
+  }, [revenueData, onDataPointClick]);
 
-  const getTooltipText = useCallback((datum: any) => {
-    // datum here is from deDupRevenueData if triggered by a revenue point
-    return formatTooltipValue(datum, selectedPeriod, deDupProfitData);
-  }, [selectedPeriod, deDupProfitData]);
-  
-  // Create a version of getTooltipText that doesn't return null for Victory
-  const getVictoryTooltipText = useCallback(({ datum }: { datum: any }) => {
-    const text = getTooltipText(datum);
-    return text === null ? '' : text;
-  }, [getTooltipText]);
+  // Calcul des statistiques pour l'affichage
+  const stats = useMemo(() => {
+    const totalRevenue = revenueData.reduce((sum, point) => sum + point.value, 0);
+    const totalProfit = profitData.reduce((sum, point) => sum + point.value, 0);
+    const avgRevenue = totalRevenue / revenueData.length;
+    const avgProfit = totalProfit / profitData.length;
+
+    return {
+      totalRevenue,
+      totalProfit,
+      avgRevenue,
+      avgProfit,
+      profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+    };
+  }, [revenueData, profitData]);
+
+  // Préparation des données avec labels formatés pour l'axe X
+  const chartDataWithLabels = useMemo(() => {
+    return revenueData.map((point) => {
+      let label = '';
+      switch (selectedPeriod) {
+        case 'week':
+          label = format(point.date, 'EEE', { locale: fr });
+          break;
+        case 'month':
+          label = format(point.date, 'dd/MM', { locale: fr });
+          break;
+        case 'year':
+          label = format(point.date, 'MMM yy', { locale: fr });
+          break;
+      }
+
+      return {
+        ...point,
+        label,
+        labelTextStyle: { color: '#666', fontSize: 10 }
+      };
+    });
+  }, [revenueData, selectedPeriod]);
+
+  const chartProfitDataWithLabels = useMemo(() => {
+    return profitData.map((point) => {
+      let label = '';
+      switch (selectedPeriod) {
+        case 'week':
+          label = format(point.date, 'EEE', { locale: fr });
+          break;
+        case 'month':
+          label = format(point.date, 'dd/MM', { locale: fr });
+          break;
+        case 'year':
+          label = format(point.date, 'MMM yy', { locale: fr });
+          break;
+      }
+
+      return {
+        ...point,
+        label,
+        labelTextStyle: { color: '#666', fontSize: 10 }
+      };
+    });
+  }, [profitData, selectedPeriod]);
 
   return (
     <View style={styles.chartContainer}>
-      <VictoryChart
-        width={width}
+      {/* Statistiques rapides */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>CA Total</Text>
+          <Text style={[styles.statValue, { color: 'rgba(0, 122, 255, 1)' }]}>
+            {formatCurrency(stats.totalRevenue)}
+          </Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Marge Total</Text>
+          <Text style={[styles.statValue, { color: 'rgba(52, 199, 89, 1)' }]}>
+            {formatCurrency(stats.totalProfit)}
+          </Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Taux Marge</Text>
+          <Text style={[styles.statValue, { color: stats.profitMargin > 0 ? 'rgba(52, 199, 89, 1)' : 'rgba(255, 59, 48, 1)' }]}>
+            {stats.profitMargin.toFixed(1)}%
+          </Text>
+        </View>
+      </View>
+
+      {/* Graphique principal */}
+      <LineChart
+        data={chartDataWithLabels}
+        data2={chartProfitDataWithLabels}
         height={height}
-        theme={VictoryTheme.material}
-        domainPadding={{ x: 20, y: 20 }}
-        scale={{ x: "time" }}
-        containerComponent={
-          <VictoryVoronoiContainer
-            voronoiDimension="x"
-            labels={({ datum }) => {
-              // Ne montrer le tooltip que pour les points de revenus
-              return datum._dataType === 'revenue' 
-                ? getVictoryTooltipText({ datum }) 
-                : '';
-            }}
-            // Désactiver tous les éléments sauf les points de scatter des revenus pour le tooltip
-            voronoiBlacklist={['profit-scatter', 'profit-line', 'revenue-line']}
-            labelComponent={
-              <VictoryTooltip
-                style={{ fontSize: 12, fill: 'white', fontWeight: 'bold' }}
-                flyoutStyle={{
-                  stroke: 'rgba(0,0,0,0.3)',
-                  fill: 'rgba(30,30,30,0.95)',
-                  padding: 10,
-                  pointerEvents: 'none'
-                }}
-                cornerRadius={5}
-                pointerLength={8}
-                constrainToVisibleArea
-              />
-            }
-          />
-        }
-      >
-      <VictoryAxis
-        tickFormat={formatXAxisTick}
-        style={{
-          tickLabels: { angle: -45, fontSize: 8 }
-        }}
+        width={width}
+
+        // Couleurs et styles
+        color1="rgba(0, 122, 255, 1)"
+        color2="rgba(52, 199, 89, 1)"
+        thickness1={2.5}
+        thickness2={2.5}
+
+        // Configuration des axes
+        formatYLabel={(value: string) => `${value}€`}
+        xAxisThickness={1}
+        yAxisThickness={1}
+        xAxisColor="rgba(0,0,0,0.1)"
+        yAxisColor="rgba(0,0,0,0.1)"
+        xAxisLabelTextStyle={{ color: '#666', fontSize: 10 }}
+
+        // Points de données interactifs - CORRIGÉ
+        showDataPointOnFocus
+        showTextOnFocus
+        onPress={handleDataPointClick}
+        dataPointsHeight1={6}
+        dataPointsWidth1={6}
+        dataPointsColor1="rgba(0, 122, 255, 1)"
+        dataPointsHeight2={6}
+        dataPointsWidth2={6}
+        dataPointsColor2="rgba(52, 199, 89, 1)"
+
+        // Tooltips
+        showValuesAsDataPointsText={false}
+
+        // Animations
+        animateOnDataChange={showAnimations}
+        animationDuration={800}
+
+        // Courbes lissées
+        curved
+
+        // Grille
+        rulesType="solid"
+        rulesColor="rgba(0,0,0,0.05)"
+
+        // Espacement et marges
+        initialSpacing={20}
+        spacing={Math.max(30, (width - 80) / Math.max(revenueData.length - 1, 1))}
+
+        // Configuration des domaines
+        maxValue={maxValue * 1.1}
+
+        // Légende sera ajoutée manuellement dans l'interface
       />
-      <VictoryAxis
-        dependentAxis
-        tickFormat={(t: number) => `${t}€`}
-      />
-      {/* Revenue Line */}
-      <VictoryLine
-        name="revenue-line"
-        data={deDupRevenueData}
-        style={{
-          data: { stroke: 'rgba(0, 122, 255, 1)', strokeWidth: 2.5 }
-        }}
-        events={onDataPointClick ? [{
-          target: "data",
-          eventHandlers: {
-            onPress: () => [{
-              target: "data",
-              mutation: (props) => {
-                const { index, x, y } = props;
-                onDataPointClick(index, x, y);
-                return null;
-              }
-            }]
-          }
-        }] : []}
-      />
-      
-      {/* Revenue data points - only these will trigger tooltips */}
-      <VictoryScatter
-        name="revenue-scatter" // Changed name for clarity with blacklist
-        data={deDupRevenueData}
-        size={4}
-        style={{
-          data: { 
-            fill: 'rgba(0, 122, 255, 1)',
-            opacity: 0 // Rendre les points invisibles mais toujours cliquables
-          }
-        }}
-      />
-      {/* Profit Line */}
-      <VictoryLine
-        name="profit-line"
-        data={deDupProfitData}
-        style={{
-          data: { stroke: 'rgba(52, 199, 89, 1)', strokeWidth: 2.5 }
-        }}
-         events={onDataPointClick ? [{
-          target: "data",
-          eventHandlers: {
-            onPress: () => [{
-              target: "data",
-              mutation: (props) => {
-                const { index, x, y } = props;
-                onDataPointClick(index, x, y);
-                return null;
-              }
-            }]
-          }
-        }] : []}
-      />
-      
-      {/* Profit data points - no tooltips */}
-      <VictoryScatter
-        name="profit-scatter" // Changed name for clarity with blacklist
-        data={deDupProfitData}
-        size={4}
-        style={{
-          data: { 
-            fill: 'rgba(52, 199, 89, 1)',
-            opacity: 0 // Rendre les points invisibles
-          }
-        }}
-      />
-      <VictoryLegend
-        x={width - 100}
-        y={50}
-        orientation="vertical"
-        data={[
-          { name: 'CA', symbol: { fill: 'rgba(0, 122, 255, 1)' } },
-          { name: 'Marge', symbol: { fill: 'rgba(52, 199, 89, 1)' } },
-        ]}
-      />
-      </VictoryChart>
-      <Text style={styles.interactionHint}>Touchez ou survolez les points pour plus de détails</Text>
+
+      {/* Légende manuelle */}
+      <View style={styles.legendContainer}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendColor, { backgroundColor: 'rgba(0, 122, 255, 1)' }]} />
+          <Text style={styles.legendText}>CA</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendColor, { backgroundColor: 'rgba(52, 199, 89, 1)' }]} />
+          <Text style={styles.legendText}>Marge</Text>
+        </View>
+      </View>
+
+      {/* Contrôles d'interaction */}
+      <View style={styles.controlsRow}>
+        <TouchableOpacity
+          style={[styles.controlButton, { opacity: showAnimations ? 1 : 0.5 }]}
+          onPress={() => setShowAnimations(!showAnimations)}
+        >
+          <Text style={styles.controlButtonText}>
+            {showAnimations ? '🎬' : '⏸️'} Animations
+          </Text>
+        </TouchableOpacity>
+
+        {selectedDataPoint && (
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => setSelectedDataPoint(null)}
+          >
+            <Text style={styles.controlButtonText}>✕ Désélectionner</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Détails du point sélectionné */}
+      {selectedDataPoint && (
+        <View style={styles.selectedPointInfo}>
+          <Text style={styles.selectedPointTitle}>
+            {format(selectedDataPoint.date, 'EEEE dd MMMM yyyy', { locale: fr })}
+          </Text>
+          <Text style={styles.selectedPointValue}>
+            CA: {formatCurrency(selectedDataPoint.value)}
+          </Text>
+          {profitData[selectedDataPoint.index] && (
+            <Text style={styles.selectedPointProfit}>
+              Marge: {formatCurrency(profitData[selectedDataPoint.index].value)}
+            </Text>
+          )}
+        </View>
+      )}
+
+      <Text style={styles.interactionHint}>
+        Touchez les points pour plus de détails • Animations {showAnimations ? 'activées' : 'désactivées'}
+      </Text>
     </View>
   );
 });
@@ -232,12 +309,98 @@ const styles = StyleSheet.create({
   chartContainer: {
     alignItems: 'center',
     width: '100%',
+    paddingVertical: 10,
   },
-  interactionHint: {
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 15,
+    paddingHorizontal: 10,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '500',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+    gap: 10,
+  },
+  controlButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 15,
+  },
+  controlButtonText: {
     fontSize: 12,
     color: '#666',
+    fontWeight: '500',
+  },
+  selectedPointInfo: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  selectedPointTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#333',
+    textTransform: 'capitalize',
+  },
+  selectedPointValue: {
+    fontSize: 14,
+    color: 'rgba(0, 122, 255, 1)',
+    fontWeight: '600',
     marginTop: 4,
+  },
+  selectedPointProfit: {
+    fontSize: 14,
+    color: 'rgba(52, 199, 89, 1)',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  interactionHint: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 8,
     fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+    gap: 20,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
 });
 
