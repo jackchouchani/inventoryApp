@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
-import 'material-icons/iconfont/material-icons.css';
+import '../../src/styles/material-icons-web.css';
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useAppTheme } from "../../src/contexts/ThemeContext";

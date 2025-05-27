@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useState } from 'react';
-import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FilterBarProps } from '../types/props';
 import { theme } from '../utils/theme';

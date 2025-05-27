@@ -7,18 +7,24 @@ import { QRCodeGenerator } from './QRCodeGenerator';
 import { captureException } from '@sentry/react-native';
 import { useAppTheme } from '../contexts/ThemeContext';
 
-// Import dynamique des dépendances lourdes
-let html2canvas: any;
-let jsPDF: any;
+// Import des dépendances
+import getJsPDF from '../utils/jspdf-polyfill';
 
-if (Platform.OS === 'web') {
-  import('html2canvas').then(module => {
-    html2canvas = module.default;
-  });
-  import('jspdf').then(module => {
-    jsPDF = module.jsPDF;
-  });
-}
+let html2canvas: any;
+
+// Import dynamique de html2canvas pour le web
+const loadHtml2Canvas = async () => {
+  if (Platform.OS === 'web' && !html2canvas) {
+    try {
+      const module = await import('html2canvas');
+      html2canvas = module.default;
+      console.log('[LabelGenerator] html2canvas loaded successfully');
+    } catch (error) {
+      console.error('[LabelGenerator] Failed to load html2canvas:', error);
+    }
+  }
+  return html2canvas;
+};
 
 // Fonction pour générer un QR code avec validation de format
 const generateQRCode = (value: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
@@ -123,15 +129,26 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
   // Fonction pour générer ou récupérer un QR code depuis le cache
   const getQRCodeImage = useCallback(async (qrValue: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
+    console.log('[LabelGenerator] getQRCodeImage called with:', qrValue, size, rotate);
+    
     // Créer une clé unique pour ce QR code
     const cacheKey = `${qrValue}_${size}_${rotate}`;
     
     // Vérifier si le QR code est déjà dans le cache
     if (qrCodeCache.current.has(cacheKey)) {
+      console.log('[LabelGenerator] QR code found in cache');
       return qrCodeCache.current.get(cacheKey);
     }
     
+    // Charger html2canvas si nécessaire
+    const html2canvasLib = await loadHtml2Canvas();
+    if (!html2canvasLib) {
+      console.error('[LabelGenerator] html2canvas not available');
+      return null;
+    }
+    
     // Générer un nouveau QR code
+    console.log('[LabelGenerator] Generating new QR code');
     setCurrentCode({ data: qrValue, size, rotate });
     
     // Attendre que le code soit rendu
@@ -143,8 +160,9 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     }
     
     try {
+      console.log('[LabelGenerator] Capturing QR code with html2canvas');
       // Utiliser une échelle réduite pour html2canvas
-      const canvas = await html2canvas(codeContainerRef.current, {
+      const canvas = await html2canvasLib(codeContainerRef.current, {
         backgroundColor: '#ffffff',
         scale: 1.5, // Réduit de 3-4 à 1.5
         logging: false,
@@ -154,6 +172,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       
       // Utiliser JPEG avec qualité réduite au lieu de PNG
       const qrCodeBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      console.log('[LabelGenerator] QR code captured successfully');
       
       // Ajouter au cache
       qrCodeCache.current.set(cacheKey, qrCodeBase64);
@@ -168,12 +187,16 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   }, []);
 
   const generateContainerPDF = useCallback(async () => {
+    console.log('[LabelGenerator] generateContainerPDF called');
+    const jsPDF = getJsPDF();
+    console.log('[LabelGenerator] jsPDF class:', jsPDF);
     if (!jsPDF) {
       throw new Error('jsPDF not loaded');
     }
 
     try {
       setLoading(true);
+      console.log('[LabelGenerator] Starting container PDF generation for', validItems.length, 'items');
 
       const isConnected = await checkNetworkConnection();
       if (!isConnected) {
@@ -185,15 +208,31 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       const labelHeight = 150;
       const margin = 5;
 
+      console.log('[LabelGenerator] Creating new jsPDF instance');
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: [labelWidth, labelHeight],
         compress: true // Activer la compression du PDF
       });
+      console.log('[LabelGenerator] jsPDF instance created successfully');
+      console.log('[LabelGenerator] doc instance:', doc);
+      console.log('[LabelGenerator] doc.setDrawColor exists:', typeof doc.setDrawColor);
+      console.log('[LabelGenerator] doc methods:', Object.getOwnPropertyNames(doc));
+      console.log('[LabelGenerator] doc prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(doc)));
+      
+      // Test direct de la méthode
+      try {
+        console.log('[LabelGenerator] Testing setDrawColor method...');
+        doc.setDrawColor(0, 0, 0);
+        console.log('[LabelGenerator] setDrawColor test successful');
+      } catch (testError) {
+        console.error('[LabelGenerator] setDrawColor test failed:', testError);
+      }
 
       for (let i = 0; i < validItems.length; i++) {
         const item = validItems[i];
+        console.log(`[LabelGenerator] Processing item ${i + 1}/${validItems.length}:`, item.name);
         
         // Assurer que chaque conteneur a un code QR
         if (!item.qrCode) {
@@ -262,9 +301,12 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       }
 
       const fileName = `etiquettes-containers-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
+      console.log('[LabelGenerator] Saving PDF with filename:', fileName);
       doc.save(fileName);
+      console.log('[LabelGenerator] PDF saved successfully');
       handleComplete();
     } catch (error) {
+      console.error('[LabelGenerator] Error in generateContainerPDF:', error);
       const err = error as Error;
       handleLabelPrintingError(err, 'LabelGenerator.generateContainerPDF');
       onError(err);
@@ -277,12 +319,16 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   }, [validItems, handleComplete, onError, getQRCodeImage]);
 
   const generateItemsPDF = useCallback(async () => {
+    console.log('[LabelGenerator] generateItemsPDF called');
+    const jsPDF = getJsPDF();
+    console.log('[LabelGenerator] jsPDF class:', jsPDF);
     if (!jsPDF) {
       throw new Error('jsPDF not loaded');
     }
 
     try {
       setLoading(true);
+      console.log('[LabelGenerator] Starting items PDF generation for', validItems.length, 'items');
 
       const isConnected = await checkNetworkConnection();
       if (!isConnected) {
@@ -298,12 +344,27 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       const marginXFixed = 11;
       const marginYFixed = 11;
 
+      console.log('[LabelGenerator] Creating new jsPDF instance for items');
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
         compress: true // Activer la compression du PDF
       });
+      console.log('[LabelGenerator] jsPDF instance created successfully for items');
+      console.log('[LabelGenerator] doc instance:', doc);
+      console.log('[LabelGenerator] doc.setDrawColor exists:', typeof doc.setDrawColor);
+      console.log('[LabelGenerator] doc methods:', Object.getOwnPropertyNames(doc));
+      console.log('[LabelGenerator] doc prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(doc)));
+      
+      // Test direct de la méthode
+      try {
+        console.log('[LabelGenerator] Testing setDrawColor method for items...');
+        doc.setDrawColor(0, 0, 0);
+        console.log('[LabelGenerator] setDrawColor test successful for items');
+      } catch (testError) {
+        console.error('[LabelGenerator] setDrawColor test failed for items:', testError);
+      }
 
       for (let i = 0; i < validItems.length; i++) {
         const item = validItems[i];
@@ -325,60 +386,90 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         const posX = marginXFixed + (col * labelWidth);
         const posY = marginYFixed + (row * labelHeight);
 
-        // Cadre de l'étiquette
+                // === DESIGN OPTIMISÉ POUR IMPRIMANTE THERMIQUE V2 ===
+        
+        // Marges internes pour l'étiquette
+        const padding = 0.8;
+        const innerWidth = labelWidth - (2 * padding);
+        const innerHeight = labelHeight - (2 * padding);
+        
+        // Cadre de l'étiquette simple et net
         doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.2);
+        doc.setLineWidth(0.4);
         doc.rect(posX, posY, labelWidth, labelHeight);
         
-        // Zone gauche pour le titre et le prix (environ 60% de la largeur)
-        const textZoneWidth = labelWidth * 0.58;
-        const qrZoneWidth = labelWidth - textZoneWidth;
-        const qrSize = 18;
-        const spaceBetween = 1;
+        // === ZONE QR CODE (en haut à droite, priorité) ===
+        const qrSize = 23; // QR code encore plus grand
+        const qrX = posX + labelWidth - qrSize - padding;
+        const qrY = posY + padding;
         
-        // Titre en haut à gauche
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'bold');
-        doc.setTextColor(0, 0, 0);
-        const titleMaxWidth = textZoneWidth - 2;
-        const titleText = doc.splitTextToSize(item.name, titleMaxWidth);
-        const limitedTitle = titleText.slice(0, 2);
-        doc.text(limitedTitle, posX + textZoneWidth/2, posY + 5, { align: 'center' });
-        
-        // Prix (si présent) - centré dans la zone de texte, plus gros
-        if (item.sellingPrice !== undefined) {
-          doc.setFontSize(14);
-          doc.setFont(undefined, 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text(`${item.sellingPrice}€`, posX + textZoneWidth/2, posY + 15, { align: 'center' });
-        }
-        
-        // Description brève (si présente) - sous le prix 
-        if (item.description) {
-          doc.setFontSize(6);
-          doc.setFont(undefined, 'italic');
-          doc.setTextColor(80, 80, 80);
-          const descMaxWidth = textZoneWidth - 4;
-          const description = doc.splitTextToSize(item.description, descMaxWidth);
-          const limitedDesc = description.slice(0, 1);
-          doc.text(limitedDesc, posX + textZoneWidth/2, posY + 19, { align: 'center' });
-        }
-        
-        // QR code sur la droite (optimisé pour scanner)
-        const qrCodeBase64 = await getQRCodeImage(item.qrCode, 220, 'N');
+        const qrCodeBase64 = await getQRCodeImage(item.qrCode, 300, 'N'); // Résolution maximale
         
         if (!qrCodeBase64) {
           doc.setFontSize(6);
-          doc.text('QR code non disponible', posX + labelWidth - textZoneWidth/2, posY + labelHeight/2, { align: 'center' });
+          doc.setTextColor(0, 0, 0);
+          doc.text('QR manquant', qrX + qrSize/2, qrY + qrSize/2, { align: 'center' });
         } else {
           doc.addImage(
             qrCodeBase64, 
             'JPEG', 
-            posX + textZoneWidth + spaceBetween + (qrZoneWidth - spaceBetween - qrSize)/2,
-            posY + (labelHeight - qrSize)/2,
+            qrX,
+            qrY,
             qrSize, 
             qrSize
           );
+        }
+        
+        // === ZONE TITRE (optimisée, à gauche du QR) ===
+        const titleStartY = posY + padding + 1.5;
+        const titleZoneWidth = labelWidth - qrSize - (3 * padding); // Espace à gauche du QR
+        
+        doc.setFontSize(13); // Titre encore plus grand
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(0, 0, 0);
+        
+        const titleText = doc.splitTextToSize(item.name, titleZoneWidth);
+        const limitedTitle = titleText.slice(0, 2); // Max 2 lignes
+        
+        // Aligner le titre à gauche
+        doc.text(limitedTitle, posX + padding, titleStartY, { align: 'left' });
+        
+                 // === ZONE PRIX (très visible, sous le titre) ===
+         let currentY = titleStartY + (limitedTitle.length * 3.8) + 1;
+         
+         if (item.sellingPrice !== undefined) {
+           // Prix sans encadrement, plus simple et plus propre
+           doc.setFontSize(20); // Prix très grand et visible
+           doc.setFont(undefined, 'bold');
+           doc.setTextColor(0, 0, 0);
+           
+           // Centrer le prix dans la zone de texte
+           doc.text(`${item.sellingPrice}€`, posX + titleZoneWidth/2, currentY, { align: 'center' });
+           
+           currentY += 6; // Espacement après le prix
+         }
+        
+        // === ZONE DESCRIPTION (espace restant optimisé) ===
+        if (item.description) {
+          // Calculer l'espace disponible pour la description
+          const descEndY = posY + labelHeight - padding - 0.5;
+          const descAvailableHeight = descEndY - currentY;
+          
+          if (descAvailableHeight > 2.5) { // Assez d'espace pour au moins une ligne
+            // Zone de texte sous le prix, à gauche du QR code
+            const descMaxWidth = titleZoneWidth;
+            
+            doc.setFontSize(9); // Description plus lisible
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(0, 0, 0);
+            
+            const description = doc.splitTextToSize(item.description, descMaxWidth);
+            const maxLines = Math.floor(descAvailableHeight / 2.5); // Lignes qui rentrent
+            const limitedDesc = description.slice(0, maxLines);
+            
+            // Aligner à gauche pour une meilleure lisibilité
+            doc.text(limitedDesc, posX + padding, currentY, { align: 'left' });
+          }
         }
 
         setProgress(((i + 1) / validItems.length) * 100);
@@ -434,7 +525,18 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
       <TouchableOpacity
         style={styles.button}
-        onPress={mode === 'containers' ? generateContainerPDF : generateItemsPDF}
+        onPress={() => {
+          console.log('[LabelGenerator] Button pressed, mode:', mode);
+          console.log('[LabelGenerator] validItems.length:', validItems.length);
+          console.log('[LabelGenerator] loading:', loading);
+          if (mode === 'containers') {
+            console.log('[LabelGenerator] Calling generateContainerPDF');
+            generateContainerPDF();
+          } else {
+            console.log('[LabelGenerator] Calling generateItemsPDF');
+            generateItemsPDF();
+          }
+        }}
         disabled={loading || validItems.length === 0}
       >
         <Text style={styles.buttonText}>

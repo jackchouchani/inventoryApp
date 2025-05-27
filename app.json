@@ -89,13 +89,8 @@
       "display": "standalone",
       "orientation": "portrait",
       "description": "Application de gestion d'inventaire",
-      "build": {
-        "babel": {
-          "include": [
-            "@expo/vector-icons"
-          ]
-        }
-      }
+      "bundler": "metro",
+      "output": "static"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",

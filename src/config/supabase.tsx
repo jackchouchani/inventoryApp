@@ -1,6 +1,4 @@
 import { createClient, AuthFlowType } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,38 +14,46 @@ if (process.env.NODE_ENV === 'production') {
   console.debug = () => {};
 }
 
-const customStorage = {
+// Storage personnalisé qui gère le cas où localStorage n'est pas disponible
+const webStorage = {
   getItem: async (key: string) => {
     try {
-      return await AsyncStorage.getItem(key);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+      return null;
     } catch (e) {
       return null;
     }
   },
   setItem: async (key: string, value: string) => {
     try {
-      await AsyncStorage.setItem(key, value);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+      }
     } catch (e) {
       console.error('Erreur lors de la sauvegarde de la session:', e);
     }
   },
   removeItem: async (key: string) => {
     try {
-      await AsyncStorage.removeItem(key);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(key);
+      }
     } catch (e) {
       console.error('Erreur lors de la suppression de la session:', e);
     }
   }
 };
 
-// Configuration de base
+// Configuration pour web app uniquement
 const supabaseConfig = {
   auth: {
     persistSession: true,
-    detectSessionInUrl: Platform.OS === 'web',
-    storage: Platform.OS === 'web' ? localStorage : customStorage,
+    detectSessionInUrl: true,
+    storage: webStorage,
     autoRefreshToken: true,
-    flowType: (Platform.OS === 'web' ? 'pkce' : 'implicit') as AuthFlowType,
+    flowType: 'pkce' as AuthFlowType,
     debug: false,
     logger: {
       error: () => {},

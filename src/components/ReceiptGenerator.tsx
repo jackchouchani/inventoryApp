@@ -3,13 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, 
 import logoAsset from '../../assets/Logo.png';
 import { uploadInvoiceToR2 } from '../utils/r2Client';
 
-let jsPDF: any;
-
-if (Platform.OS === 'web') {
-  import('jspdf').then(module => {
-    jsPDF = module.default ? module.default : module;
-  });
-}
+import getJsPDF from '../utils/jspdf-polyfill';
 
 interface Item {
   id: number;
@@ -140,6 +134,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   }, [items, itemPrices]);
 
   const generateReceipt = useCallback(async () => {
+    const jsPDF = getJsPDF();
     if (!jsPDF) {
       onError(new Error('jsPDF n\'a pas pu être chargé. Assurez-vous d\'être sur une plateforme web.'));
       return;
@@ -586,15 +581,15 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         </View>
       )}
       <TouchableOpacity
-        style={[styles.button, (loading || !jsPDF) && styles.buttonDisabled]}
+        style={[styles.button, (loading || !getJsPDF()) && styles.buttonDisabled]}
         onPress={generateReceipt}
-        disabled={loading || !jsPDF}
+        disabled={loading || !getJsPDF()}
       >
         <Text style={styles.buttonText}>
           {loading ? 'Génération...' : 'Générer la Facture'}
         </Text>
       </TouchableOpacity>
-      {!jsPDF && Platform.OS === 'web' && <Text style={styles.errorText}>jsPDF est en cours de chargement ou n'a pas pu être chargé.</Text>}
+      {!getJsPDF() && Platform.OS === 'web' && <Text style={styles.errorText}>jsPDF est en cours de chargement ou n'a pas pu être chargé.</Text>}
     </View>
   );
 };
