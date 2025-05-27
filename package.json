@@ -9,7 +9,7 @@
     "web": "expo start --web --clear",
     "web:https": "expo start --web --https",
     "build:web": "expo export -p web && cp -r public/* dist/",
-    "build:cloudflare": "expo export -p web && node scripts/prepare-cloudflare.js && cp -r public/* dist/"
+    "build:cloudflare": "expo export -p web && node scripts/prepare-cloudflare.js && cp public/_headers public/_redirects public/manifest.json public/service-worker.js public/offline.html dist/"
   },
   "dependencies": {
     "@0no-co/graphql.web": "^1.0.13",
