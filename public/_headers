@@ -1,0 +1,26 @@
+/_expo/static/js/*
+  Content-Type: application/javascript
+
+*.js
+  Content-Type: application/javascript
+
+*.mjs
+  Content-Type: application/javascript
+
+*.css
+  Content-Type: text/css
+
+*.json
+  Content-Type: application/json
+
+*.woff
+  Content-Type: font/woff
+
+*.woff2
+  Content-Type: font/woff2
+
+*.ttf
+  Content-Type: font/ttf
+
+*.otf
+  Content-Type: font/otf 

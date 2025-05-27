@@ -1,0 +1,27 @@
+[build]
+command = "npm run build:cloudflare"
+publish = "dist"
+
+[build.environment]
+NODE_VERSION = "18"
+NPM_VERSION = "9"
+
+[[headers]]
+for = "/_expo/static/js/*"
+[headers.values]
+Content-Type = "application/javascript"
+
+[[headers]]
+for = "*.js"
+[headers.values]
+Content-Type = "application/javascript"
+
+[[headers]]
+for = "*.mjs"
+[headers.values]
+Content-Type = "application/javascript"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200 

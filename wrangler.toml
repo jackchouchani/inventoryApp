@@ -1,0 +1,19 @@
+name = "inventory-app"
+compatibility_date = "2024-01-01"
+
+[env.production]
+routes = [
+  { pattern = "inventory.comptoirvintage.com/*", zone_name = "comptoirvintage.com" }
+]
+
+[[env.production.rules]]
+type = "Text"
+globs = ["**/*.js", "**/*.mjs"]
+[env.production.rules.result]
+"Content-Type" = "application/javascript"
+
+[[env.production.rules]]
+type = "Text"
+globs = ["**/*.css"]
+[env.production.rules.result]
+"Content-Type" = "text/css" 
