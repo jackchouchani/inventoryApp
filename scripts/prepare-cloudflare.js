@@ -18,14 +18,31 @@ function fixIndexHtml() {
   
   let content = fs.readFileSync(indexPath, 'utf8');
   
-  // Corriger le chemin vers entry.js
-  const originalScript = /src="\/Users\/[^"]*\/node_modules\/expo-router\/entry\.js"/g;
-  const newScript = 'src="/Users/jackch/inventoryApp/node_modules/expo-router/entry.js"';
+  // Corriger tous les chemins absolus vers entry.js
+  const patterns = [
+    {
+      regex: /src="\/Users\/[^"]*\/node_modules\/expo-router\/entry\.js"/g,
+      replacement: 'src="/Users/jackch/inventoryApp/node_modules/expo-router/entry.js"',
+      name: 'Users path'
+    },
+    {
+      regex: /src="\/opt\/buildhome\/repo\/[^"]*\/node_modules\/expo-router\/entry\.js"/g,
+      replacement: 'src="/opt/buildhome/repo/node_modules/expo-router/entry.js"',
+      name: 'Cloudflare buildhome path'
+    }
+  ];
   
-  if (content.match(originalScript)) {
-    content = content.replace(originalScript, newScript);
+  let modified = false;
+  patterns.forEach(pattern => {
+    if (content.match(pattern.regex)) {
+      content = content.replace(pattern.regex, pattern.replacement);
+      modified = true;
+      console.log(`✅ Chemin entry.js corrigé (${pattern.name}) dans index.html`);
+    }
+  });
+  
+  if (modified) {
     fs.writeFileSync(indexPath, content);
-    console.log('✅ Chemin entry.js corrigé dans index.html');
   } else {
     console.log('ℹ️  Aucun chemin entry.js à corriger');
   }
