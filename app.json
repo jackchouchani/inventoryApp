@@ -90,7 +90,7 @@
       "orientation": "portrait",
       "description": "Application de gestion d'inventaire",
       "bundler": "metro",
-      "output": "static"
+      "output": "single"
     },
     "owner": "jackch",
     "scheme": "inventoryapp",
