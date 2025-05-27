@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
 import { useStats } from '../../src/hooks/useStats';
 import { StatsChart } from '../../src/components/StatsChart';
@@ -101,7 +101,7 @@ const StatsScreen = () => {
             style={styles.backButton}
             onPress={() => router.push('/(tabs)/stock')}
           >
-            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Icon name="arrow_back_ios" size={18} color="#007AFF" />
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>

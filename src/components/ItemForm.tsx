@@ -6,7 +6,7 @@ import { useRefreshStore } from '../store/refreshStore';
 import { generateId } from '../utils/identifierManager';
 import { addItem } from '../store/itemsActions';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import type { MaterialIconName } from '../types/icons';
 import AdaptiveImage from './AdaptiveImage';
 import { handleError } from '../utils/errorHandler';
@@ -100,7 +100,7 @@ const ContainerOption = memo(({ container, isSelected, onSelect, theme }: Contai
         ]}
         onPress={() => onSelect(container.id)}
     >
-        <MaterialIcons
+        <Icon
             name="inbox"
             size={20}
             color={isSelected ? theme.text.onPrimary : theme.text.secondary}
@@ -135,7 +135,7 @@ const CategoryOption = memo(({ category, isSelected, onSelect, theme }: Category
         ]}
         onPress={() => onSelect(category.id)}
     >
-        <MaterialIcons
+        <Icon
             name={(category.icon as MaterialIconName) || 'folder'}
             size={20}
             color={isSelected ? theme.text.onPrimary : theme.text.secondary}
@@ -186,8 +186,8 @@ const ContainerList = memo(({ containers, selectedId, onSelect, onAddNew, theme 
                 }}
                 onPress={onAddNew}
             >
-                <MaterialIcons
-                    name="add-circle"
+                <Icon
+                    name="add_circle"
                     size={20}
                     color={theme.primary}
                     style={{ marginRight: 8 }}
@@ -233,8 +233,8 @@ const CategoryList = memo(({ categories, selectedId, onSelect, onAddNew, theme }
                 }}
                 onPress={onAddNew}
             >
-                <MaterialIcons
-                    name="add-circle"
+                <Icon
+                    name="add_circle"
                     size={20}
                     color={theme.primary}
                     style={{ marginRight: 8 }}
@@ -520,7 +520,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 return;
             }
             
-            let photoStorageUrl = item.photo_storage_url; // Utiliser l'URL existante si aucune nouvelle photo n'est sélectionnée
+            let photoStorageUrl = undefined; // Pour un nouvel article, pas d'URL existante
 
             // Si nous avons une image locale en attente d'upload
             if (localImage && localImage.needsUpload) {
@@ -552,9 +552,6 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                     setIsUploading(false);
                 }
             } else {
-                 // Si pas de nouvelle image locale, vérifier si l'image existante a été supprimée
-                 // Dans ItemForm (création), il n'y a pas d'image existante à supprimer de R2
-                 // Cette logique est plus pertinente dans ItemEditForm
                  console.log("[ItemForm] handleSubmit - Pas de nouvelle image locale à uploader.");
             }
 
@@ -750,7 +747,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                     resizeMode="cover"
                                     placeholder={
                                         <View style={styles.placeholderContainer}>
-                                            <MaterialIcons name="image" size={24} color={activeTheme.text.secondary} />
+                                            <Icon name="image" size={24} color={activeTheme.text.secondary} />
                                         </View>
                                     }
                                 />
@@ -759,19 +756,19 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                     onPress={handlePhotoDelete}
                                     disabled={isUploading}
                                 >
-                                    <MaterialIcons name="delete" size={24} color="#FF3B30" />
+                                    <Icon name="delete" size={24} color="#FF3B30" />
                                 </TouchableOpacity>
                                 
                                 {localImage?.needsUpload && (
                                     <View style={styles.newImageBadge}>
-                                        <MaterialIcons name="cloud-upload" size={14} color="#FFFFFF" />
+                                        <Icon name="cloud_upload" size={14} color="#FFFFFF" />
                                         <Text style={styles.newImageText}>En attente d'upload</Text>
                                     </View>
                                 )}
                                 
                                 {isUploading && (
                                     <View style={styles.uploadingOverlay}>
-                                        <MaterialIcons name="cloud-upload" size={32} color="#FFFFFF" />
+                                        <Icon name="cloud_upload" size={32} color="#FFFFFF" />
                                         <Text style={styles.uploadingText}>Upload en cours...</Text>
                                     </View>
                                 )}
@@ -782,7 +779,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                                 onPress={handleImagePreview}
                                 disabled={isUploading}
                             >
-                                <MaterialIcons name="add-photo-alternate" size={48} color={isUploading ? activeTheme.text.disabled : activeTheme.primary} />
+                                <Icon name="add_photo_alternate" size={48} color={isUploading ? activeTheme.text.disabled : activeTheme.primary} />
                                 <Text style={[styles.imagePickerText, isUploading && {color: activeTheme.text.disabled}]}>
                                     {isUploading ? "Upload en cours..." : "Sélectionner une image"}
                                 </Text>

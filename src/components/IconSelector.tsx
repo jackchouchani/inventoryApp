@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { Text, StyleSheet, TouchableOpacity, ScrollView, useColorScheme, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import * as Haptics from 'expo-haptics';
 import { CATEGORY_ICONS } from '../constants/categoryIcons';
 import { MaterialIconName } from '../types/icons';
@@ -53,7 +53,7 @@ export const IconSelector: React.FC<IconSelectorProps> = React.memo(({
             accessibilityState={{ selected: isSelected }}
             testID={`${testID}-item-${item.id}`}
           >
-            <MaterialIcons
+            <Icon
               name={item.icon}
               size={24}
               color={isSelected ? theme.colors.text.inverse : theme.colors.text.primary}

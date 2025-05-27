@@ -1,4 +1,3 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { MaterialIconName } from '../types/icons';
 
 export interface CategoryIcon {
@@ -8,7 +7,7 @@ export interface CategoryIcon {
 }
 
 export const CATEGORY_ICONS: CategoryIcon[] = [
-  { id: 'handbag', label: 'Sacs à main', icon: 'shopping-bag' },
+  { id: 'handbag', label: 'Sacs à main', icon: 'shopping_bag' },
   { id: 'coat', label: 'Manteaux', icon: 'style' },
   { id: 'dress', label: 'Robes', icon: 'accessibility' },
   { id: 'pants', label: 'Pantalons', icon: 'layers' },
@@ -22,5 +21,5 @@ export const CATEGORY_ICONS: CategoryIcon[] = [
   { id: 'lingerie', label: 'Lingerie', icon: 'favorite' },
   { id: 'scarf', label: 'Écharpes & Foulards', icon: 'texture' },
   { id: 'belt', label: 'Ceintures', icon: 'circle' },
-  { id: 'other', label: 'Autres', icon: 'more-horiz' },
+  { id: 'other', label: 'Autres', icon: 'more_horiz' },
 ]; 

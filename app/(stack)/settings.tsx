@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useSelector } from 'react-redux';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { useAuth } from '../../src/contexts/AuthContext';
@@ -137,8 +137,8 @@ const SettingsScreen = () => {
           style={styles.backButton} 
           onPress={() => router.push('/(tabs)/stock')}
         >
-          <MaterialIcons 
-            name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+          <Icon 
+            name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
             size={24} 
             color={activeTheme.primary} 
             style={Platform.OS === 'ios' ? { marginRight: -2 } : {}}
@@ -182,36 +182,36 @@ const SettingsScreen = () => {
         style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, borderTopColor: activeTheme.border}] }
         onPress={() => router.push('/(stack)/containers')}
       >
-        <MaterialIcons name="inbox" size={24} color={activeTheme.primary} />
+        <Icon name="inbox" size={24} color={activeTheme.primary} />
         <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Gérer les containers</Text>
-        <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
         onPress={() => router.push('/(stack)/categories')}
       >
-        <MaterialIcons name="category" size={24} color={activeTheme.primary} />
+        <Icon name="category" size={24} color={activeTheme.primary} />
         <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Gérer les catégories</Text>
-        <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
         onPress={() => router.push('/(stack)/labels')}
       >
-        <MaterialIcons name="label" size={24} color={activeTheme.primary} />
+        <Icon name="label" size={24} color={activeTheme.primary} />
         <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Générer des étiquettes</Text>
-        <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
         onPress={() => router.push('/(stack)/multi-receipt')}
       >
-        <MaterialIcons name="receipt" size={24} color={activeTheme.primary} />
+        <Icon name="receipt" size={24} color={activeTheme.primary} />
         <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Facture multi-articles</Text>
-        <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
@@ -219,14 +219,14 @@ const SettingsScreen = () => {
         onPress={handleClearImageCache}
         disabled={clearingCache}
       >
-        <MaterialIcons name="cleaning-services" size={24} color={activeTheme.warning} />
+        <Icon name="cleaning_services" size={24} color={activeTheme.warning} />
         <Text style={[styles.menuText, { color: clearingCache ? activeTheme.text.disabled : activeTheme.warning }]}>
           {clearingCache ? 'Nettoyage en cours...' : 'Vider le cache d\'images'}
         </Text>
         {clearingCache ? (
           <ActivityIndicator size="small" color={activeTheme.warning} />
         ) : (
-          <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+          <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
         )}
       </TouchableOpacity>
 
@@ -234,9 +234,9 @@ const SettingsScreen = () => {
         style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, borderTopColor: activeTheme.border, marginTop: 20 }]} 
         onPress={handleLogout}
       >
-        <MaterialIcons name="logout" size={24} color={activeTheme.danger.main} />
+        <Icon name="logout" size={24} color={activeTheme.danger.main} />
         <Text style={[styles.menuText, { color: activeTheme.danger.main }]}>Se déconnecter</Text>
-        <MaterialIcons name="chevron-right" size={24} color={activeTheme.text.secondary} />
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
     </View>
   );

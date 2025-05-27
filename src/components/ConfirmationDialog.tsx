@@ -9,7 +9,7 @@ import {
   Pressable,
   TouchableWithoutFeedback
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 
 interface ConfirmationDialogProps {
   visible: boolean;
@@ -50,7 +50,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
                 <Text style={styles.title}>{title}</Text>
                 {Platform.OS === 'web' && (
                   <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
-                    <MaterialIcons name="close" size={24} color="#666" />
+                    <Icon name="close" size={24} color="#666" />
                   </TouchableOpacity>
                 )}
               </View>

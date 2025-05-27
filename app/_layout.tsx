@@ -9,6 +9,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../src/config/queryClient';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { DataLoader } from '../src/components/DataLoader';
+import UpdateNotification from '../src/components/UpdateNotification';
 import * as Sentry from '@sentry/react-native';
 import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
 
@@ -64,7 +65,21 @@ export default function RootLayout() {
             <ThemeProvider>
               {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
               <Toast config={toastConfig} />
-              {Platform.OS === 'web' && <div id="datepicker-portal"></div>}
+              {Platform.OS === 'web' && (
+                <>
+                  <div id="datepicker-portal"></div>
+                  <UpdateNotification 
+                    onUpdateAvailable={(version) => {
+                      console.log('🔄 Nouvelle version PWA disponible:', version);
+                      Sentry.addBreadcrumb({
+                        message: `Mise à jour PWA disponible: ${version}`,
+                        level: 'info',
+                        category: 'pwa'
+                      });
+                    }}
+                  />
+                </>
+              )}
             </ThemeProvider>
           </AuthProvider>
         </Provider>

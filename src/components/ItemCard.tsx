@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, ActivityIndicator } from 'react-native';
 import { Item } from '../types/item';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 import { getImageUrl } from '../utils/r2Client';
@@ -113,7 +113,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
     if (errorMessage) {
       return (
         <View style={[styles.image, styles.noImageContainer]}>
-          <MaterialIcons name="error-outline" size={24} color={activeTheme.danger.text} />
+          <Icon name="error_outline" size={24} color={activeTheme.danger.text} />
           <Text style={styles.errorText}>Erreur</Text>
           <Text style={styles.errorDetail}>{errorMessage.substring(0, 25)}</Text>
         </View>
@@ -147,7 +147,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
     
     return (
       <View style={[styles.image, styles.noImageContainer]}>
-        <MaterialIcons name="image-not-supported" size={24} color={activeTheme.text.secondary} />
+        <Icon name="image_not_supported" size={24} color={activeTheme.text.secondary} />
       </View>
     );
   };
@@ -181,8 +181,8 @@ const ItemCard: React.FC<ItemCardProps> = ({
               ]}
               onPress={localStatus === 'sold' ? handleMarkAsAvailable : handleMarkAsSold}
             >
-              <MaterialIcons
-                name={localStatus === 'sold' ? 'restore' : 'shopping-cart'}
+              <Icon
+                name={localStatus === 'sold' ? 'restore' : 'shopping_cart'}
                 size={16}
                 color="#fff"
               />

@@ -12,8 +12,7 @@ import {
   type TextStyle
 } from 'react-native';
 import type { Category } from '../../src/types/category';
-import { MaterialIcons } from '@expo/vector-icons';
-import type { MaterialIconName } from '../../src/types/icons';
+import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useCategories } from '../../src/hooks/useCategories';
@@ -91,8 +90,8 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
     <Animated.View style={[styles.categoryCard, animatedStyle]}>
       <View style={styles.categoryContent}>
         <View style={styles.iconContainer}>
-          <MaterialIcons
-            name={(category.icon as MaterialIconName) || 'folder'}
+          <Icon
+            name={category.icon || 'folder'}
             size={24}
             color={iconColor}
           />
@@ -111,13 +110,13 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
           style={styles.actionButton}
           onPress={() => onEdit(category)}
         >
-          <MaterialIcons name="edit" size={20} color={editIconColor} />
+          <Icon name="edit" size={20} color={editIconColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete(category)}
         >
-          <MaterialIcons name="delete" size={20} color={deleteIconColor} />
+          <Icon name="delete" size={20} color={deleteIconColor} />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -254,7 +253,7 @@ const CategoryScreen: FC = () => {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <MaterialIcons name="error-outline" size={64} color="#FF3B30" />
+        <Icon name="error_outline" size={64} color="#FF3B30" />
         <Text style={styles.errorTitle}>Une erreur est survenue</Text>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity 
@@ -275,7 +274,7 @@ const CategoryScreen: FC = () => {
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
           >
-            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Icon name="arrow_back_ios" size={18} color="#007AFF" />
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -286,14 +285,14 @@ const CategoryScreen: FC = () => {
             style={styles.addButton}
             onPress={handleAddCategory}
           >
-            <MaterialIcons name="add" size={24} color="#fff" />
+            <Icon name="add" size={24} color="#fff" />
             <Text style={styles.addButtonText}>Ajouter une catégorie</Text>
           </TouchableOpacity>
         </View>
 
         {categories.length === 0 ? (
           <View style={styles.emptyState}>
-            <MaterialIcons name="category" size={64} color="#ccc" />
+            <Icon name="category" size={64} color="#ccc" />
             <Text style={styles.emptyStateText}>Aucune catégorie</Text>
             <Text style={styles.emptyStateSubtext}>
               Commencez par créer une nouvelle catégorie

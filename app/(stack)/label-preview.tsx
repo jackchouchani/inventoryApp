@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Platform }
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LabelGenerator } from '../../src/components/LabelGenerator'; 
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialIcons } from '@expo/vector-icons'; 
+import { Icon } from '../../src/components';
 import { useAppTheme } from '../../src/contexts/ThemeContext'; 
 
 // Define the structure of the data we expect for each label
@@ -67,8 +67,8 @@ const LabelPreviewScreen = () => {
             style={styles.backButton} 
             onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/labels')}
           >
-            <MaterialIcons 
-              name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+            <Icon 
+              name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
               size={24} 
               color={activeTheme.primary} 
               style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
@@ -96,8 +96,8 @@ const LabelPreviewScreen = () => {
           style={styles.backButton} 
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/labels')}
         >
-          <MaterialIcons 
-            name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+          <Icon 
+            name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
             size={24} 
             color={activeTheme.primary} 
             style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}

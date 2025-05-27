@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import * as Sentry from '@sentry/react-native';
 
 interface Props {
@@ -50,7 +50,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
       return (
         <View style={styles.container}>
-          <MaterialIcons name="error-outline" size={64} color="#FF3B30" />
+          <Icon name="error_outline" size={64} color="#FF3B30" />
           <Text style={styles.title}>Oups ! Une erreur est survenue</Text>
           <Text style={styles.message}>
             {this.state.error?.message || 'Une erreur inattendue s\'est produite'}

@@ -4,7 +4,7 @@ import { Item } from '../types/item';
 import { Container } from '../types/container';
 import { Category } from '../types/category';
 import { ItemEditForm } from './ItemEditForm';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components'; 
 import { useSelector } from 'react-redux';
 import { selectAllCategories } from '../store/categorySlice';
 import { selectAllContainers } from '../store/containersSlice';
@@ -62,7 +62,7 @@ const ItemListModal: React.FC<{
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Modifier l'article</Text>
             <TouchableOpacity style={styles.modalCloseButton} onPress={onCancel}>
-              <MaterialIcons name="close" size={24} color="#007AFF" />
+            <Icon name="close" size={24} color="#007AFF" />
             </TouchableOpacity>
           </View>
           {selectedItem && (
@@ -121,12 +121,12 @@ const ItemRow = memo(({
       <View style={styles.itemActions}>
         {item.status === 'available' ? (
           <TouchableOpacity onPress={handleMarkAsSold} style={styles.actionButton}>
-            <MaterialIcons name="shopping-cart" size={20} color="#fff" />
+            <Icon name="shopping_cart" size={20} color="#fff" />
             <Text style={styles.buttonText}>Vendu</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={handleMarkAsAvailable} style={[styles.actionButton, styles.restoreButton]}>
-            <MaterialIcons name="restore" size={20} color="#fff" />
+            <Icon name="restore" size={20} color="#fff" />
             <Text style={styles.buttonText}>En stock</Text>
           </TouchableOpacity>
         )}

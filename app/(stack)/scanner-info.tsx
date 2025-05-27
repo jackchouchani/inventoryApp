@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useRouter, Stack } from 'expo-router';
 import { useCameraPermissions, CameraView as ExpoCameraView } from 'expo-camera';
 import { supabase } from '../../src/config/supabase';
@@ -163,23 +163,23 @@ const WebCamera: React.FC<{
     };
   }, []); // Dépendances vides pour éviter les re-rendus
 
-  if (error) {
-    return (
-      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.9)' }]}>
-        <MaterialIcons name="error" size={48} color="#FF3B30" />
-        <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', marginVertical: 20, paddingHorizontal: 20 }}>{error}</Text>
-        <TouchableOpacity 
-          style={{ backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }}
-          onPress={() => {
-            setError(null);
-            window.location.reload();
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Réessayer</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+        if (error) {
+        return (
+          <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.9)' }]}>
+            <Icon name="error" size={48} color="#FF3B30" />
+            <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', marginVertical: 20, paddingHorizontal: 20 }}>{error}</Text>
+            <TouchableOpacity 
+              style={{ backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 }}
+              onPress={() => {
+                setError(null);
+                window.location.reload();
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -629,7 +629,7 @@ export default function ScannerInfoScreen() {
           title: 'Scanner',
           headerLeft: () => (
             <TouchableOpacity onPress={handleGoBack}>
-              <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
+              <Icon name="arrow_back" size={24} color="#007AFF" />
             </TouchableOpacity>
           )
         }} />
@@ -647,7 +647,7 @@ export default function ScannerInfoScreen() {
           title: 'Scanner',
           headerLeft: () => (
             <TouchableOpacity onPress={handleGoBack}>
-              <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
+              <Icon name="arrow_back" size={24} color="#007AFF" />
             </TouchableOpacity>
           )
         }} />
@@ -666,11 +666,11 @@ export default function ScannerInfoScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{
+              <Stack.Screen options={{
         title: 'Scanner QR Code',
         headerLeft: () => (
           <TouchableOpacity onPress={handleGoBack}>
-            <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
+            <Icon name="arrow_back" size={24} color="#007AFF" />
           </TouchableOpacity>
         )
       }} />
@@ -698,7 +698,7 @@ export default function ScannerInfoScreen() {
             style={styles.scanBackButton} 
             onPress={handleGoBack}
           >
-            <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+            <Icon name="arrow_back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       ) : (
@@ -715,19 +715,19 @@ export default function ScannerInfoScreen() {
                   handleRescan();
                 }}
               >
-                <MaterialIcons name="cancel" size={24} color="#ffffff" />
+                <Icon name="cancel" size={24} color="#ffffff" />
                 <Text style={styles.buttonText}>Annuler</Text>
               </TouchableOpacity>
             </View>
           ) : error ? (
-            <View style={styles.centerContent}>
-              <MaterialIcons name="error-outline" size={80} color="#FF3B30" />
-              <Text style={styles.errorMessage}>{error}</Text>
+                          <View style={styles.centerContent}>
+                <Icon name="error_outline" size={80} color="#FF3B30" />
+                <Text style={styles.errorMessage}>{error}</Text>
               <TouchableOpacity
                 style={styles.button}
                 onPress={handleRescan}
               >
-                <MaterialIcons name="refresh" size={24} color="#ffffff" />
+                <Icon name="refresh" size={24} color="#ffffff" />
                 <Text style={styles.buttonText}>Scanner à nouveau</Text>
               </TouchableOpacity>
             </View>
@@ -741,10 +741,10 @@ export default function ScannerInfoScreen() {
                     <Text style={styles.loadingText}>Chargement...</Text>
                   </View>
                 ) : imageError ? (
-                  <View style={[styles.itemImage, styles.errorImagePlaceholder]}>
-                    <MaterialIcons name="error-outline" size={40} color="#e53935" />
-                    <Text style={styles.errorText}>Erreur de chargement</Text>
-                  </View>
+                                      <View style={[styles.itemImage, styles.errorImagePlaceholder]}>
+                      <Icon name="error_outline" size={40} color="#e53935" />
+                      <Text style={styles.errorText}>Erreur de chargement</Text>
+                    </View>
                 ) : imageUrl ? (
                   <Image
                     source={{ uri: imageUrl || FALLBACK_IMAGE_URL }}
@@ -756,10 +756,10 @@ export default function ScannerInfoScreen() {
                     }}
                   />
                 ) : (
-                  <View style={styles.noImageContainer}>
-                    <MaterialIcons name="image-not-supported" size={80} color="#cccccc" />
-                    <Text style={styles.noImageText}>Pas d'image</Text>
-                  </View>
+                                      <View style={styles.noImageContainer}>
+                      <Icon name="image_not_supported" size={80} color="#cccccc" />
+                      <Text style={styles.noImageText}>Pas d'image</Text>
+                    </View>
                 )}
               </View>
               
@@ -808,13 +808,13 @@ export default function ScannerInfoScreen() {
                 ) : null}
                 
                 <View style={styles.buttonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.button, styles.rescanButton]}
-                    onPress={handleRescan}
-                  >
-                    <MaterialIcons name="qr-code-scanner" size={24} color="#ffffff" />
-                    <Text style={styles.buttonText}>Scanner un autre article</Text>
-                  </TouchableOpacity>
+                                      <TouchableOpacity
+                      style={[styles.button, styles.rescanButton]}
+                      onPress={handleRescan}
+                    >
+                      <Icon name="qr_code_scanner" size={24} color="#ffffff" />
+                      <Text style={styles.buttonText}>Scanner un autre article</Text>
+                    </TouchableOpacity>
                 </View>
               </View>
 
@@ -847,7 +847,7 @@ export default function ScannerInfoScreen() {
                       setIsMarkSoldModalVisible(true);
                     }}
                   >
-                    <MaterialIcons name="shopping-cart" size={24} color="#fff" />
+                    <Icon name="shopping_cart" size={24} color="#fff" />
                     <Text style={styles.buttonText}>Marquer comme vendu</Text>
                   </TouchableOpacity>
                   
@@ -855,7 +855,7 @@ export default function ScannerInfoScreen() {
                     style={[styles.button, styles.receiptButton]}
                     onPress={() => setIsReceiptGeneratorVisible(true)}
                   >
-                    <MaterialIcons name="receipt" size={24} color="#fff" />
+                    <Icon name="receipt" size={24} color="#fff" />
                     <Text style={styles.buttonText}>Générer un ticket de caisse</Text>
                   </TouchableOpacity>
                 </>
@@ -863,9 +863,9 @@ export default function ScannerInfoScreen() {
             </View>
           ) : ( 
             // Ce cas (pas de loading, pas d'erreur, pas d'item) ne devrait plus être atteint si le loading initial est bien géré
-            <View style={styles.centerContent}>
-              <MaterialIcons name="error-outline" size={80} color="#FF3B30" />
-              <Text style={styles.message}>Scannez un code pour commencer.</Text> 
+                          <View style={styles.centerContent}>
+                <Icon name="error_outline" size={80} color="#FF3B30" />
+                <Text style={styles.message}>Scannez un code pour commencer.</Text> 
               {/* Ou un message si le scan a été fait mais n'a rien retourné et pas d'erreur explicite */}
             </View>
           )}
@@ -933,7 +933,7 @@ export default function ScannerInfoScreen() {
               style={styles.closeButton}
               onPress={() => setIsReceiptGeneratorVisible(false)}
             >
-              <MaterialIcons name="close" size={24} color="#333" />
+              <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
             
             {scannedItem && (

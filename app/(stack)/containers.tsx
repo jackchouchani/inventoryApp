@@ -10,7 +10,7 @@ import { ContainerForm } from '../../src/components/ContainerForm';
 import { useInventoryData } from '../../src/hooks/useInventoryData';
 import { supabase } from '../../src/config/supabase';
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateItem, setItems } from '../../src/store/itemsActions';
 import { selectAllItems } from '../../src/store/itemsAdapter';
@@ -762,7 +762,7 @@ const ContainerScreen = () => {
           </View>
           <Text style={styles.itemPrice}>{item.sellingPrice !== null && item.sellingPrice !== undefined ? `${item.sellingPrice}€` : ''}</Text>
         </View>
-        <MaterialIcons name="add-circle-outline" size={24} color={itemListItemIconColor} />
+        <Icon name="add_circle_outline" size={24} color={itemListItemIconColor} />
       </TouchableOpacity>
     );
   });
@@ -784,13 +784,13 @@ const ContainerScreen = () => {
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
           >
-            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Icon name="arrow_back_ios" size={18} color="#007AFF" />
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.emptyStateContainer}>
-          <MaterialIcons name="inbox" size={64} color="#ccc" />
+          <Icon name="inbox" size={64} color="#ccc" />
           <Text style={styles.emptyStateText}>Aucun container disponible</Text>
           <TouchableOpacity 
             style={styles.addButton} 
@@ -868,7 +868,7 @@ const ContainerScreen = () => {
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
           >
-            <MaterialIcons name="arrow-back-ios" size={18} color="#007AFF" />
+            <Icon name="arrow_back_ios" size={18} color="#007AFF" />
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -877,7 +877,7 @@ const ContainerScreen = () => {
           style={styles.addButton} 
           onPress={() => setShowContainerForm(true)}
         >
-          <MaterialIcons name="add" size={24} color="#fff" style={styles.addIcon} />
+          <Icon name="add" size={24} color="#fff" style={styles.addIcon} />
           <Text style={styles.addButtonText}>Ajouter un Container</Text>
         </TouchableOpacity>
 
@@ -962,13 +962,13 @@ const ContainerScreen = () => {
                   style={styles.actionButton}
                   onPress={() => selectedContainer && handleEditContainer(selectedContainer)}
                 >
-                  <MaterialIcons name="edit" size={24} color="#007AFF" />
+                  <Icon name="edit" size={24} color="#007AFF" />
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.actionButton, styles.deleteButton]}
                   onPress={() => selectedContainer?.id && handleDeleteContainer(selectedContainer.id)}
                 >
-                  <MaterialIcons name="delete" size={24} color="#FF3B30" />
+                  <Icon name="delete" size={24} color="#FF3B30" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1072,7 +1072,7 @@ const ContainerScreen = () => {
                                   </View>
                                   <Text style={styles.itemPrice}>{item.sellingPrice}€</Text>
                                 </View>
-                                <MaterialIcons name="remove-circle-outline" size={24} color="#FF3B30" />
+                                <Icon name="remove_circle_outline" size={24} color="#FF3B30" />
                               </TouchableOpacity>
                             );
                           })

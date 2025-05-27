@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 
 // Composants
 import { Scanner } from '../../src/components/Scanner';
@@ -13,6 +13,7 @@ import { useScannerWorkflow } from '../../src/hooks/useScannerWorkflow';
 
 // Thème
 import { theme } from '../../src/utils/theme';
+
 
 // États de l'écran
 type ScanScreenMode = 'scanner' | 'manual';
@@ -58,8 +59,8 @@ const ScanScreen: React.FC = () => {
               style={styles.modeButton}
               onPress={handleModeChange}
             >
-              <MaterialIcons 
-                name={mode === 'manual' ? "qr-code-scanner" : "edit"} 
+              <Icon 
+                name={mode === 'manual' ? "qr_code_scanner" : "edit"} 
                 size={24} 
                 color="#fff" 
               />
@@ -78,14 +79,14 @@ const ScanScreen: React.FC = () => {
                 // Fonctionnalité d'aide à implémenter
               }}
             >
-              <MaterialIcons name="help-outline" size={24} color={theme.colors.primary} />
+              <Icon name="help_outline" size={24} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
 
           {mode === 'manual' ? (
             <View style={styles.manualContainer}>
               <View style={styles.manualContentWrapper}>
-                <MaterialIcons name="construction" size={64} color="#ddd" style={styles.comingSoonIcon} />
+                <Icon name="construction" size={64} color="#ddd" style={styles.comingSoonIcon} />
                 <Text style={styles.comingSoonText}>
                   Le mode manuel sera disponible prochainement.
                 </Text>
@@ -96,7 +97,7 @@ const ScanScreen: React.FC = () => {
                   style={styles.switchToScannerButton}
                   onPress={handleModeChange}
                 >
-                  <MaterialIcons name="qr-code-scanner" size={24} color="#fff" />
+                  <Icon name="qr_code_scanner" size={24} color="#fff" />
                   <Text style={styles.switchToScannerText}>
                     Utiliser le scanner
                   </Text>

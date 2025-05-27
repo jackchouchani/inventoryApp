@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StyleSheet, View, TouchableOpacity, Text } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import * as Sentry from '@sentry/react-native';
 
 interface CameraComponentProps {
@@ -49,7 +49,7 @@ export const CameraComponent: React.FC<CameraComponentProps> = ({ onCapture }) =
           style={styles.permissionButton} 
           onPress={requestPermission}
         >
-          <MaterialIcons name="camera" size={32} color="#007AFF" />
+          <Icon name="camera" size={32} color="#007AFF" />
         </TouchableOpacity>
       </View>
     );
@@ -73,13 +73,13 @@ export const CameraComponent: React.FC<CameraComponentProps> = ({ onCapture }) =
             onPress={handleCapture}
             disabled={!isCameraReady}
           >
-            <MaterialIcons name="camera" size={32} color="white" />
+            <Icon name="camera" size={32} color="white" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.flipButton}
             onPress={toggleCameraFacing}
           >
-            <MaterialIcons name="flip-camera-ios" size={32} color="white" />
+            <Icon name="flip_camera_ios" size={32} color="white" />
           </TouchableOpacity>
         </View>
       </CameraView>

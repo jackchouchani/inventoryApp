@@ -15,7 +15,7 @@ import {
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components'; 
 import Reanimated, {
     useAnimatedStyle,
     withRepeat,
@@ -30,6 +30,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import QrScanner from 'qr-scanner';
+import { checkCameraPermissionPWA, requestCameraPermissionPWA, isPWAMode, getCameraInstructionsPWA } from '../utils/pwaPermissions';
 
 // Types
 export type ScanMode = 'container' | 'items';
@@ -67,6 +68,7 @@ interface ScannerProps {
 type ScannerState = 
   | { status: 'initializing' }
   | { status: 'ready'; mode: ScanMode }
+  | { status: 'permission-needed'; message: string }
   | { status: 'container_confirmation'; container: Container }
   | { status: 'scanning_items'; container: Container; items: ScannedItem[] }
   | { status: 'processing'; container: Container; items: ScannedItem[]; progress: number }
@@ -575,7 +577,7 @@ const WebCamera: React.FC<{
         backgroundColor: 'rgba(0,0,0,0.9)',
         padding: 20,
       }}>
-        <MaterialIcons name="error" size={48} color="#FF3B30" />
+        <Icon name="error" size={48} color="#FF3B30" />
         <Text style={{
           color: '#fff',
           fontSize: 16,
@@ -819,15 +821,37 @@ export const Scanner: React.FC<ScannerProps> = ({
             try {
         console.log("Vérification des permissions de caméra...");
                 
-                // Sur le web, les permissions sont gérées automatiquement par le navigateur
+                // Sur le web et PWA, utiliser les nouvelles fonctions
                 if (Platform.OS === 'web') {
-                    console.log("Plateforme web détectée, initialisation directe");
+                    console.log("Plateforme web/PWA détectée");
+                    
+                    const pwaPermissionStatus = await checkCameraPermissionPWA();
+                    console.log("Statut permissions PWA:", pwaPermissionStatus);
+                    
+                    if (pwaPermissionStatus.denied) {
+                        console.log("Permission caméra refusée dans la PWA");
+                        updateScannerState({ 
+                            status: 'error', 
+                            message: `Permission caméra refusée.\n\n${getCameraInstructionsPWA()}` 
+                        });
+                        return;
+                    }
+                    
+                    if (pwaPermissionStatus.prompt && pwaPermissionStatus.isPWA) {
+                        console.log("Permission caméra en attente pour PWA");
+                        updateScannerState({ 
+                            status: 'permission-needed', 
+                            message: 'Autorisation caméra requise pour scanner les codes QR' 
+                        });
+                        return;
+                    }
+                    
                     setHasCheckedPermission(true);
                     updateScannerState({ status: 'ready', mode: 'container' });
                     return;
                 }
                 
-                // Logique mobile
+                // Logique mobile inchangée
                 if (permission?.granted) {
           console.log("Permission de caméra déjà accordée, passage à l'état ready");
                     setHasCheckedPermission(true);
@@ -900,60 +924,43 @@ export const Scanner: React.FC<ScannerProps> = ({
   // Demander la permission d'utiliser la caméra
     const handleRequestPermission = async () => {
         try {
-      console.log("Demande de permission de caméra initiée par l'utilisateur");
-      
-      // Sur le web, passer directement à l'état ready
-      if (Platform.OS === 'web') {
-        console.log("Plateforme web - initialisation directe du scanner");
-        updateScannerState({ status: 'ready', mode: 'container' });
-        return;
-      }
-      
-      // Logique mobile
+            if (Platform.OS === 'web') {
+                console.log("Demande de permission caméra pour PWA");
+                const granted = await requestCameraPermissionPWA();
+                
+                if (granted) {
+                    console.log("Permission PWA accordée");
+                    updateScannerState({ status: 'ready', mode: 'container' });
+                } else {
+                    console.log("Permission PWA refusée");
+                    updateScannerState({ 
+                        status: 'error', 
+                        message: `Permission caméra refusée.\n\n${getCameraInstructionsPWA()}` 
+                    });
+                }
+                return;
+            }
+            
+            // Logique mobile
+            console.log("Demande de permission de caméra mobile");
             const result = await requestPermission();
             if (result.granted) {
-        console.log("Permission accordée par l'utilisateur, initialisation du scanner...");
+                console.log("Permission mobile accordée");
                 await AsyncStorage.setItem(CAMERA_PERMISSION_KEY, 'granted');
-        
-        // Utiliser un délai avant de passer à ready pour éviter les problèmes d'initialisation
-        setTimeout(() => {
-          console.log("Initialisation après permission terminée, passage à l'état ready");
-          updateScannerState({ status: 'ready', mode: 'container' });
-        }, 1000);
+                updateScannerState({ status: 'ready', mode: 'container' });
             } else {
-                await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
-        
-        // Proposer d'ouvrir les paramètres
-        if (Platform.OS === 'ios') {
-                Alert.alert(
-                    'Permission requise',
-                    'L\'accès à la caméra est nécessaire pour scanner les codes QR. Veuillez l\'autoriser dans les paramètres de votre appareil.',
-                    [
-                        { text: 'Annuler', style: 'cancel' },
-                        { 
-                            text: 'Ouvrir les paramètres', 
-                            onPress: () => {
-                                Linking.openSettings();
-                  onClose();
-                            }
-                        }
-                    ]
-                );
-        } else {
-          Alert.alert(
-            'Permission requise',
-            'L\'accès à la caméra est nécessaire pour scanner les codes QR.',
-            [
-              { text: 'OK', onPress: onClose }
-            ]
-          );
-        }
+                console.log("Permission mobile refusée");
+                updateScannerState({ 
+                    status: 'error', 
+                    message: 'Permission de caméra refusée. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre appareil.' 
+                });
             }
         } catch (error) {
             console.error('Erreur lors de la demande de permission:', error);
-            if (Platform.OS !== 'web') {
-                await AsyncStorage.removeItem(CAMERA_PERMISSION_KEY);
-            }
+            updateScannerState({ 
+                status: 'error', 
+                message: 'Erreur lors de la demande de permission de caméra.' 
+            });
         }
     };
 
@@ -1233,7 +1240,7 @@ export const Scanner: React.FC<ScannerProps> = ({
     if (Platform.OS !== 'web' && !permission?.granted) {
         return (
         <View style={styles.centerContainer}>
-          <MaterialIcons name="camera-alt" size={64} color={activeTheme.primary} style={styles.icon} />
+          <Icon name="camera_alt" size={64} color={activeTheme.primary} style={styles.icon} />
                 <Text style={styles.permissionText}>
                     Nous avons besoin de votre permission pour utiliser la caméra
                 </Text>
@@ -1248,6 +1255,30 @@ export const Scanner: React.FC<ScannerProps> = ({
             onPress={onClose}
           >
             <Text style={styles.permissionButtonText}>Annuler</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // Gestion spécifique des permissions PWA
+    if (scannerState.status === 'permission-needed') {
+        return (
+            <View style={styles.centerContainer}>
+                <Icon name="camera_alt" size={64} color={activeTheme.primary} style={styles.icon} />
+                <Text style={styles.permissionText}>
+                    {scannerState.message}
+                </Text>
+                <TouchableOpacity
+                    style={styles.permissionButton}
+                    onPress={handleRequestPermission}
+                >
+                    <Text style={styles.permissionButtonText}>Autoriser la caméra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.permissionButton, styles.cancelButton]}
+                    onPress={onClose}
+                >
+                    <Text style={styles.permissionButtonText}>Annuler</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -1288,11 +1319,11 @@ export const Scanner: React.FC<ScannerProps> = ({
                   onPress={onClose}
                   disabled={scannerStateRef.current.status !== 'scanning_items'}
                 >
-                  <MaterialIcons name="close" size={24} color="#fff" />
+                  <Icon name="close" size={24} color="#fff" />
                 </TouchableOpacity>
                 
                 <View style={styles.modeIndicator}>
-                  <MaterialIcons name="shopping-bag" size={24} color="#fff" />
+                  <Icon name="shopping_bag" size={24} color="#fff" />
                   <Text style={styles.modeText}>Scanner des articles</Text>
                 </View>
 
@@ -1300,7 +1331,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                   style={styles.resetButton}
                   onPress={() => updateScannerState({ status: 'ready', mode: 'container' })}
                 >
-                  <MaterialIcons name="refresh" size={24} color="#fff" />
+                  <Icon name="refresh" size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
 
@@ -1318,7 +1349,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                     <AnimatedView style={[styles.scanLine, scanLineStyle]} />
                     
                     <AnimatedView style={[styles.successOverlay, successStyle]}>
-                      <MaterialIcons name="check-circle" size={80} color="#4CAF50" />
+                      <Icon name="check_circle" size={80} color="#4CAF50" />
                     </AnimatedView>
                   </AnimatedView>
 
@@ -1336,7 +1367,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                 {/* Colonne de droite : liste des articles */}
                 <View style={styles.listColumn}>
                   <View style={styles.listHeader}>
-                    <MaterialIcons name="format-list-bulleted" size={20} color="#fff" />
+                    <Icon name="format_list_bulleted" size={20} color="#fff" />
                     <Text style={styles.listHeaderText}>
                       Articles scannés
                     </Text>
@@ -1386,7 +1417,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                               }
                             }}
             >
-                <MaterialIcons name="close" size={20} color="#FF3B30" />
+                <Icon name="close" size={20} color="#FF3B30" />
             </TouchableOpacity>
                         </View>
                       )}
@@ -1397,7 +1428,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                     />
                   ) : (
                     <View style={styles.emptyState}>
-                      <MaterialIcons name="info" size={40} color="rgba(255,255,255,0.5)" />
+                      <Icon name="info" size={40} color="rgba(255,255,255,0.5)" />
                       <Text style={styles.emptyStateText}>
                         Scannez des articles pour les ajouter au container
                       </Text>
@@ -1409,7 +1440,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                     onPress={handleFinalizeScan}
                     disabled={scanningState.items.length === 0}
                   >
-                    <MaterialIcons name="check" size={24} color="#fff" />
+                    <Icon name="check" size={24} color="#fff" />
                     <Text style={styles.finishButtonText}>
                       Terminer et assigner les articles
                     </Text>
@@ -1453,11 +1484,11 @@ export const Scanner: React.FC<ScannerProps> = ({
                                 onPress={onClose}
                 disabled={scannerState.status !== 'ready' && (scannerState.status as any) !== 'scanning_items' && scannerState.status !== 'error'}
                             >
-                                <MaterialIcons name="close" size={24} color="#fff" />
+                                <Icon name="close" size={24} color="#fff" />
                             </TouchableOpacity>
                             
                             <View style={styles.modeIndicator}>
-                                <MaterialIcons 
+                                <Icon 
                   name={scannerState.status === 'ready' || scannerState.status === 'container_confirmation' ? 'inbox' : 'shopping-bag'} 
                                     size={24} 
                                     color="#fff" 
@@ -1476,7 +1507,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                                     style={styles.resetButton}
                   onPress={() => updateScannerState({ status: 'ready', mode: 'container' })}
                                 >
-                                    <MaterialIcons name="refresh" size={24} color="#fff" />
+                                    <Icon name="refresh" size={24} color="#fff" />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -1496,7 +1527,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                     
                     {/* Animation de succès de scan */}
                     <AnimatedView style={[styles.successOverlay, successStyle]}>
-                      <MaterialIcons name="check-circle" size={80} color="#4CAF50" />
+                      <Icon name="check_circle" size={80} color="#4CAF50" />
                                 </AnimatedView>
                   </AnimatedView>
                 )}
@@ -1506,7 +1537,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                                 <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
                                     <View style={styles.confirmationContainer}>
                                                 <View style={styles.confirmationHeader}>
-                                                    <MaterialIcons name="check-circle" size={40} color="#4CAF50" />
+                                                    <Icon name="check_circle" size={40} color="#4CAF50" />
                                                     <Text style={styles.confirmationTitle}>
                                                         Container scanné avec succès
                                                     </Text>
@@ -1519,14 +1550,14 @@ export const Scanner: React.FC<ScannerProps> = ({
                                                         style={[styles.button, styles.cancelButton]}
                           onPress={handleCancelContainer}
                                                     >
-                                                        <MaterialIcons name="close" size={20} color="#fff" />
+                                                        <Icon name="close" size={20} color="#fff" />
                                                         <Text style={styles.buttonText}>Annuler</Text>
                                                     </TouchableOpacity>
                                                     <TouchableOpacity
                                                         style={[styles.button, styles.confirmButton]}
                           onPress={handleConfirmContainer}
                                                     >
-                                                        <MaterialIcons name="qr-code-scanner" size={20} color="#fff" />
+                                                        <Icon name="qr_code_scanner" size={20} color="#fff" />
                                                         <Text style={styles.buttonText}>Scanner des articles</Text>
                                                     </TouchableOpacity>
                                                 </View>
@@ -1562,7 +1593,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                     <View style={styles.confirmationContainer}>
                       <View style={styles.confirmationHeader}>
                         <AnimatedView style={finalSuccessStyle}>
-                          <MaterialIcons name="check-circle" size={60} color="#4CAF50" />
+                          <Icon name="check_circle" size={60} color="#4CAF50" />
                         </AnimatedView>
                         <Text style={styles.confirmationTitle}>
                           Opération réussie !
@@ -1580,7 +1611,7 @@ export const Scanner: React.FC<ScannerProps> = ({
                   <BlurView intensity={80} tint="dark" style={styles.confirmationWrapper}>
                     <View style={styles.confirmationContainer}>
                       <View style={styles.confirmationHeader}>
-                        <MaterialIcons name="error" size={60} color="#FF3B30" />
+                        <Icon name="error" size={60} color="#FF3B30" />
                         <Text style={styles.confirmationTitle}>
                           Une erreur est survenue
                         </Text>

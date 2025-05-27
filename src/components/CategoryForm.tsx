@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   SafeAreaView
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useForm, Controller } from 'react-hook-form';
 import { debounce } from 'lodash';
 import type { MaterialIconName } from '../types/icons';
@@ -82,7 +82,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <MaterialIcons name="arrow-back-ios" size={24} color={theme.colors.primary} />
+              <Icon name="arrow_back_ios" size={24} color={theme.colors.primary} />
               <Text style={styles.backButtonText}>Retour</Text>
             </TouchableOpacity>
             <Text style={styles.title}>{title}</Text>
@@ -179,7 +179,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
-                  <MaterialIcons 
+                  <Icon 
                     name={initialData ? 'save' : 'add'} 
                     size={24} 
                     color="#fff" 

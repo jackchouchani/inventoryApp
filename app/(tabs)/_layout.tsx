@@ -1,10 +1,10 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
-import '../../src/styles/material-icons-web.css';
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useAppTheme } from "../../src/contexts/ThemeContext";
+import Icon from "../../src/components/Icon";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -35,15 +35,11 @@ export default function TabLayout() {
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <span
-                className="material-icons"
-                style={{
-                  fontSize: 22,
-                  color: activeTheme.primary
-                }}
-              >
-                qr_code_scanner
-              </span>
+              <Icon 
+                name="qr_code_scanner" 
+                size={22} 
+                color={activeTheme.primary} 
+              />
             </TouchableOpacity>
             <View style={[styles.separator, { backgroundColor: `${activeTheme.primary}33` }]} />
             <TouchableOpacity
@@ -51,15 +47,11 @@ export default function TabLayout() {
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <span
-                className="material-icons"
-                style={{
-                  fontSize: 22,
-                  color: activeTheme.primary
-                }}
-              >
-                bar_chart
-              </span>
+              <Icon 
+                name="bar_chart" 
+                size={22} 
+                color={activeTheme.primary} 
+              />
             </TouchableOpacity>
           </View>
         ),
@@ -70,15 +62,11 @@ export default function TabLayout() {
               style={styles.headerButton}
               activeOpacity={0.7}
             >
-              <span
-                className="material-icons"
-                style={{
-                  fontSize: 22,
-                  color: activeTheme.primary
-                }}
-              >
-                settings
-              </span>
+              <Icon 
+                name="settings" 
+                size={22} 
+                color={activeTheme.primary} 
+              />
             </TouchableOpacity>
           </View>
         ),
@@ -117,15 +105,7 @@ export default function TabLayout() {
             backgroundColor: activeTheme.background,
           },
           tabBarIcon: ({ color, size }: { color: string, size: number }) => (
-            <span
-              className="material-icons"
-              style={{
-                fontSize: size,
-                color: color
-              }}
-            >
-              inventory
-            </span>
+            <Icon name="inventory" size={size} color={color} />
           ),
         }}
       />
@@ -134,15 +114,7 @@ export default function TabLayout() {
         options={{
           title: "Ajouter",
           tabBarIcon: ({ color, size }) => (
-            <span
-              className="material-icons"
-              style={{
-                fontSize: size,
-                color: color
-              }}
-            >
-              add_circle_outline
-            </span>
+            <Icon name="add_circle_outline" size={size} color={color} />
           ),
         }}
       />
@@ -151,15 +123,7 @@ export default function TabLayout() {
         options={{
           title: "Scanner",
           tabBarIcon: ({ color, size }) => (
-              <span
-              className="material-icons"
-              style={{
-                fontSize: size,
-                color: color
-              }}
-            >
-              qr_code
-            </span>
+            <Icon name="qr_code" size={size} color={color} />
           ),
         }}
       />

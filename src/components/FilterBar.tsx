@@ -1,12 +1,13 @@
 import React, { memo, useCallback, useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, ScrollView, StyleSheet } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { FilterBarProps } from '../types/props';
 import { theme } from '../utils/theme';
+import type { MaterialIconName } from '../types/icons';
 
 // Composant FilterChip mémorisé pour éviter les re-rendus inutiles
 const FilterChip: React.FC<{
-  icon: keyof typeof MaterialIcons.glyphMap;
+  icon: MaterialIconName;
   label: string;
   selected: boolean;
   onPress: () => void;
@@ -22,7 +23,7 @@ const FilterChip: React.FC<{
       accessibilityState={{ selected }}
       accessibilityLabel={`Filtre ${label}`}
     >
-      <MaterialIcons 
+      <Icon 
         name={icon}
         size={18} 
         color={selected ? theme.colors.text.inverse : theme.colors.text.secondary} 
@@ -102,7 +103,7 @@ const FilterBarComponent = function FilterBar({
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <MaterialIcons 
+        <Icon 
           name="search" 
           size={24} 
           color={theme.colors.text.secondary} 
@@ -124,8 +125,8 @@ const FilterBarComponent = function FilterBar({
           accessibilityState={{ expanded: showFilters }}
           accessibilityLabel="Afficher les filtres"
         >
-          <MaterialIcons 
-            name={showFilters ? "filter-list-off" : "filter-list"} 
+          <Icon 
+            name={showFilters ? "filter_list_off" : "filter_list"} 
             size={24} 
             color={theme.colors.text.secondary} 
           />
@@ -146,7 +147,7 @@ const FilterBarComponent = function FilterBar({
                 {categories.map((category) => (
                   <FilterChip
                     key={category.id}
-                    icon={category.icon as keyof typeof MaterialIcons.glyphMap || 'folder'}
+                    icon={(category.icon as MaterialIconName) || 'folder'}
                     label={category.name}
                     selected={category.id === selectedCategoryId}
                     onPress={() => handleCategorySelect(category.id)}
@@ -182,13 +183,13 @@ const FilterBarComponent = function FilterBar({
             <Text style={styles.filterTitle}>Statut</Text>
             <View style={styles.filterChips}>
               {[
-                { value: 'all' as const, label: 'Tous', icon: 'all-inclusive' },
-                { value: 'available' as const, label: 'En stock', icon: 'check-circle' },
-                { value: 'sold' as const, label: 'Rupture', icon: 'remove-circle' }
+                { value: 'all' as const, label: 'Tous', icon: 'inventory' as MaterialIconName },
+                { value: 'available' as const, label: 'En stock', icon: 'check_circle' as MaterialIconName },
+                { value: 'sold' as const, label: 'Rupture', icon: 'close' as MaterialIconName }
               ].map((status) => (
                 <FilterChip
                   key={status.value}
-                  icon={status.icon as keyof typeof MaterialIcons.glyphMap}
+                  icon={status.icon}
                   label={status.label}
                   selected={selectedStatus === status.value}
                   onPress={() => handleStatusChange(status.value)}

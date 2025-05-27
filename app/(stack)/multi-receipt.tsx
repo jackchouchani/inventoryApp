@@ -12,7 +12,7 @@ import {
   FlatList,
   Image
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
 import { database } from '../../src/database/database';
 import { useQuery } from '@tanstack/react-query';
@@ -52,7 +52,7 @@ interface MultiReceiptData {
 const SearchBox = ({ query, setQuery }: { query: string; setQuery: (q: string) => void }) => {
   return (
     <View style={styles.searchBoxContainer}>
-      <MaterialIcons name="search" size={20} color="#777" style={styles.searchIcon} />
+      <Icon name="search" size={20} color="#777" style={styles.searchIcon} />
       <TextInput
         style={styles.searchBoxInput}
         value={query}
@@ -65,7 +65,7 @@ const SearchBox = ({ query, setQuery }: { query: string; setQuery: (q: string) =
       />
       {query.length > 0 && (
         <TouchableOpacity onPress={() => setQuery('')} style={styles.clearButton}>
-          <MaterialIcons name="clear" size={20} color="#777" />
+          <Icon name="clear" size={20} color="#777" />
         </TouchableOpacity>
       )}
     </View>
@@ -342,7 +342,7 @@ const MultiReceiptScreen = () => {
             />
           ) : (
             <View style={styles.noImagePlaceholder}>
-              <MaterialIcons name="image-not-supported" size={24} color="#999" />
+              <Icon name="image_not_supported" size={24} color="#999" />
             </View>
           )}
         </View>
@@ -359,9 +359,9 @@ const MultiReceiptScreen = () => {
         
         <View style={styles.selectionIndicator}>
           {isSelected ? (
-            <MaterialIcons name="check-circle" size={24} color={theme.colors.primary} />
+            <Icon name="check_circle" size={24} color={theme.colors.primary} />
           ) : (
-            <MaterialIcons name="radio-button-unchecked" size={24} color="#ccc" />
+            <Icon name="radio_button_unchecked" size={24} color="#ccc" />
           )}
         </View>
       </TouchableOpacity>
@@ -378,7 +378,7 @@ const MultiReceiptScreen = () => {
         <View style={styles.selectedItemHeader}>
           <Text style={styles.selectedItemName} numberOfLines={1}>{item.name}</Text>
           <TouchableOpacity onPress={() => toggleItemSelection(item)}>
-            <MaterialIcons name="close" size={20} color="#777" />
+            <Icon name="close" size={20} color="#777" />
           </TouchableOpacity>
         </View>
         
@@ -414,7 +414,7 @@ const MultiReceiptScreen = () => {
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color={theme.colors.primary} />
+          <Icon name="arrow_back" size={24} color={theme.colors.primary} />
           <Text style={styles.backButtonText}>Retour</Text>
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Facture Multiple</Text>
@@ -495,7 +495,7 @@ const MultiReceiptScreen = () => {
                 style={styles.generateReceiptButton}
                 onPress={handleGenerateReceipt}
               >
-                <MaterialIcons name="receipt" size={18} color="#fff" style={styles.buttonIcon} />
+                <Icon name="receipt" size={18} color="#fff" style={styles.buttonIcon} />
                 <Text style={styles.generateReceiptText}>Générer la facture</Text>
               </TouchableOpacity>
             </View>
@@ -527,12 +527,12 @@ const MultiReceiptScreen = () => {
               ) : (
                 searchQuery.trim() ? (
                   <View style={styles.emptyResultsContainer}>
-                    <MaterialIcons name="search-off" size={40} color="#ccc" />
+                    <Icon name="search-off" size={40} color="#ccc" />
                     <Text style={styles.emptyResultsText}>Aucun résultat trouvé</Text>
                   </View>
                 ) : (
                   <View style={styles.startSearchContainer}>
-                    <MaterialIcons name="search" size={40} color="#ccc" />
+                    <Icon name="search" size={40} color="#ccc" />
                     <Text style={styles.startSearchText}>
                       Commencez votre recherche pour trouver des articles
                     </Text>

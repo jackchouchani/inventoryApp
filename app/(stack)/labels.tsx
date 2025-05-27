@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, useId } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ScrollView, ActivityIndicator, FlatList, SafeAreaView } from 'react-native'; 
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import type { Category } from '../../src/types/category';
@@ -488,8 +488,8 @@ const LabelScreenContent = () => {
               </Text>
             )}
           </View>
-          <MaterialIcons
-            name={isSelected ? "check-box" : "check-box-outline-blank"}
+          <Icon
+            name={isSelected ? "check_box" : "check_box_outline_blank"}
             size={24}
             color={isSelected ? activeTheme.primary : activeTheme.text.secondary}
           />
@@ -509,7 +509,7 @@ const LabelScreenContent = () => {
     }
     return (
       <View style={styles.noResultsContainer}>
-        <MaterialIcons name="search-off" size={48} color={activeTheme.text.secondary} />
+        <Icon name="search_off" size={48} color={activeTheme.text.secondary} />
         <Text style={styles.noResultsText}>
           Aucun {showContainers ? 'conteneur trouvé' : 'article trouvé'}.
           {Platform.OS !== 'web' && '\n'}Essayez d'ajuster vos filtres ou votre recherche.
@@ -542,7 +542,7 @@ const LabelScreenContent = () => {
   >(({ value, onClick, type, hasValue }, ref) => (
     <TouchableOpacity style={styles.dateButton} onPress={onClick} ref={ref}>
       <View style={styles.dateButtonContentView}> 
-        <MaterialIcons name="calendar-today" size={20} color={activeTheme.text.secondary} style={styles.dateButtonIcon} />
+        <Icon name="calendar_today" size={20} color={activeTheme.text.secondary} style={styles.dateButtonIcon} />
         <Text style={styles.dateButtonTextValue}>{value || (type === 'start' ? 'Date début' : 'Date fin')}</Text>
         {hasValue && (
           <TouchableOpacity 
@@ -552,7 +552,7 @@ const LabelScreenContent = () => {
             }} 
             style={styles.dateClearButton}
           >
-            <MaterialIcons name="close" size={18} color={activeTheme.text.secondary} />
+            <Icon name="close" size={18} color={activeTheme.text.secondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -567,8 +567,8 @@ const LabelScreenContent = () => {
             style={styles.backButton} 
             onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
           >
-            <MaterialIcons 
-              name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+            <Icon 
+              name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
               size={24} 
               color={activeTheme.primary} 
               style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
@@ -594,8 +594,8 @@ const LabelScreenContent = () => {
             style={styles.backButton} 
             onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
           >
-            <MaterialIcons 
-              name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+            <Icon 
+              name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
               size={24} 
               color={activeTheme.primary} 
               style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
@@ -606,7 +606,7 @@ const LabelScreenContent = () => {
           <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
         </View>
         <View style={styles.centeredLoading}>
-          <MaterialIcons name="error-outline" size={48} color={activeTheme.danger.main} />
+          <Icon name="error_outline" size={48} color={activeTheme.danger.main} />
           <Text style={styles.errorText}>Erreur de chargement des données.</Text>
           <Text style={styles.errorDetails}>{staticDataError.message}</Text>
         </View>
@@ -621,8 +621,8 @@ const LabelScreenContent = () => {
           style={styles.backButton}
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
         >
-          <MaterialIcons 
-            name={Platform.OS === 'ios' ? 'arrow-back-ios' : 'arrow-back'} 
+          <Icon 
+            name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
             size={24} 
             color={activeTheme.primary} 
             style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
@@ -647,7 +647,7 @@ const LabelScreenContent = () => {
       </View>
 
       <View style={styles.searchBarContainer}>
-        <MaterialIcons name="search" size={24} color={activeTheme.text.secondary} style={styles.searchIcon} />
+        <Icon name="search" size={24} color={activeTheme.text.secondary} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder={showContainers ? "Rechercher conteneurs..." : "Rechercher articles..."}
@@ -658,7 +658,7 @@ const LabelScreenContent = () => {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
-            <MaterialIcons name="close" size={20} color={activeTheme.text.secondary} />
+            <Icon name="close" size={20} color={activeTheme.text.secondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -782,11 +782,11 @@ const LabelScreenContent = () => {
         </Text>
         <View style={{ flexDirection: 'row' }}>
           <TouchableOpacity style={styles.selectionButton} onPress={handleSelectAll}>
-            <MaterialIcons name="done-all" size={18} color={activeTheme.primary} />
+            <Icon name="done_all" size={18} color={activeTheme.primary} />
             <Text style={styles.selectionButtonText}>Tout Sél.</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.selectionButton} onPress={handleDeselectAll}>
-            <MaterialIcons name="deselect" size={18} color="#777" />
+            <Icon name="deselect" size={18} color="#777" />
             <Text style={styles.selectionButtonText}>Tout Désél.</Text>
           </TouchableOpacity>
         </View>
@@ -797,7 +797,7 @@ const LabelScreenContent = () => {
           style={styles.clearAllButton} 
           onPress={handleDeselectAll} 
         >
-          <MaterialIcons name="delete-sweep" size={20} color={activeTheme.primary} style={styles.buttonIcon} />
+          <Icon name="delete_sweep" size={20} color={activeTheme.primary} style={styles.buttonIcon} />
           <Text style={styles.clearAllButtonText}>Tout Vider</Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -819,7 +819,7 @@ const LabelScreenContent = () => {
             });
           }}
         >
-          <MaterialIcons name="label" size={20} color="#fff" style={styles.buttonIcon} />
+          <Icon name="label" size={20} color="#fff" style={styles.buttonIcon} />
           <Text style={styles.generateButtonText}>Générer Étiquettes ({showContainers ? selectedContainers.size : selectedItems.size})</Text>
         </TouchableOpacity>
       </View>

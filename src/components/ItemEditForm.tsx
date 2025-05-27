@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../../src/components';
 import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
@@ -68,7 +68,7 @@ const CategoryOption = memo(({
         style={[styles.option, isSelected && styles.optionSelected]}
         onPress={onSelect}
     >
-        <MaterialIcons
+        <Icon
             name={(category.icon as MaterialIconName) || 'folder'}
             size={20}
             color={isSelected ? '#fff' : '#666'}
@@ -105,8 +105,8 @@ const ContainerList = memo(({
                 style={styles.addNewOption}
                 onPress={onAddNew}
             >
-                <MaterialIcons
-                    name="add-circle"
+                <Icon
+                    name="add_circle"
                     size={20}
                     color="#007AFF"
                     style={styles.addIcon}
@@ -142,8 +142,8 @@ const CategoryList = memo(({
                 style={styles.addNewOption}
                 onPress={onAddNew}
             >
-                <MaterialIcons
-                    name="add-circle"
+                <Icon
+                    name="add_circle"
                     size={20}
                     color="#007AFF"
                     style={styles.addIcon}
@@ -312,7 +312,22 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const selectedAsset = result.assets[0];
-                const selectedUri = selectedAsset.uri;
+                let selectedUri = selectedAsset.uri;
+
+                // Traitement spécial pour le web (mobile et desktop)
+                if (Platform.OS === 'web') {
+                    // Pour le web, toujours privilégier le format base64
+                    if (selectedAsset.base64) {
+                        const mimeType = selectedAsset.mimeType || 'image/jpeg';
+                        const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
+                        selectedUri = base64Uri;
+                        console.log("[ItemEditForm] Image convertie en base64 pour le web");
+                    } else {
+                        console.error("handleImagePreview - Impossible d'obtenir l'image en base64");
+                        Alert.alert('Erreur', 'Impossible d\'obtenir l\'image en format compatible');
+                        return;
+                    }
+                }
 
                 console.log("[ItemEditForm] Image sélectionnée:", selectedUri.substring(0, 50) + "...");
 
@@ -682,7 +697,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                     </View>
                                 ) : photoError ? (
                                     <View style={[styles.image, styles.errorImagePlaceholder]}>
-                                        <MaterialIcons name="error-outline" size={24} color="#e53935" />
+                                        <Icon name="error_outline" size={24} color="#e53935" />
                                         <Text style={styles.errorText}>Erreur de chargement</Text>
                                     </View>
                                 ) : displayImageUri && (
@@ -702,7 +717,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                         onPress={handleImagePreview}
                                         disabled={isPhotoProcessing}
                                     >
-                                        <MaterialIcons name="edit" size={24} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
+                                        <Icon name="edit" size={24} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
                                     </TouchableOpacity>
                                     {(item.photo_storage_url !== null && item.photo_storage_url !== undefined) || localImageUri ? (
                                          <TouchableOpacity
@@ -710,13 +725,13 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                              onPress={handlePhotoDelete}
                                              disabled={isPhotoProcessing}
                                          >
-                                             <MaterialIcons name="delete" size={24} color={isPhotoProcessing ? "#cccccc" : "#FF3B30"} />
+                                             <Icon name="delete" size={24} color={isPhotoProcessing ? "#cccccc" : "#FF3B30"} />
                                          </TouchableOpacity>
                                     ) : null}
                                 </View>
                                 {localImageNeedsUpload && !isPhotoProcessing && (
                                     <View style={styles.newImageBadge}>
-                                        <MaterialIcons name="cloud-upload" size={14} color="#FFFFFF" />
+                                        <Icon name="cloud_upload" size={14} color="#FFFFFF" />
                                         <Text style={styles.newImageText}>En attente d'upload</Text>
                                     </View>
                                 )}
@@ -733,7 +748,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                 onPress={handleImagePreview}
                                 disabled={isPhotoProcessing}
                             >
-                                <MaterialIcons name="add-photo-alternate" size={48} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
+                                <Icon name="add_photo_alternate" size={48} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
                                 <Text style={[styles.imagePickerText, isPhotoProcessing && {color: "#cccccc"}]}>
                                     {isPhotoProcessing ? "Opération en cours..." : "Sélectionner une image"}
                                 </Text>
@@ -767,7 +782,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         style={[styles.button, styles.generateLabelButton]}
                         onPress={() => setShowLabelGenerator(true)}
                     >
-                        <MaterialIcons name="receipt" size={20} color="#fff" style={styles.buttonIcon} />
+                        <Icon name="receipt" size={20} color="#fff" style={styles.buttonIcon} />
                         <Text style={styles.buttonText}>Générer Étiquette</Text>
                     </TouchableOpacity>
 
@@ -802,7 +817,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         onPress={handleDelete}
                         disabled={isPhotoProcessing}
                     >
-                        <MaterialIcons name="delete" size={20} color="#fff" />
+                        <Icon name="delete" size={20} color="#fff" />
                         <Text style={styles.buttonText}>Supprimer</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -826,14 +841,14 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     >
                         {localImageNeedsUpload && !isPhotoProcessing ? (
                             <>
-                                <MaterialIcons name="cloud-upload" size={20} color="#fff" />
+                                <Icon name="cloud_upload" size={20} color="#fff" />
                                 <Text style={styles.buttonText}>Uploader & Sauvegarder</Text>
                             </>
                         ) : isPhotoProcessing ? (
                              <Text style={styles.buttonText}>Opération en cours...</Text>
                         ) : (
                             <>
-                                <MaterialIcons name="save" size={20} color="#fff" />
+                                <Icon name="save" size={20} color="#fff" />
                                 <Text style={styles.buttonText}>Mettre à jour</Text>
                             </>
                         )}
@@ -853,7 +868,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             />
             {photoError && (
                 <View style={styles.globalErrorContainer}>
-                    <MaterialIcons name="error-outline" size={24} color="#e53935" />
+                    <Icon name="error_outline" size={24} color="#e53935" />
                     <Text style={styles.globalErrorText}>{photoError.message}</Text>
                 </View>
             )}

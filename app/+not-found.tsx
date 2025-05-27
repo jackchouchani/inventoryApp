@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Icon } from '../src/components';
 import { useRouter } from 'expo-router';
 
 export default function NotFoundScreen() {
@@ -7,7 +7,7 @@ export default function NotFoundScreen() {
 
   return (
     <View style={styles.container}>
-      <MaterialIcons name="error-outline" size={64} color="#007AFF" />
+      <Icon name="error_outline" size={64} color="#007AFF" />
       <Text style={styles.title}>Page introuvable</Text>
       <Text style={styles.message}>
         Désolé, la page que vous recherchez n'existe pas ou n'est plus disponible.
@@ -16,7 +16,7 @@ export default function NotFoundScreen() {
         style={styles.button}
         onPress={() => router.replace('/(tabs)/stock')}
       >
-        <MaterialIcons name="home" size={20} color="#007AFF" />
+        <Icon name="home" size={20} color="#007AFF" />
         <Text style={styles.buttonText}>Retourner à l'accueil</Text>
       </TouchableOpacity>
     </View>
