@@ -1,5 +1,5 @@
-import { Platform, Alert } from 'react-native';
-import { MAX_PHOTO_SIZE } from '../constants/photos';
+import { Platform } from 'react-native';
+import { MAX_PHOTO_SIZE, PHOTO_COMPRESSION_OPTIONS } from '../constants/photos';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 /**
@@ -23,9 +23,9 @@ export const compressImage = async (uri: string): Promise<string> => {
     }
     
     // Pour les plateformes natives, utiliser expo-image-manipulator
-    let quality = 0.85;
-    let maxWidth = 1200;
-    let maxHeight = 1200;
+    let quality = PHOTO_COMPRESSION_OPTIONS.quality;
+    let maxWidth = PHOTO_COMPRESSION_OPTIONS.maxWidth;
+    let maxHeight = PHOTO_COMPRESSION_OPTIONS.maxHeight;
     
     console.log(`[imageCompression] Compression avec qualité ${quality*100}%, taille max ${maxWidth}x${maxHeight}`);
     
@@ -54,10 +54,10 @@ const compressImageWithCanvas = async (dataUri: string): Promise<string> => {
     try {
       const img = new Image();
       img.onload = () => {
-        // Déterminer les dimensions optimales (max 1200px)
+        // Déterminer les dimensions optimales (max 800px au lieu de 1200px)
         let width = img.width;
         let height = img.height;
-        const maxDimension = 1200;
+        const maxDimension = PHOTO_COMPRESSION_OPTIONS.maxWidth; // Utiliser 800 au lieu de 1200
         
         if (width > height && width > maxDimension) {
           height = (height * maxDimension) / width;
@@ -82,26 +82,23 @@ const compressImageWithCanvas = async (dataUri: string): Promise<string> => {
         // Dessiner l'image sur le canvas
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Déterminer la qualité de compression en fonction de la taille originale
-        let quality = 0.85;
+        // Déterminer la qualité de compression en fonction de la taille originale - plus agressif
+        let quality: number = PHOTO_COMPRESSION_OPTIONS.quality; // Commencer avec 0.6
         const base64Data = dataUri.split(',')[1] || '';
         const initialSize = (base64Data.length * 3) / 4;
         
-        if (initialSize > 10 * 1024 * 1024) { // > 10MB
-          quality = 0.6;
-        } else if (initialSize > 5 * 1024 * 1024) { // > 5MB
-          quality = 0.7;
+        if (initialSize > 5 * 1024 * 1024) { // > 5MB
+          quality = 0.3; // Compression maximale
         } else if (initialSize > 2 * 1024 * 1024) { // > 2MB
-          quality = 0.75;
+          quality = 0.4; // Compression forte
+        } else if (initialSize > 1 * 1024 * 1024) { // > 1MB
+          quality = 0.5; // Compression modérée
         } else if (initialSize <= MAX_PHOTO_SIZE) {
           // Si c'est déjà assez petit, compression légère
-          quality = 0.9;
+          quality = 0.7;
         }
         
         console.log(`[imageCompression] Canvas: compression avec qualité ${quality*100}%`);
-        
-        // Extraire le type MIME de l'URI d'origine
-        const mimeType = dataUri.split(';')[0].split(':')[1] || 'image/jpeg';
         
         // Convertir en JPEG pour une meilleure compression
         const compressedDataUri = canvas.toDataURL('image/jpeg', quality);

@@ -104,7 +104,7 @@ const WebCamera: React.FC<{
             onBarcodeScanned({ data: result.data });
           },
           {
-            onDecodeError: (error) => {
+            onDecodeError: () => {
               // Ne pas logger tous les erreurs de décodage car c'est normal
             },
             highlightScanRegion: true,
@@ -218,7 +218,7 @@ const WebCamera: React.FC<{
 
 // React QR Barcode Scanner implementation for web et mobile
 const CameraView = ({ onBarcodeScanned, style }: WebCameraProps) => {
-  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [, setIsCameraReady] = useState(false);
   
   return (
     <View style={style}>

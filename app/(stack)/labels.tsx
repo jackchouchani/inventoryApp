@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef, useId } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ScrollView, ActivityIndicator, FlatList, SafeAreaView } from 'react-native'; 
+import React, { useState, useMemo, useCallback, useEffect, useId } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, ActivityIndicator, FlatList, SafeAreaView } from 'react-native'; 
 import { Icon } from '../../src/components';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
@@ -375,11 +375,29 @@ const LabelScreenContent = () => {
 
   const handleDeselectAll = () => {
     if (showContainers) {
-      setSelectedContainers(new Set());
-      setSelectedContainersMap(new Map());
+      const containersToDeselect = displayedList as Container[];
+      const newSelectedContainers = new Set(selectedContainers);
+      const newContainersMap = new Map(selectedContainersMap);
+      
+      containersToDeselect.forEach(container => {
+        newSelectedContainers.delete(container.id);
+        newContainersMap.delete(container.id);
+      });
+      
+      setSelectedContainers(newSelectedContainers);
+      setSelectedContainersMap(newContainersMap);
     } else {
-      setSelectedItems(new Set());
-      setSelectedItemsMap(new Map());
+      const itemsToDeselect = displayedList as Item[];
+      const newSelectedItems = new Set(selectedItems);
+      const newItemsMap = new Map(selectedItemsMap);
+      
+      itemsToDeselect.forEach(item => {
+        newSelectedItems.delete(item.id);
+        newItemsMap.delete(item.id);
+      });
+      
+      setSelectedItems(newSelectedItems);
+      setSelectedItemsMap(newItemsMap);
     }
   };
 
@@ -766,16 +784,6 @@ const LabelScreenContent = () => {
         </View>
       )}
 
-      <FlatList
-        data={itemsToDisplayInList}
-        renderItem={renderItem}
-        keyExtractor={(item) => `${item.type}-${item.id}`}
-        ListEmptyComponent={ListEmptyComponent}
-        contentContainerStyle={styles.listContentContainer}
-        style={{ backgroundColor: 'transparent' }} 
-        extraData={showContainers ? selectedContainers : selectedItems}
-      />
-
       <View style={styles.selectionHeader}>
         <Text style={styles.selectionCountText}>
           {showContainers ? selectedContainers.size : selectedItems.size} {showContainers ? 'conteneur(s)' : 'article(s)'} sélectionné(s)
@@ -792,10 +800,26 @@ const LabelScreenContent = () => {
         </View>
       </View>
 
+      <FlatList
+        data={itemsToDisplayInList}
+        renderItem={renderItem}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        ListEmptyComponent={ListEmptyComponent}
+        contentContainerStyle={styles.listContentContainer}
+        style={{ backgroundColor: 'transparent' }} 
+        extraData={showContainers ? selectedContainers : selectedItems}
+      />
+
       <View style={styles.footer}>
         <TouchableOpacity 
           style={styles.clearAllButton} 
-          onPress={handleDeselectAll} 
+          onPress={() => {
+            // Vider TOUTES les sélections (pas seulement la liste actuelle)
+            setSelectedItems(new Set());
+            setSelectedItemsMap(new Map());
+            setSelectedContainers(new Set());
+            setSelectedContainersMap(new Map());
+          }} 
         >
           <Icon name="delete_sweep" size={20} color={activeTheme.primary} style={styles.buttonIcon} />
           <Text style={styles.clearAllButtonText}>Tout Vider</Text>

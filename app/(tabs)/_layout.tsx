@@ -2,6 +2,7 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../src/contexts/AuthContext";
 import { useAppTheme } from "../../src/contexts/ThemeContext";
 import Icon from "../../src/components/Icon";
@@ -10,6 +11,7 @@ export default function TabLayout() {
   const router = useRouter();
   const { user } = useAuth();
   const { activeTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
 
   // Si l'utilisateur n'est pas authentifié, ne pas rendre les onglets
   // La redirection sera gérée par le layout racine
@@ -75,14 +77,14 @@ export default function TabLayout() {
           backgroundColor: activeTheme.surface,
           borderTopWidth: 1,
           borderTopColor: activeTheme.border,
-          height: 65,
+          height: Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65,
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
           zIndex: 9999,
-          paddingBottom: Platform.OS === 'ios' ? 45 : 0,
-          paddingTop: 8,
+          paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 0,
+          paddingTop: Platform.OS === 'ios' ? 12 : 8,
         },
         tabBarActiveTintColor: activeTheme.primary,
         tabBarInactiveTintColor: activeTheme.text.secondary,
@@ -90,10 +92,12 @@ export default function TabLayout() {
           fontSize: 13,
           paddingBottom: Platform.OS === 'ios' ? 8 : 0,
           fontWeight: '500',
+          marginBottom: Platform.OS === 'ios' ? 4 : 0,
         },
         tabBarItemStyle: {
           padding: 0,
-          height: 65,
+          height: Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65,
+          paddingBottom: Platform.OS === 'ios' ? 8 : 0,
         },
       }}
     >

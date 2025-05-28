@@ -1,4 +1,5 @@
-// Alternative simple à jsPDF utilisant l'API native du navigateur
+// Alternative à jsPDF qui génère de vrais PDFs
+import { jsPDF as RealJsPDF } from 'jspdf';
 
 interface SimplePDFOptions {
   orientation?: 'portrait' | 'landscape';
@@ -28,23 +29,23 @@ export class SimplePDF {
   textColor: string;
 
   constructor(
-    orientation: string | SimplePDFOptions = 'portrait', 
-    unit: string = 'mm', 
-    format: string | number[] = 'a4', 
-    compress: boolean = false
+    orientationOrOptions?: string | SimplePDFOptions, 
+    unit?: string, 
+    format?: string | number[], 
+    compress?: boolean
   ) {
-    console.log('[SimplePDF] Constructor called with:', { orientation, unit, format, compress });
+    console.log('[SimplePDF] Constructor called with:', { orientationOrOptions, unit, format, compress });
     
     // Si le premier paramètre est un objet (nouveau format jsPDF)
-    if (typeof orientation === 'object') {
-      const options = orientation as SimplePDFOptions;
+    if (typeof orientationOrOptions === 'object') {
+      const options = orientationOrOptions as SimplePDFOptions;
       this.orientation = options.orientation || 'portrait';
       this.unit = options.unit || 'mm';
       this.format = options.format || 'a4';
       this.compress = options.compress || false;
     } else {
       // Format classique avec paramètres séparés
-      this.orientation = orientation || 'portrait';
+      this.orientation = orientationOrOptions || 'portrait';
       this.unit = unit || 'mm';
       this.format = format || 'a4';
       this.compress = compress || false;
@@ -79,8 +80,8 @@ export class SimplePDF {
   }
 
   setFont(family?: string, style?: string): void {
-    if (family) this.fontFamily = family;
-    if (style) this.fontStyle = style;
+    if (family !== undefined) this.fontFamily = family;
+    if (style !== undefined) this.fontStyle = style;
   }
 
   setTextColor(r: number, g: number, b: number): void {
@@ -150,7 +151,7 @@ export class SimplePDF {
   }
 
   addPage(format?: string | number[]): void {
-    this.content.push({ type: 'pageBreak', format });
+    this.content.push({ type: 'pageBreak', format: format || this.format });
     this.currentY = 10;
   }
 
@@ -179,83 +180,98 @@ export class SimplePDF {
     console.log('[SimplePDF] save() called with filename:', filename);
     
     try {
-      // Ouvrir un aperçu du PDF dans une nouvelle page
-      await this.openPreview(filename);
+      // Générer un vrai PDF avec jsPDF
+      await this.generateRealPDF(filename);
     } catch (error) {
-      console.error('[SimplePDF] Error opening preview:', error);
-      // Fallback : télécharger en HTML
-      await this.saveAsHTML(filename);
+      console.error('[SimplePDF] Error generating PDF:', error);
+      throw error;
     }
   }
 
-  private async openPreview(filename: string): Promise<void> {
-    const html = this.generateHTML();
+  private async generateRealPDF(filename: string): Promise<void> {
+    console.log('[SimplePDF] Generating real PDF with jsPDF');
     
-    // Créer un blob avec le contenu HTML
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    
-    // Ouvrir dans une nouvelle fenêtre/onglet
-    const previewWindow = window.open(url, '_blank');
-    
-    if (!previewWindow) {
-      console.warn('[SimplePDF] Popup blocked, falling back to download');
-      // Si le popup est bloqué, fallback vers téléchargement
-      await this.saveAsHTML(filename);
-      return;
-    }
-    
-    // Essayer d'utiliser l'API Web Share si disponible (mobile)
-    if (navigator.share) {
-      try {
-        // Attendre un peu que la page se charge
-        setTimeout(async () => {
-          try {
-            await navigator.share({
-              title: filename,
-              text: 'Étiquettes générées',
-              url: url
-            });
-            console.log('[SimplePDF] Shared successfully');
-          } catch (shareError) {
-            console.log('[SimplePDF] Share cancelled or failed:', shareError);
+    // Créer une instance jsPDF avec nos paramètres
+    const doc = new RealJsPDF({
+      orientation: this.orientation as any,
+      unit: this.unit as any,
+      format: this.format,
+      compress: this.compress
+    });
+
+    // Convertir nos éléments en appels jsPDF
+    this.content.forEach((item) => {
+      if (item.type === 'text') {
+        // Configurer la police
+        if (item.fontFamily) {
+          doc.setFont(item.fontFamily, item.fontStyle === 'bold' ? 'bold' : 'normal');
+        }
+        if (item.fontSize) {
+          doc.setFontSize(item.fontSize);
+        }
+        if (item.color && item.color !== 'black') {
+          // Convertir rgb(r,g,b) en valeurs séparées
+          const rgbMatch = item.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            doc.setTextColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
           }
-        }, 1000);
-      } catch (error) {
-        console.log('[SimplePDF] Web Share API not supported or failed');
+        }
+        
+        // Ajouter le texte avec l'alignement correct
+        const options: any = {};
+        if (item.align) {
+          options.align = item.align;
+        }
+        doc.text(item.text, item.x, item.y, options);
+        
+      } else if (item.type === 'image') {
+        doc.addImage(item.imageData, 'PNG', item.x, item.y, item.width, item.height);
+        
+      } else if (item.type === 'line') {
+        if (item.lineWidth) {
+          doc.setLineWidth(item.lineWidth);
+        }
+        if (item.color && item.color !== 'black') {
+          const rgbMatch = item.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            doc.setDrawColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+          }
+        }
+        doc.line(item.x1, item.y1, item.x2, item.y2);
+        
+      } else if (item.type === 'rect') {
+        if (item.lineWidth) {
+          doc.setLineWidth(item.lineWidth);
+        }
+        if (item.strokeColor && item.strokeColor !== 'black') {
+          const rgbMatch = item.strokeColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            doc.setDrawColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+          }
+        }
+        if (item.fillColor && item.fillColor !== 'transparent') {
+          const rgbMatch = item.fillColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (rgbMatch) {
+            doc.setFillColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+          }
+          doc.rect(item.x, item.y, item.width, item.height, 'FD'); // Fill and Draw
+        } else {
+          doc.rect(item.x, item.y, item.width, item.height, 'S'); // Stroke only
+        }
+        
+      } else if (item.type === 'pageBreak') {
+        // Ajouter une nouvelle page avec le format spécifié ou le format actuel
+        if (item.format) {
+          doc.addPage(item.format);
+        } else {
+          doc.addPage();
+        }
       }
-    }
-    
-    // Nettoyer l'URL après un délai
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 30000); // 30 secondes pour laisser le temps à l'utilisateur
-    
-    console.log('[SimplePDF] Preview opened in new tab');
-  }
+    });
 
-  private async saveAsHTML(filename: string): Promise<void> {
-    const html = this.generateHTML();
-    
-    // Créer un blob avec le contenu HTML
-    const blob = new Blob([html], { type: 'text/html' });
-    
-    // Créer un lien de téléchargement
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename.replace('.pdf', '.html');
-    
-    // Déclencher le téléchargement
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Nettoyer l'URL
-    URL.revokeObjectURL(url);
-    
-    console.log('[SimplePDF] File downloaded as HTML. User can print to PDF from browser.');
-    console.log('[SimplePDF] Instructions: Open the downloaded HTML file and use Ctrl+P (Cmd+P on Mac) to save as PDF');
+    // Télécharger le PDF
+    doc.save(filename);
+    console.log('[SimplePDF] Real PDF generated and downloaded');
   }
 
   generateHTML(): string {
@@ -444,8 +460,83 @@ export class SimplePDF {
 
   output(type: string): Blob | null {
     if (type === 'blob') {
-      const html = this.generateHTML();
-      return new Blob([html], { type: 'text/html' });
+      try {
+        // Créer une instance jsPDF avec nos paramètres
+        const doc = new RealJsPDF({
+          orientation: this.orientation as any,
+          unit: this.unit as any,
+          format: this.format,
+          compress: this.compress
+        });
+
+        // Convertir nos éléments en appels jsPDF (même logique que generateRealPDF)
+        this.content.forEach((item) => {
+          if (item.type === 'text') {
+            if (item.fontFamily) {
+              doc.setFont(item.fontFamily, item.fontStyle === 'bold' ? 'bold' : 'normal');
+            }
+            if (item.fontSize) {
+              doc.setFontSize(item.fontSize);
+            }
+            if (item.color && item.color !== 'black') {
+              const rgbMatch = item.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+              if (rgbMatch) {
+                doc.setTextColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+              }
+            }
+            
+            const options: any = {};
+            if (item.align) {
+              options.align = item.align;
+            }
+            doc.text(item.text, item.x, item.y, options);
+            
+          } else if (item.type === 'image') {
+            doc.addImage(item.imageData, 'PNG', item.x, item.y, item.width, item.height);
+            
+          } else if (item.type === 'line') {
+            if (item.lineWidth) {
+              doc.setLineWidth(item.lineWidth);
+            }
+            if (item.color && item.color !== 'black') {
+              const rgbMatch = item.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+              if (rgbMatch) {
+                doc.setDrawColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+              }
+            }
+            doc.line(item.x1, item.y1, item.x2, item.y2);
+            
+          } else if (item.type === 'rect') {
+            if (item.lineWidth) {
+              doc.setLineWidth(item.lineWidth);
+            }
+            if (item.strokeColor && item.strokeColor !== 'black') {
+              const rgbMatch = item.strokeColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+              if (rgbMatch) {
+                doc.setDrawColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+              }
+            }
+            if (item.fillColor && item.fillColor !== 'transparent') {
+              const rgbMatch = item.fillColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+              if (rgbMatch) {
+                doc.setFillColor(parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]));
+              }
+              doc.rect(item.x, item.y, item.width, item.height, 'FD');
+            } else {
+              doc.rect(item.x, item.y, item.width, item.height, 'S');
+            }
+            
+          } else if (item.type === 'pageBreak') {
+            doc.addPage(item.format);
+          }
+        });
+
+        // Retourner un vrai blob PDF
+        return doc.output('blob');
+      } catch (error) {
+        console.error('[SimplePDF] Error generating PDF blob:', error);
+        return null;
+      }
     }
     return null;
   }

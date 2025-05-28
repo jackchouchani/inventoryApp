@@ -6,8 +6,8 @@ import { Icon } from '../../src/components';
 import { deleteItem, updateItem } from '../store/itemsActions';
 import { useQueryClient } from '@tanstack/react-query';
 import type { MaterialIconName } from '../types/icons';
-import type { Item, ItemUpdate } from '../types/item';
-import { validatePrice, validateItemName } from '../utils/validation';
+import type { Item } from '../types/item';
+import { validateItemName } from '../utils/validation';
 import { handleError } from '../utils/errorHandler';
 import { checkPhotoPermissions } from '../utils/permissions';
 import { usePhoto } from '../hooks/usePhoto';
@@ -165,7 +165,10 @@ const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProp
 
 export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
     const containers = Array.isArray(propContainers) ? propContainers : [];
-    const categories = Array.isArray(propCategories) ? propCategories : [];
+    // Trier les catégories par created_at (plus ancien en premier) pour que "Bags" soit en premier
+    const categories = Array.isArray(propCategories) 
+        ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+        : [];
 
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
@@ -301,17 +304,31 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 return;
             }
 
+            console.log("[ItemEditForm] handleImagePreview - Lancement du sélecteur d'image...");
             const result = await ExpoImagePicker.launchImageLibraryAsync({
                 mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.7,
+                quality: 0.3,
                 base64: true,
                 exif: false,
             });
 
+            console.log("[ItemEditForm] handleImagePreview - Résultat du sélecteur:", {
+                canceled: result.canceled,
+                hasAssets: result.assets ? result.assets.length : 0
+            });
+
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const selectedAsset = result.assets[0];
+                console.log("[ItemEditForm] handleImagePreview - Asset sélectionné:", {
+                    uri: selectedAsset.uri ? selectedAsset.uri.substring(0, 50) + "..." : "null",
+                    hasBase64: !!selectedAsset.base64,
+                    mimeType: selectedAsset.mimeType,
+                    width: selectedAsset.width,
+                    height: selectedAsset.height
+                });
+
                 let selectedUri = selectedAsset.uri;
 
                 // Traitement spécial pour le web (mobile et desktop)
@@ -331,19 +348,22 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
                 console.log("[ItemEditForm] Image sélectionnée:", selectedUri.substring(0, 50) + "...");
 
-                 const isValid = await validatePhoto(selectedUri);
-                 if (!isValid) {
-                     console.warn("[ItemEditForm] handleImagePreview - Photo non valide.");
-                     return;
-                 }
+                // Pas de validation bloquante - on laisse l'upload gérer la compression et validation
+                console.log("[ItemEditForm] handleImagePreview - Validation ignorée, passage direct à la mise à jour des états");
 
-                 setLocalImageUri(selectedUri);
-                 setLocalImageNeedsUpload(true);
-
-                 setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
+                console.log("[ItemEditForm] handleImagePreview - Mise à jour des états...");
+                setLocalImageUri(selectedUri);
+                setLocalImageNeedsUpload(true);
+                setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
+                console.log("[ItemEditForm] handleImagePreview - États mis à jour avec succès");
 
             } else {
-                 console.log("[ItemEditForm] handleImagePreview - Sélection d'image annulée.");
+                console.log("[ItemEditForm] handleImagePreview - Sélection d'image annulée ou aucun asset.");
+                if (result.canceled) {
+                    console.log("[ItemEditForm] handleImagePreview - Utilisateur a annulé la sélection");
+                } else {
+                    console.log("[ItemEditForm] handleImagePreview - Aucun asset dans le résultat:", result);
+                }
             }
         } catch (error) {
             console.error("handleImagePreview - Erreur:", error);
@@ -617,7 +637,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
          if (savedState && savedState.categoryId === undefined && fetchedCategories && fetchedCategories.length > 0) {
              console.log("[ItemEditForm] useEffect - Restoring category selection after navigation.");
              const sortedCategories = [...fetchedCategories].sort((a, b) =>
-                 new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+                 new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
              );
               const uncategorized = sortedCategories.find(cat => cat.name === 'Sans catégorie');
               const defaultCategoryId = uncategorized ? uncategorized.id : sortedCategories[0].id;
@@ -662,10 +682,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
                 <View style={styles.priceContainer}>
                     <View style={styles.priceInputWrapper}>
-                        <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                        <View style={styles.priceLabelContainer}>
+                            <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                        </View>
                         <TextInput
                             style={[styles.input, styles.priceInput]}
-                            placeholder="0.00"
+                            placeholder="100"
                             value={editedItem.purchasePrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('purchasePrice', text)}
@@ -673,10 +695,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         />
                     </View>
                     <View style={styles.priceInputWrapper}>
-                        <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                        <View style={styles.priceLabelContainer}>
+                            <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                        </View>
                         <TextInput
                             style={[styles.input, styles.priceInput]}
-                            placeholder="0.00"
+                            placeholder="200"
                             value={editedItem.sellingPrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('sellingPrice', text)}
@@ -812,21 +836,23 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 </View>
 
                 <View style={styles.buttonContainer}>
-                    <TouchableOpacity
-                        style={[styles.deleteButton, isPhotoProcessing && styles.disabledButton]}
-                        onPress={handleDelete}
-                        disabled={isPhotoProcessing}
-                    >
-                        <Icon name="delete" size={20} color="#fff" />
-                        <Text style={styles.buttonText}>Supprimer</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.cancelButton, isPhotoProcessing && styles.disabledButton]}
-                        onPress={onCancel}
-                        disabled={isPhotoProcessing}
-                    >
-                        <Text style={styles.buttonText}>Annuler</Text>
-                    </TouchableOpacity>
+                    <View style={styles.secondaryButtonsRow}>
+                        <TouchableOpacity
+                            style={[styles.deleteButton, isPhotoProcessing && styles.disabledButton]}
+                            onPress={handleDelete}
+                            disabled={isPhotoProcessing}
+                        >
+                            <Icon name="delete" size={20} color="#fff" />
+                            <Text style={styles.buttonText}>Supprimer</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.cancelButton, isPhotoProcessing && styles.disabledButton]}
+                            onPress={onCancel}
+                            disabled={isPhotoProcessing}
+                        >
+                            <Text style={styles.buttonText}>Annuler</Text>
+                        </TouchableOpacity>
+                    </View>
                     <TouchableOpacity
                         style={[
                             styles.saveButton,
@@ -901,37 +927,37 @@ const styles = StyleSheet.create({
     },
     priceContainer: {
         flexDirection: 'column',
-        gap: 12,
+        gap: 16,
         marginBottom: 16,
         backgroundColor: '#fff',
-        borderRadius: 10,
-        padding: 12,
+        borderRadius: 12,
+        padding: 16,
         boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
     },
     priceInputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#f8f9fa',
-        borderRadius: 8,
-        padding: 10,
+        flexDirection: 'column',
+        gap: 8,
+    },
+    priceLabelContainer: {
+        marginBottom: 4,
     },
     priceLabel: {
         fontSize: 14,
         fontWeight: '600',
         color: '#666',
-        width: '40%',
     },
     priceInput: {
-        flex: 1,
-        backgroundColor: '#fff',
-        borderRadius: 6,
-        padding: 8,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        padding: 12,
         textAlign: 'right',
-        fontSize: 16,
+        fontSize: 18,
         color: '#007AFF',
         fontWeight: '600',
         marginBottom: 0,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+        minHeight: 48,
     },
     imageContainer: {
         marginTop: 8,
@@ -1002,11 +1028,14 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     buttonContainer: {
+        flexDirection: 'column',
+        marginTop: 16,
+        marginBottom: 16,
+        gap: 12,
+    },
+    secondaryButtonsRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 12,
-        marginBottom: 12,
-        gap: 10,
+        gap: 12,
     },
     button: {
         flex: 1,
@@ -1027,10 +1056,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        paddingVertical: 14,
+        paddingVertical: 16,
         paddingHorizontal: 20,
-        borderRadius: 10,
-        flex: 1,
+        borderRadius: 12,
+        minHeight: 56,
     },
     generateLabelButton: {
         backgroundColor: '#6c5ce7',
@@ -1048,19 +1077,24 @@ const styles = StyleSheet.create({
     cancelButton: {
         flex: 1,
         backgroundColor: '#8E8E93',
-        padding: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
         borderRadius: 12,
         alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 48,
     },
     deleteButton: {
         flex: 1,
         backgroundColor: '#FF3B30',
-        padding: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
         borderRadius: 12,
         alignItems: 'center',
-        flexDirection: 'row',
         justifyContent: 'center',
+        flexDirection: 'row',
         gap: 8,
+        minHeight: 48,
     },
     buttonText: {
         color: '#fff',
@@ -1168,14 +1202,13 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 10, // Padding fixe mais plus petit
     },
     modalContent: {
         backgroundColor: '#fff',
         borderRadius: 12,
-        padding: 20,
+        padding: 10,
         width: '100%',
-        maxWidth: 500,
         boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.25)',
         elevation: 5,
     },

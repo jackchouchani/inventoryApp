@@ -3,46 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform }
 import { handleLabelGenerationError, handleLabelPrintingError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/networkUtils';
 import { useRouter } from 'expo-router';
-import { QRCodeGenerator } from './QRCodeGenerator';
 import { captureException } from '@sentry/react-native';
 import { useAppTheme } from '../contexts/ThemeContext';
 
 // Import des dépendances
 import getJsPDF from '../utils/jspdf-polyfill';
-
-let html2canvas: any;
-
-// Import dynamique de html2canvas pour le web
-const loadHtml2Canvas = async () => {
-  if (Platform.OS === 'web' && !html2canvas) {
-    try {
-      const module = await import('html2canvas');
-      html2canvas = module.default;
-      console.log('[LabelGenerator] html2canvas loaded successfully');
-    } catch (error) {
-      console.error('[LabelGenerator] Failed to load html2canvas:', error);
-    }
-  }
-  return html2canvas;
-};
-
-// Fonction pour générer un QR code avec validation de format
-const generateQRCode = (value: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
-  // Valeur par défaut en cas de chaîne vide
-  if (!value) {
-    console.error("Valeur de QR code vide");
-    value = "INVALID_CODE";
-  }
-  
-  // QRCodeGenerator gère déjà la validation et correction du format
-  return (
-    <QRCodeGenerator 
-      value={value} 
-      size={size}
-      rotate={rotate}
-    />
-  );
-};
 
 interface Item {
   id: number;
@@ -78,9 +43,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const router = useRouter();
-  const codeContainerRef = useRef<HTMLDivElement>(null);
-  const [currentCode, setCurrentCode] = useState<{ data: string; size: number; rotate?: 'N' | 'R' | 'L' | 'I' } | null>(null);
-  
+
   // Cache pour les QR codes générés - optimisation majeure
   const qrCodeCache = useRef<Map<string, string>>(new Map());
 
@@ -104,30 +67,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     }
   }, [onComplete, router]);
 
-  const CodeRenderer = () => {
-    if (!currentCode) return null;
-
-    // QRCodeGenerator fait déjà la validation et correction des formats
-    return (
-      <div style={{ 
-        width: currentCode.size, 
-        height: currentCode.size, 
-        backgroundColor: 'white',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative'
-      }}>
-        {generateQRCode(
-          currentCode.data,
-          currentCode.size * 0.95,
-          currentCode.rotate
-        )}
-      </div>
-    );
-  };
-
-  // Fonction pour générer ou récupérer un QR code depuis le cache
+  // Fonction pour générer un QR code directement sans HTML
   const getQRCodeImage = useCallback(async (qrValue: string, size: number, rotate: 'N' | 'R' | 'L' | 'I' = 'N') => {
     console.log('[LabelGenerator] getQRCodeImage called with:', qrValue, size, rotate);
     
@@ -140,49 +80,31 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       return qrCodeCache.current.get(cacheKey);
     }
     
-    // Charger html2canvas si nécessaire
-    const html2canvasLib = await loadHtml2Canvas();
-    if (!html2canvasLib) {
-      console.error('[LabelGenerator] html2canvas not available');
-      return null;
-    }
-    
-    // Générer un nouveau QR code
-    console.log('[LabelGenerator] Generating new QR code');
-    setCurrentCode({ data: qrValue, size, rotate });
-    
-    // Attendre que le code soit rendu
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    if (!codeContainerRef.current) {
-      console.error('Référence au conteneur de code manquante');
-      return null;
-    }
-    
     try {
-      console.log('[LabelGenerator] Capturing QR code with html2canvas');
-      // Utiliser une échelle réduite pour html2canvas
-      const canvas = await html2canvasLib(codeContainerRef.current, {
-        backgroundColor: '#ffffff',
-        scale: 1.5, // Réduit de 3-4 à 1.5
-        logging: false,
-        useCORS: true,
-        allowTaint: true
+      // Utiliser QRCode.js pour générer directement un canvas
+      const QRCode = await import('qrcode');
+      console.log('[LabelGenerator] Generating QR code directly with QRCode.js');
+      
+      // Générer le QR code en tant que Data URL
+      const qrCodeDataURL = await QRCode.toDataURL(qrValue, {
+        width: size,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
       });
       
-      // Utiliser JPEG avec qualité réduite au lieu de PNG
-      const qrCodeBase64 = canvas.toDataURL('image/jpeg', 0.7);
-      console.log('[LabelGenerator] QR code captured successfully');
+      console.log('[LabelGenerator] QR code generated successfully');
       
       // Ajouter au cache
-      qrCodeCache.current.set(cacheKey, qrCodeBase64);
+      qrCodeCache.current.set(cacheKey, qrCodeDataURL);
       
-      return qrCodeBase64;
+      return qrCodeDataURL;
     } catch (qrError) {
-      console.error('Erreur lors de la capture du QR code:', qrError);
+      console.error('Erreur lors de la génération du QR code:', qrError);
       return null;
-    } finally {
-      setCurrentCode(null);
     }
   }, []);
 
@@ -209,12 +131,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       const margin = 5;
 
       console.log('[LabelGenerator] Creating new jsPDF instance');
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [labelWidth, labelHeight],
-        compress: true // Activer la compression du PDF
-      });
+      const doc = new jsPDF(
+        'portrait',
+        'mm',
+        [labelWidth, labelHeight]
+      );
       console.log('[LabelGenerator] jsPDF instance created successfully');
       console.log('[LabelGenerator] doc instance:', doc);
       console.log('[LabelGenerator] doc.setDrawColor exists:', typeof doc.setDrawColor);
@@ -251,7 +172,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         
         // Titre du container
         doc.setFontSize(22);
-        doc.setFont(undefined, 'bold');
+        doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         doc.text(item.name, labelWidth/2, margin + 15, { align: 'center' });
 
@@ -291,7 +212,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         // Description
         if (item.description) {
           doc.setFontSize(10);
-          doc.setFont(undefined, 'normal');
+          doc.setFont('helvetica', 'normal');
           doc.setTextColor(0, 0, 0);
           const description = doc.splitTextToSize(item.description, labelWidth - (2 * margin) - 10);
           doc.text(description, labelWidth/2, margin + 130, { align: 'center' });
@@ -301,9 +222,9 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       }
 
       const fileName = `etiquettes-containers-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
-      console.log('[LabelGenerator] Saving PDF with filename:', fileName);
       doc.save(fileName);
-      console.log('[LabelGenerator] PDF saved successfully');
+      
+      console.log('[LabelGenerator] PDF preview opened successfully');
       handleComplete();
     } catch (error) {
       console.error('[LabelGenerator] Error in generateContainerPDF:', error);
@@ -337,20 +258,19 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
       // Dimensions de la page A4 en mm
       const labelWidth = 48.5;
-      const labelHeight = 25.4;
+      const labelHeight = 25.2;
       const labelsPerRow = 4;
       const labelsPerColumn = 11;
       const totalLabelsPerPage = labelsPerRow * labelsPerColumn;
-      const marginXFixed = 11;
-      const marginYFixed = 11;
+      const marginXFixed = 11.2;
+      const marginYFixed = 11.3;
 
       console.log('[LabelGenerator] Creating new jsPDF instance for items');
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-        compress: true // Activer la compression du PDF
-      });
+      const doc = new jsPDF(
+        'portrait',
+        'mm',
+        'a4'
+      );
       console.log('[LabelGenerator] jsPDF instance created successfully for items');
       console.log('[LabelGenerator] doc instance:', doc);
       console.log('[LabelGenerator] doc.setDrawColor exists:', typeof doc.setDrawColor);
@@ -376,7 +296,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         }
 
         if (i > 0 && i % totalLabelsPerPage === 0) {
-          doc.addPage();
+          doc.addPage('a4');
         }
 
         const indexSurPage = i % totalLabelsPerPage;
@@ -390,13 +310,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         
         // Marges internes pour l'étiquette
         const padding = 0.8;
-        const innerWidth = labelWidth - (2 * padding);
-        const innerHeight = labelHeight - (2 * padding);
         
-        // Cadre de l'étiquette simple et net
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.4);
-        doc.rect(posX, posY, labelWidth, labelHeight);
+        // // Cadre de l'étiquette simple et net
+        // doc.setDrawColor(0, 0, 0);
+        // doc.setLineWidth(0.0);
+        // doc.rect(posX, posY, labelWidth, labelHeight);
         
         // === ZONE QR CODE (en haut à droite, priorité) ===
         const qrSize = 23; // QR code encore plus grand
@@ -421,11 +339,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         }
         
         // === ZONE TITRE (optimisée, à gauche du QR) ===
-        const titleStartY = posY + padding + 1.5;
+        const titleStartY = posY + padding + 3.5; // Plus bas
         const titleZoneWidth = labelWidth - qrSize - (3 * padding); // Espace à gauche du QR
         
-        doc.setFontSize(13); // Titre encore plus grand
-        doc.setFont(undefined, 'bold');
+        doc.setFontSize(10); // Titre plus petit
+        doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         
         const titleText = doc.splitTextToSize(item.name, titleZoneWidth);
@@ -435,12 +353,12 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
         doc.text(limitedTitle, posX + padding, titleStartY, { align: 'left' });
         
                  // === ZONE PRIX (très visible, sous le titre) ===
-         let currentY = titleStartY + (limitedTitle.length * 3.8) + 1;
+         let currentY = titleStartY + (limitedTitle.length * 2.2) + 6;
          
          if (item.sellingPrice !== undefined) {
            // Prix sans encadrement, plus simple et plus propre
-           doc.setFontSize(20); // Prix très grand et visible
-           doc.setFont(undefined, 'bold');
+           doc.setFontSize(20); // Prix plus raisonnable
+           doc.setFont('helvetica', 'bold');
            doc.setTextColor(0, 0, 0);
            
            // Centrer le prix dans la zone de texte
@@ -460,7 +378,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
             const descMaxWidth = titleZoneWidth;
             
             doc.setFontSize(9); // Description plus lisible
-            doc.setFont(undefined, 'normal');
+            doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 0, 0);
             
             const description = doc.splitTextToSize(item.description, descMaxWidth);
@@ -477,6 +395,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
       const fileName = `etiquettes-articles-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
       doc.save(fileName);
+      
+      console.log('[LabelGenerator] PDF preview opened successfully');
       handleComplete();
     } catch (error) {
       const err = error as Error;
@@ -490,22 +410,9 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     }
   }, [validItems, handleComplete, onError, getQRCodeImage]);
 
-  return (
-    <View style={styles.container}>
-      <div 
-        ref={codeContainerRef}
-        style={{ 
-          position: 'absolute', 
-          opacity: 1,
-          zIndex: -1, 
-          backgroundColor: 'white',
-          overflow: 'hidden'
-        }}
-      >
-        <CodeRenderer />
-      </div>
-
-      {!compact && (
+      return (
+      <View style={styles.container}>
+        {!compact && (
         <Text style={styles.title}>
           Génération des étiquettes
         </Text>

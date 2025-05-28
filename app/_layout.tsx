@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { View, ActivityIndicator, StyleSheet, Platform } from "react-native";
+import { View, ActivityIndicator, Platform } from "react-native";
 import { Slot, SplashScreen, router, useSegments } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";

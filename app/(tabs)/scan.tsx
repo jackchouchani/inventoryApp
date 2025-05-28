@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Icon } from '../../src/components';
 
@@ -52,7 +52,7 @@ const ScanScreen: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.safeArea}>
+      <View style={styles.safeArea}>
         <View style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -117,7 +117,7 @@ const ScanScreen: React.FC = () => {
             </View>
           )}
         </View>
-      </SafeAreaView>
+      </View>
     </ErrorBoundary>
   );
 };

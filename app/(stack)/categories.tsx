@@ -6,11 +6,11 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
   Platform,
   type ViewStyle,
   type TextStyle
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Category } from '../../src/types/category';
 import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
@@ -126,6 +126,7 @@ const CategoryCard: FC<CategoryCardProps> = React.memo(({
 const CategoryScreen: FC = () => {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
 
   const { categories, isLoading, error, handleDeleteCategory } = useCategories();
@@ -268,8 +269,8 @@ const CategoryScreen: FC = () => {
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.topBar}>
+      <View style={styles.container}>
+        <View style={[styles.topBar, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
@@ -328,7 +329,7 @@ const CategoryScreen: FC = () => {
           onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
         />
-      </SafeAreaView>
+      </View>
     </ErrorBoundary>
   );
 };
@@ -346,7 +347,7 @@ const getThemedStyles = (theme: ReturnType<typeof useAppTheme>['activeTheme']): 
     backgroundColor: theme.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
+    // marginTop sera défini dynamiquement avec useSafeAreaInsets
   },
   backButton: {
     flexDirection: 'row',

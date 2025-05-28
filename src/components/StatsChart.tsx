@@ -1,5 +1,5 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
-import { Dimensions, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { memo, useCallback, useMemo } from 'react';
+import { Dimensions, View, Text, StyleSheet, ScrollView } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -22,17 +22,6 @@ interface ChartDataPoint {
   date: Date;
   label?: string;
   labelTextStyle?: object;
-  dataPointText?: string;
-  textShiftY?: number;
-  textShiftX?: number;
-  showStrip?: boolean;
-  stripHeight?: number;
-  stripColor?: string;
-  stripOpacity?: number;
-  dataPointHeight?: number;
-  dataPointWidth?: number;
-  dataPointColor?: string;
-  dataPointRadius?: number;
 }
 
 const StatsChart: React.FC<StatsChartProps> = memo(({
@@ -42,79 +31,173 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
   onDataPointClick,
   selectedPeriod
 }) => {
-  const [selectedDataPoint, setSelectedDataPoint] = useState<{
-    index: number;
-    value: number;
-    date: Date;
-    type: 'revenue' | 'profit';
-    profitValue?: number;
-  } | null>(null);
-  const [showAnimations, setShowAnimations] = useState(true);
+  // S'assurer que les valeurs numériques sont valides
+  const safeWidth = useMemo(() => {
+    const screenWidth = Dimensions.get('window').width;
+    return Math.max(200, Math.min(screenWidth - 40, width || screenWidth - 40));
+  }, [width]);
+
+  const safeHeight = useMemo(() => {
+    return Math.max(200, height || 220);
+  }, [height]);
+
+  // Calculer la largeur optimale du graphique selon le nombre de points et la période
+  const getOptimalChartWidth = useCallback((dataLength: number, screenWidth: number) => {
+    const minSpacing = 40; // Espacement minimum entre les points
+    const padding = 80; // Padding pour les labels Y
+    
+    // Pour la période mensuelle sur mobile, on veut un graphique plus large pour être scrollable
+    if (selectedPeriod === 'month' && dataLength > 15) {
+      return Math.max(screenWidth, dataLength * minSpacing + padding);
+    }
+    
+    // Pour les autres cas, utiliser la largeur de l'écran
+    return screenWidth;
+  }, [selectedPeriod]);
 
   // Helper function to create unique data points by date
   const createUniqueData = useCallback((points: TimeSeriesDataPoint[]): ChartDataPoint[] => {
+    if (!points || points.length === 0) {
+      return [];
+    }
+
     const uniqueDataMap = new Map<number, ChartDataPoint>();
 
     for (const point of points) {
+      if (!point || typeof point.x === 'undefined' || typeof point.y === 'undefined') {
+        continue;
+      }
+
       const date = new Date(point.x);
+      const value = Number(point.y);
+      
+      // Vérifier que la date et la valeur sont valides
+      if (isNaN(date.getTime()) || isNaN(value)) {
+        continue;
+      }
+
       const time = date.getTime();
 
       if (!uniqueDataMap.has(time)) {
         uniqueDataMap.set(time, {
-          value: point.y,
+          value: value,
           date: date,
-          dataPointRadius: 4,
-          showStrip: true,
-          stripHeight: height,
-          stripColor: 'rgba(0,0,0,0.1)',
-          stripOpacity: 0.3,
         });
       }
     }
 
     return Array.from(uniqueDataMap.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [height]);
+  }, []);
+
+  // Fonction pour grouper les données par semaine si nécessaire (pour la période mensuelle)
+  const groupDataByWeek = useCallback((points: ChartDataPoint[]): ChartDataPoint[] => {
+    if (!points || points.length === 0) {
+      return [];
+    }
+
+    if (selectedPeriod !== 'month' || points.length <= 15) {
+      return points; // Pas besoin de grouper
+    }
+
+    const weeklyData = new Map<string, { values: number[], dates: Date[] }>();
+    
+    points.forEach(point => {
+      if (!point || !point.date || isNaN(point.value)) {
+        return;
+      }
+
+      const date = new Date(point.date);
+      // Obtenir le début de la semaine (lundi)
+      const startOfWeek = new Date(date);
+      const day = startOfWeek.getDay();
+      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+      startOfWeek.setDate(diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      const weekKey = startOfWeek.toISOString();
+      
+      if (!weeklyData.has(weekKey)) {
+        weeklyData.set(weekKey, { values: [], dates: [] });
+      }
+      
+      weeklyData.get(weekKey)!.values.push(point.value);
+      weeklyData.get(weekKey)!.dates.push(point.date);
+    });
+
+    return Array.from(weeklyData.entries()).map(([weekKey, data]) => {
+      const weekDate = new Date(weekKey);
+      const avgValue = data.values.reduce((sum, val) => sum + val, 0) / data.values.length;
+      
+      return {
+        value: avgValue,
+        date: weekDate,
+      };
+    }).sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [selectedPeriod]);
 
   // Préparation des données optimisées
-  const { revenueData, profitData, maxValue, minValue } = useMemo(() => {
-    const revenue = createUniqueData(data.revenue);
-    const profit = createUniqueData(data.profit);
+  const { revenueData, profitData, maxValue, chartWidth, isGroupedByWeek, hasValidData } = useMemo(() => {
+    const rawRevenue = createUniqueData(data.revenue || []);
+    const rawProfit = createUniqueData(data.profit || []);
+    
+    // Grouper par semaine si nécessaire pour améliorer la lisibilité
+    const revenue = groupDataByWeek(rawRevenue);
+    const profit = groupDataByWeek(rawProfit);
+    
+    const isGrouped = revenue.length !== rawRevenue.length;
 
-    const allValues = [...revenue.map(d => d.value), ...profit.map(d => d.value)];
-    const max = Math.max(...allValues);
-    const min = Math.min(...allValues);
+    // S'assurer qu'on a des données valides
+    const hasData = revenue.length > 0 || profit.length > 0;
+    
+    if (!hasData) {
+      return {
+        revenueData: [],
+        profitData: [],
+        maxValue: 100, // Valeur par défaut pour éviter NaN
+        chartWidth: safeWidth,
+        isGroupedByWeek: false,
+        hasValidData: false
+      };
+    }
+
+    const allValues = [...revenue.map(d => d.value), ...profit.map(d => d.value)].filter(v => !isNaN(v));
+    const max = allValues.length > 0 ? Math.max(...allValues) : 100;
+    
+    const optimalWidth = getOptimalChartWidth(revenue.length, safeWidth);
 
     return {
       revenueData: revenue,
       profitData: profit,
-      maxValue: max,
-      minValue: min
+      maxValue: Math.max(max, 1), // S'assurer qu'on a au moins 1 pour éviter les divisions par 0
+      chartWidth: optimalWidth,
+      isGroupedByWeek: isGrouped,
+      hasValidData: true
     };
-  }, [data.revenue, data.profit, createUniqueData]);
+  }, [data.revenue, data.profit, createUniqueData, groupDataByWeek, getOptimalChartWidth, safeWidth]);
 
   // Gestionnaire de clic sur les points de données
   const handleDataPointClick = useCallback((item: any, index: number) => {
     console.log('Point de données cliqué:', { item, index });
     
     // Vérifier que l'index est valide
-    if (index >= 0 && index < revenueData.length) {
+    if (index >= 0 && index < revenueData.length && revenueData[index]) {
       const revenuePoint = revenueData[index];
-      const profitPoint = profitData[index];
-
-      setSelectedDataPoint({
-        index,
-        value: revenuePoint.value,
-        date: revenuePoint.date,
-        type: 'revenue',
-        profitValue: profitPoint?.value || 0
-      });
-
       onDataPointClick?.(index, revenuePoint.date.getTime(), revenuePoint.value);
     }
-  }, [revenueData, profitData, onDataPointClick]);
+  }, [revenueData, onDataPointClick]);
 
   // Calcul des statistiques pour l'affichage
   const stats = useMemo(() => {
+    if (!hasValidData) {
+      return {
+        totalRevenue: 0,
+        totalProfit: 0,
+        avgRevenue: 0,
+        avgProfit: 0,
+        profitMargin: 0
+      };
+    }
+
     // Pour des données mensuelles, prendre la dernière valeur (cumul du mois)
     // ou la somme selon le contexte
     let totalRevenue, totalProfit;
@@ -125,36 +208,44 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
       totalProfit = profitData.length > 0 ? profitData[profitData.length - 1].value : 0;
     } else {
       // Pour semaine/année, sommer toutes les valeurs
-      totalRevenue = revenueData.reduce((sum, point) => sum + point.value, 0);
-      totalProfit = profitData.reduce((sum, point) => sum + point.value, 0);
+      totalRevenue = revenueData.reduce((sum, point) => sum + (point?.value || 0), 0);
+      totalProfit = profitData.reduce((sum, point) => sum + (point?.value || 0), 0);
     }
     
     const avgRevenue = totalRevenue / Math.max(revenueData.length, 1);
     const avgProfit = totalProfit / Math.max(profitData.length, 1);
 
     return {
-      totalRevenue,
-      totalProfit,
-      avgRevenue,
-      avgProfit,
+      totalRevenue: totalRevenue || 0,
+      totalProfit: totalProfit || 0,
+      avgRevenue: avgRevenue || 0,
+      avgProfit: avgProfit || 0,
       profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
     };
-  }, [revenueData, profitData, selectedPeriod]);
+  }, [revenueData, profitData, selectedPeriod, hasValidData]);
 
   // Préparation des données avec labels formatés pour l'axe X
   const chartDataWithLabels = useMemo(() => {
+    if (!hasValidData) return [];
+    
     return revenueData.map((point) => {
+      if (!point || !point.date) return null;
+      
       let label = '';
-      switch (selectedPeriod) {
-        case 'week':
-          label = format(point.date, 'EEE', { locale: fr });
-          break;
-        case 'month':
-          label = format(point.date, 'dd/MM', { locale: fr });
-          break;
-        case 'year':
-          label = format(point.date, 'MMM yy', { locale: fr });
-          break;
+      try {
+        switch (selectedPeriod) {
+          case 'week':
+            label = format(point.date, 'EEE', { locale: fr });
+            break;
+          case 'month':
+            label = format(point.date, 'dd/MM', { locale: fr });
+            break;
+          case 'year':
+            label = format(point.date, 'MMM yy', { locale: fr });
+            break;
+        }
+      } catch (error) {
+        label = '';
       }
 
       return {
@@ -162,22 +253,30 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
         label,
         labelTextStyle: { color: '#666', fontSize: 10 }
       };
-    });
-  }, [revenueData, selectedPeriod]);
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [revenueData, selectedPeriod, hasValidData]);
 
   const chartProfitDataWithLabels = useMemo(() => {
+    if (!hasValidData) return [];
+    
     return profitData.map((point) => {
+      if (!point || !point.date) return null;
+      
       let label = '';
-      switch (selectedPeriod) {
-        case 'week':
-          label = format(point.date, 'EEE', { locale: fr });
-          break;
-        case 'month':
-          label = format(point.date, 'dd/MM', { locale: fr });
-          break;
-        case 'year':
-          label = format(point.date, 'MMM yy', { locale: fr });
-          break;
+      try {
+        switch (selectedPeriod) {
+          case 'week':
+            label = format(point.date, 'EEE', { locale: fr });
+            break;
+          case 'month':
+            label = format(point.date, 'dd/MM', { locale: fr });
+            break;
+          case 'year':
+            label = format(point.date, 'MMM yy', { locale: fr });
+            break;
+        }
+      } catch (error) {
+        label = '';
       }
 
       return {
@@ -185,8 +284,195 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
         label,
         labelTextStyle: { color: '#666', fontSize: 10 }
       };
-    });
-  }, [profitData, selectedPeriod]);
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [profitData, selectedPeriod, hasValidData]);
+
+  // Déterminer si on a besoin d'un scroll horizontal
+  const needsHorizontalScroll = chartWidth > safeWidth;
+
+  // Si pas de données valides, afficher un message
+  if (!hasValidData) {
+    return (
+      <View style={styles.chartContainer}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>CA Total</Text>
+            <Text style={[styles.statValue, { color: 'rgba(0, 122, 255, 1)' }]}>
+              {formatCurrency(0)}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Marge Total</Text>
+            <Text style={[styles.statValue, { color: 'rgba(52, 199, 89, 1)' }]}>
+              {formatCurrency(0)}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Taux Marge</Text>
+            <Text style={[styles.statValue, { color: 'rgba(255, 59, 48, 1)' }]}>
+              0.0%
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.noDataContainer}>
+          <Text style={styles.noDataText}>Aucune donnée disponible pour cette période</Text>
+        </View>
+        
+        <View style={styles.legendContainer}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: 'rgba(0, 122, 255, 1)' }]} />
+            <Text style={styles.legendText}>CA</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendColor, { backgroundColor: 'rgba(52, 199, 89, 1)' }]} />
+            <Text style={styles.legendText}>Marge</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  const chartComponent = useMemo(() => (
+    <LineChart
+      key={`${selectedPeriod}-${revenueData.length}-${profitData.length}-${maxValue}`}
+      data={chartDataWithLabels}
+      data2={chartProfitDataWithLabels}
+      height={safeHeight}
+      width={chartWidth}
+
+      // Couleurs et styles
+      color1="rgba(0, 122, 255, 1)"
+      color2="rgba(52, 199, 89, 1)"
+      thickness1={2.5}
+      thickness2={2.5}
+
+      // Configuration des axes
+      formatYLabel={(value: string) => {
+        const num = Number(value);
+        return isNaN(num) ? '0€' : `${num}€`;
+      }}
+      xAxisThickness={1}
+      yAxisThickness={1}
+      xAxisColor="rgba(0,0,0,0.1)"
+      yAxisColor="rgba(0,0,0,0.1)"
+      xAxisLabelTextStyle={{ color: '#666', fontSize: 10 }}
+      yAxisTextStyle={{ color: '#666', fontSize: 10 }}
+      yAxisLabelWidth={50}
+
+      // Interactions avec points visibles seulement au survol/clic
+      focusEnabled={true}
+      showDataPointOnFocus={true}
+      showTextOnFocus={false}
+      showStripOnFocus={false}
+      showDataPointLabelOnFocus={false}
+      onPress={handleDataPointClick}
+      
+      // Configuration du pointer avec tooltip
+      pointerConfig={{
+        pointer1Color: 'rgba(0, 122, 255, 0.8)',
+        pointer2Color: 'rgba(52, 199, 89, 0.8)',
+        pointerStripUptoDataPoint: true,
+        pointerStripColor: 'rgba(0,0,0,0.2)',
+        pointerStripWidth: 1,
+        activatePointersOnLongPress: false,
+        activatePointersDelay: 0,
+        hidePointer1: false,
+        hidePointer2: false,
+        pointerLabelComponent: (items: any) => {
+          const item1 = items[0];
+          const item2 = items[1];
+          
+          if (!item1) return null;
+          
+          return (
+            <View style={[styles.customTooltip, { transform: [{ translateX: -140 }] }]}>
+              <Text style={styles.tooltipDate}>
+                {item1?.date ? format(new Date(item1.date), 'dd MMM', { locale: fr }) : 
+                 (revenueData[item1?.index]?.date ? format(revenueData[item1.index].date, 'dd MMM', { locale: fr }) : '')}
+              </Text>
+              <View style={styles.tooltipRow}>
+                <View style={styles.tooltipItem}>
+                  <View style={[styles.tooltipColorDot, { backgroundColor: 'rgba(0, 122, 255, 1)' }]} />
+                  <Text style={styles.tooltipLabel}>CA: </Text>
+                  <Text style={styles.tooltipValue}>{formatCurrency(item1?.value || 0)}</Text>
+                </View>
+              </View>
+              {item2 && (
+                <View style={styles.tooltipRow}>
+                  <View style={styles.tooltipItem}>
+                    <View style={[styles.tooltipColorDot, { backgroundColor: 'rgba(52, 199, 89, 1)' }]} />
+                    <Text style={styles.tooltipLabel}>Marge: </Text>
+                    <Text style={styles.tooltipValue}>{formatCurrency(item2?.value || 0)}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        },
+      }}
+      
+      // Points de données cachés par défaut, visibles seulement au focus
+      hideDataPoints1={true}
+      hideDataPoints2={true}
+      dataPointsHeight1={8}
+      dataPointsWidth1={8}
+      dataPointsColor1="rgba(0, 122, 255, 1)"
+      dataPointsRadius1={4}
+      dataPointsHeight2={8}
+      dataPointsWidth2={8}
+      dataPointsColor2="rgba(52, 199, 89, 1)"
+      dataPointsRadius2={4}
+      
+      // Affichage des valeurs sur les points (désactivé pour réduire les warnings)
+      showValuesAsDataPointsText={false}
+      textShiftY={-10}
+      textShiftX={0}
+      textColor1="rgba(0, 122, 255, 1)"
+      textColor2="rgba(52, 199, 89, 1)"
+      textFontSize={10}
+
+      // Animations simplifiées
+      animateOnDataChange={true}
+      animationDuration={600}
+
+      // Courbes lissées
+      curved
+
+      // Grille
+      rulesType="solid"
+      rulesColor="rgba(0,0,0,0.05)"
+
+      // Espacement et marges
+      initialSpacing={20}
+      spacing={Math.max(30, (chartWidth - 80) / Math.max(revenueData.length - 1, 1))}
+
+      // Configuration des domaines
+      maxValue={maxValue * 1.1}
+      noOfSections={5}
+      stepValue={Math.ceil((maxValue * 1.1) / 5)}
+
+      // S'assurer que les deux courbes sont visibles
+      startOpacity1={1}
+      startOpacity2={1}
+      endOpacity1={1}
+      endOpacity2={1}
+
+      // Propriétés spécifiques pour la compatibilité web
+      disableScroll={false}
+      scrollToEnd={false}
+    />
+  ), [
+    selectedPeriod,
+    revenueData,
+    profitData,
+    chartDataWithLabels,
+    chartProfitDataWithLabels,
+    safeHeight,
+    chartWidth,
+    maxValue,
+    handleDataPointClick
+  ]);
 
   return (
     <View style={styles.chartContainer}>
@@ -212,120 +498,33 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
         </View>
       </View>
 
-      {/* Graphique principal */}
-      <LineChart
-        data={chartDataWithLabels}
-        data2={chartProfitDataWithLabels}
-        height={height}
-        width={width}
+      {/* Indication de scroll si nécessaire */}
+      {needsHorizontalScroll && (
+        <Text style={styles.scrollHint}>
+          ← Faites glisser horizontalement pour voir toutes les données →
+        </Text>
+      )}
 
-        // Couleurs et styles
-        color1="rgba(0, 122, 255, 1)"
-        color2="rgba(52, 199, 89, 1)"
-        thickness1={2.5}
-        thickness2={2.5}
+      {/* Indication si les données sont groupées par semaine */}
+      {isGroupedByWeek && (
+        <Text style={styles.groupingHint}>
+          📊 Données groupées par semaine pour une meilleure lisibilité
+        </Text>
+      )}
 
-        // Configuration des axes
-        formatYLabel={(value: string) => `${value}€`}
-        xAxisThickness={1}
-        yAxisThickness={1}
-        xAxisColor="rgba(0,0,0,0.1)"
-        yAxisColor="rgba(0,0,0,0.1)"
-        xAxisLabelTextStyle={{ color: '#666', fontSize: 10 }}
-        yAxisTextStyle={{ color: '#666', fontSize: 10 }}
-        yAxisLabelWidth={50}
-
-        // Activation des interactions avancées
-        focusEnabled={true}
-        showDataPointOnFocus={true}
-        showTextOnFocus={true}
-        showStripOnFocus={true}
-        showDataPointLabelOnFocus={true}
-        onPress={handleDataPointClick}
-        
-        // Configuration du pointer pour les tooltips
-        pointerConfig={{
-          pointer1Color: 'rgba(0, 122, 255, 0.8)',
-          pointer2Color: 'rgba(52, 199, 89, 0.8)',
-          pointerStripUptoDataPoint: true,
-          pointerStripColor: 'rgba(0,0,0,0.2)',
-          pointerStripWidth: 1,
-          strokeDashArray: [2, 5],
-          activatePointersOnLongPress: false,
-          activatePointersDelay: 0,
-          hidePointer1: false,
-          hidePointer2: false,
-          pointerLabelComponent: (items: any) => {
-            const item1 = items[0];
-            const item2 = items[1];
-            return (
-              <View style={styles.customTooltip}>
-                <Text style={styles.tooltipDate}>
-                  {format(new Date(item1?.date || revenueData[item1?.index]?.date), 'dd MMM', { locale: fr })}
-                </Text>
-                <View style={styles.tooltipRow}>
-                  <View style={styles.tooltipItem}>
-                    <View style={[styles.tooltipColorDot, { backgroundColor: 'rgba(0, 122, 255, 1)' }]} />
-                    <Text style={styles.tooltipLabel}>CA: </Text>
-                    <Text style={styles.tooltipValue}>{formatCurrency(item1?.value || 0)}</Text>
-                  </View>
-                </View>
-                {item2 && (
-                  <View style={styles.tooltipRow}>
-                    <View style={styles.tooltipItem}>
-                      <View style={[styles.tooltipColorDot, { backgroundColor: 'rgba(52, 199, 89, 1)' }]} />
-                      <Text style={styles.tooltipLabel}>Marge: </Text>
-                      <Text style={styles.tooltipValue}>{formatCurrency(item2?.value || 0)}</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            );
-          },
-        }}
-        
-        // Points de données visibles et interactifs
-        hideDataPoints1={false}
-        hideDataPoints2={false}
-        dataPointsHeight1={10}
-        dataPointsWidth1={10}
-        dataPointsColor1="rgba(0, 122, 255, 1)"
-        dataPointsRadius1={5}
-        dataPointsHeight2={10}
-        dataPointsWidth2={10}
-        dataPointsColor2="rgba(52, 199, 89, 1)"
-        dataPointsRadius2={5}
-        
-        // Affichage des valeurs sur les points
-        showValuesAsDataPointsText={false}
-        textShiftY={-10}
-        textShiftX={0}
-        textColor1="rgba(0, 122, 255, 1)"
-        textColor2="rgba(52, 199, 89, 1)"
-        textFontSize={10}
-
-        // Animations (contrôlées par l'utilisateur)
-        animateOnDataChange={showAnimations}
-        animationDuration={800}
-
-        // Courbes lissées
-        curved
-
-        // Grille
-        rulesType="solid"
-        rulesColor="rgba(0,0,0,0.05)"
-
-        // Espacement et marges
-        initialSpacing={20}
-        spacing={Math.max(30, (width - 80) / Math.max(revenueData.length - 1, 1))}
-
-        // Configuration des domaines
-        maxValue={maxValue * 1.1}
-        noOfSections={5}
-        stepValue={Math.ceil((maxValue * 1.1) / 5)}
-
-        // Légende sera ajoutée manuellement dans l'interface
-      />
+      {/* Graphique principal avec scroll horizontal si nécessaire */}
+      {needsHorizontalScroll ? (
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={true}
+          style={styles.chartScrollContainer}
+          contentContainerStyle={styles.chartScrollContent}
+        >
+          {chartComponent}
+        </ScrollView>
+      ) : (
+        chartComponent
+      )}
 
       {/* Légende manuelle */}
       <View style={styles.legendContainer}>
@@ -339,130 +538,8 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
         </View>
       </View>
 
-      {/* Contrôles d'interaction */}
-      <View style={styles.controlsRow}>
-        <TouchableOpacity
-          style={[styles.controlButton, { opacity: showAnimations ? 1 : 0.5 }]}
-          onPress={() => setShowAnimations(!showAnimations)}
-        >
-          <Text style={styles.controlButtonText}>
-            {showAnimations ? '🎬' : '⏸️'} Animations
-          </Text>
-        </TouchableOpacity>
-
-        {selectedDataPoint && (
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={() => setSelectedDataPoint(null)}
-          >
-            <Text style={styles.controlButtonText}>✕ Désélectionner</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Navigation des points de données */}
-      <View style={styles.navigationRow}>
-        <TouchableOpacity
-          style={[styles.navButton, { opacity: selectedDataPoint && selectedDataPoint.index > 0 ? 1 : 0.3 }]}
-          onPress={() => {
-            if (selectedDataPoint && selectedDataPoint.index > 0) {
-              const newIndex = selectedDataPoint.index - 1;
-              const revenuePoint = revenueData[newIndex];
-              const profitPoint = profitData[newIndex];
-              setSelectedDataPoint({
-                index: newIndex,
-                value: revenuePoint.value,
-                date: revenuePoint.date,
-                type: 'revenue',
-                profitValue: profitPoint?.value || 0
-              });
-            }
-          }}
-          disabled={!selectedDataPoint || selectedDataPoint.index <= 0}
-        >
-          <Text style={styles.navButtonText}>← Précédent</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.exploreButton}
-          onPress={() => {
-            if (!selectedDataPoint && revenueData.length > 0) {
-              // Sélectionner le point avec la meilleure performance (plus haut CA)
-              const maxRevenueIndex = revenueData.reduce((maxIndex, current, index) => 
-                current.value > revenueData[maxIndex].value ? index : maxIndex, 0
-              );
-              const revenuePoint = revenueData[maxRevenueIndex];
-              const profitPoint = profitData[maxRevenueIndex];
-              setSelectedDataPoint({
-                index: maxRevenueIndex,
-                value: revenuePoint.value,
-                date: revenuePoint.date,
-                type: 'revenue',
-                profitValue: profitPoint?.value || 0
-              });
-            } else if (selectedDataPoint) {
-              // Basculer vers le point avec la meilleure marge
-              const maxProfitIndex = profitData.reduce((maxIndex, current, index) => 
-                current.value > profitData[maxIndex].value ? index : maxIndex, 0
-              );
-              const revenuePoint = revenueData[maxProfitIndex];
-              const profitPoint = profitData[maxProfitIndex];
-              setSelectedDataPoint({
-                index: maxProfitIndex,
-                value: revenuePoint.value,
-                date: revenuePoint.date,
-                type: 'revenue',
-                profitValue: profitPoint?.value || 0
-              });
-            }
-          }}
-        >
-          <Text style={styles.exploreButtonText}>
-            {selectedDataPoint ? '🎯 Meilleure marge' : '📈 Point culminant'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navButton, { opacity: selectedDataPoint && selectedDataPoint.index < revenueData.length - 1 ? 1 : 0.3 }]}
-          onPress={() => {
-            if (selectedDataPoint && selectedDataPoint.index < revenueData.length - 1) {
-              const newIndex = selectedDataPoint.index + 1;
-              const revenuePoint = revenueData[newIndex];
-              const profitPoint = profitData[newIndex];
-              setSelectedDataPoint({
-                index: newIndex,
-                value: revenuePoint.value,
-                date: revenuePoint.date,
-                type: 'revenue',
-                profitValue: profitPoint?.value || 0
-              });
-            }
-          }}
-          disabled={!selectedDataPoint || selectedDataPoint.index >= revenueData.length - 1}
-        >
-          <Text style={styles.navButtonText}>Suivant →</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Détails du point sélectionné */}
-      {selectedDataPoint && (
-        <View style={styles.selectedPointInfo}>
-          <Text style={styles.selectedPointTitle}>
-            {format(selectedDataPoint.date, 'EEEE dd MMMM yyyy', { locale: fr })}
-          </Text>
-          <Text style={styles.selectedPointValue}>
-            CA: {formatCurrency(selectedDataPoint.value)}
-          </Text>
-          {selectedDataPoint.profitValue !== undefined && (
-            <Text style={styles.selectedPointProfit}>
-              Marge: {formatCurrency(selectedDataPoint.profitValue)}
-            </Text>
-          )}
-        </View>
-      )}
-
       <Text style={styles.interactionHint}>
-        Touchez ou survolez les points pour voir les détails • Animations {showAnimations ? 'activées' : 'désactivées'}
+        Touchez ou survolez les points pour voir les détails
       </Text>
     </View>
   );
@@ -473,6 +550,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     paddingVertical: 10,
+  },
+  scrollHint: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 20,
+  },
+  groupingHint: {
+    fontSize: 11,
+    color: '#007AFF',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginHorizontal: 20,
+  },
+  chartScrollContainer: {
+    width: '100%',
+  },
+  chartScrollContent: {
+    paddingHorizontal: 10,
   },
   statsRow: {
     flexDirection: 'row',
@@ -495,47 +598,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 2,
   },
-  controlsRow: {
-    flexDirection: 'row',
+  noDataContainer: {
+    height: 220,
     justifyContent: 'center',
-    marginTop: 10,
-    gap: 10,
-  },
-  controlButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 15,
-  },
-  controlButtonText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  selectedPointInfo: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderRadius: 8,
+    marginVertical: 10,
+    width: '90%',
   },
-  selectedPointTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333',
-    textTransform: 'capitalize',
-  },
-  selectedPointValue: {
-    fontSize: 14,
-    color: 'rgba(0, 122, 255, 1)',
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  selectedPointProfit: {
-    fontSize: 14,
-    color: 'rgba(52, 199, 89, 1)',
-    fontWeight: '600',
-    marginTop: 2,
+  noDataText: {
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
   },
   interactionHint: {
     fontSize: 11,
@@ -564,45 +639,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontWeight: '500',
-  },
-  navigationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    paddingHorizontal: 10,
-    gap: 10,
-  },
-  navButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.2)',
-    minWidth: 90,
-  },
-  navButtonText: {
-    fontSize: 12,
-    color: 'rgba(0, 122, 255, 1)',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  exploreButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(52, 199, 89, 0.2)',
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  exploreButtonText: {
-    fontSize: 13,
-    color: 'rgba(52, 199, 89, 1)',
-    fontWeight: '600',
-    textAlign: 'center',
   },
   customTooltip: {
     backgroundColor: 'rgba(0, 0, 0, 0.8)',

@@ -156,12 +156,11 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       const contentWidth = receiptWidth - 2 * margin;
       const pageHeight = 148; // Hauteur A6 explicitement définie
 
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a6',
-        compress: true,
-      });
+      const doc = new jsPDF(
+        'portrait',
+        'mm',
+        'a6'
+      );
 
       setProgress(20);
 
@@ -222,7 +221,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
           yPos += logoDisplayHeight + 1;
 
           doc.setFontSize(10);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           doc.text(COMPANY_INFO.name, receiptWidth / 2, yPos + 3, { align: 'center' });
           yPos += 6;
 
@@ -230,18 +229,18 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
           console.error("Erreur lors de l'ajout du logo au PDF:", logoErrorAdding);
           // Fallback si addImage échoue
           doc.setFontSize(14);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           doc.text(COMPANY_INFO.name, receiptWidth / 2, yPos + 5, { align: 'center' });
           yPos += 10;
         }
       } else {
         // Si pas de logo, afficher le nom de l'entreprise en grand
         doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
+        doc.setFont('helvetica', 'bold');
         doc.text(COMPANY_INFO.name, receiptWidth / 2, yPos + 5, { align: 'center' });
         yPos += 10;
       }
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
 
       setProgress(40);
 
@@ -274,18 +273,18 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       // 4. Titre de la section des articles
       doc.setFontSize(11);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('Désignation', margin, yPos);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       yPos += 5;
 
       const colDescWidth = contentWidth - 25; // Largeur pour la description/nom article (laisse 25mm pour le prix à droite)
 
       doc.setFontSize(8);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('Article', margin, yPos);
       doc.text('Prix €', receiptWidth - margin, yPos, { align: 'right' });
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       const headerLineY = yPos + 0.8;
       doc.setLineWidth(0.1);
       doc.line(margin, headerLineY, receiptWidth - margin, headerLineY);
@@ -301,26 +300,26 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       // Fonction pour dessiner l'en-tête de page
       const drawPageHeader = (pageNum: number) => {
         if (pageNum > 1) {
-          doc.addPage();
+          doc.addPage('a6');
           yPos = margin;
           
           // Ajouter en-tête de page pour les pages supplémentaires
           doc.setFontSize(10);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           doc.text(COMPANY_INFO.name, receiptWidth / 2, yPos, { align: 'center' });
           yPos += 5;
           
           doc.setFontSize(7);
-          doc.setFont(undefined, 'normal');
+          doc.setFont('helvetica', 'normal');
           doc.text(`Facture ${invoiceRef} - page ${pageNum}/${totalPages}`, receiptWidth / 2, yPos, { align: 'center' });
           yPos += 7;
           
           // Redessiner l'en-tête de tableau des articles
           doc.setFontSize(8);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           doc.text('Article', margin, yPos);
           doc.text('Prix €', receiptWidth - margin, yPos, { align: 'right' });
-          doc.setFont(undefined, 'normal');
+          doc.setFont('helvetica', 'normal');
           const headerLineY = yPos + 0.8;
           doc.setLineWidth(0.1);
           doc.line(margin, headerLineY, receiptWidth - margin, headerLineY);
@@ -445,7 +444,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       doc.setLineWidth(0.5);
       doc.line(totalLineXStart, yPos - 1, receiptWidth - margin, yPos - 1);
       yPos += 3;
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.text('TOTAL TTC', totalLineXStart, yPos);
       doc.text(`${totalGeneralTTC.toFixed(2)} €`, receiptWidth - margin, yPos, { align: 'right' });
@@ -460,7 +459,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         doc.setTextColor(0, 0, 0); // Revenir au noir
         yPos += 3;
       }
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
 
 
       // --- DESSIN DU FOOTER ---
@@ -471,7 +470,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       yPos += 3.5;
 
       doc.setFontSize(7);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       tvaTextLines.forEach(line => {
         const split = doc.splitTextToSize(line, contentWidth);
         doc.text(split, receiptWidth / 2, yPos, { align: 'center' });
@@ -480,7 +479,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       yPos += 2;
 
       doc.setFontSize(8.5);
-      doc.setFont(undefined, 'italic');
+      doc.setFont('helvetica', 'italic');
       doc.text(merciMsg, receiptWidth / 2, yPos, { align: 'center' });
 
       setProgress(90);
@@ -491,15 +490,17 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       const pdfBlob = doc.output('blob');
       
       try {
-        // Uploader la facture vers R2 en arrière-plan
-        uploadInvoiceToR2(pdfBlob, fileName)
-          .then(invoiceUrl => {
-            console.log('Facture téléchargée avec succès:', invoiceUrl);
-          })
-          .catch(error => {
-            console.error('Erreur lors du téléchargement de la facture:', error);
-            // Ne pas bloquer l'utilisateur en cas d'échec de l'upload
-          });
+        // Uploader la facture vers R2 en arrière-plan (seulement si le blob existe)
+        if (pdfBlob) {
+          uploadInvoiceToR2(pdfBlob, fileName)
+            .then(invoiceUrl => {
+              console.log('Facture téléchargée avec succès:', invoiceUrl);
+            })
+            .catch(error => {
+              console.error('Erreur lors du téléchargement de la facture:', error);
+              // Ne pas bloquer l'utilisateur en cas d'échec de l'upload
+            });
+        }
       } catch (error) {
         console.error('Erreur lors de la préparation de l\'upload de la facture:', error);
         // Continuer même en cas d'erreur

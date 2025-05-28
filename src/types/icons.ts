@@ -41,6 +41,8 @@ export type MaterialIconName =
   | 'shopping_cart'
   // Icônes pour les catégories
   | 'shopping_bag'
+  | 'work'
+  | 'business_center'
   | 'style'
   | 'accessibility'
   | 'layers'
@@ -54,4 +56,6 @@ export type MaterialIconName =
   | 'favorite'
   | 'texture'
   | 'circle'
-  | 'more_horiz'; 
+  | 'more_horiz'
+  | 'work'
+  | 'business_center'; 

@@ -77,7 +77,7 @@ const INITIAL_STATE: ItemFormState = {
     sellingPrice: '',
     status: 'available',
     photo_storage_url: undefined,
-    containerId: null,
+    containerId: null, // Aucun container sélectionné par défaut
     categoryId: null,
 };
 
@@ -111,7 +111,7 @@ const ContainerOption = memo(({ container, isSelected, onSelect, theme }: Contai
             color: isSelected ? theme.text.onPrimary : theme.text.primary,
             fontWeight: isSelected ? '500' : 'normal'
         }}>
-            {container.name}
+            {container.name}#{container.number}
         </Text>
     </TouchableOpacity>
 ));
@@ -304,7 +304,11 @@ const ItemFormWithErrorBoundary: React.FC<ItemFormProps> = (props) => (
     </ErrorBoundary>
 );
 
-const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }) => {
+const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategories, onSuccess }) => {
+    // Trier les catégories par created_at (plus ancien en premier) pour que "Bags" soit en premier
+    const categories = Array.isArray(propCategories) 
+        ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+        : [];
     const dispatch = useDispatch();
     const queryClient = useQueryClient();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
@@ -461,6 +465,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
     // Ajouter une fonction pour la sélection d'image directement comme dans ItemEditForm
     const handleImagePreview = useCallback(async () => {
         try {
+            console.log("[ItemForm] handleImagePreview - Sélection d'image...");
             const hasPermissions = await checkPhotoPermissions();
             if (!hasPermissions) {
                 console.error("handleImagePreview - Permission refusée");
@@ -468,17 +473,30 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 return;
             }
             
-            // Utiliser ImagePicker avec la bonne API (MediaTypeOptions est toujours utilisé dans la version actuelle)
+            console.log("[ItemForm] handleImagePreview - Lancement du sélecteur d'image...");
+            // Utiliser ImagePicker avec compression forte pour éviter les problèmes de taille
             const result = await ExpoImagePicker.launchImageLibraryAsync({
                 mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.5,
+                quality: 0.3,
                 base64: true,
+            });
+            
+            console.log("[ItemForm] handleImagePreview - Résultat du sélecteur:", {
+                canceled: result.canceled,
+                hasAssets: result.assets ? result.assets.length : 0
             });
             
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const selectedAsset = result.assets[0];
+                console.log("[ItemForm] handleImagePreview - Asset sélectionné:", {
+                    uri: selectedAsset.uri ? selectedAsset.uri.substring(0, 50) + "..." : "null",
+                    hasBase64: !!selectedAsset.base64,
+                    mimeType: selectedAsset.mimeType,
+                    width: selectedAsset.width,
+                    height: selectedAsset.height
+                });
                 
                 if (Platform.OS === 'web') {
                     // Pour le web, toujours privilégier le format base64
@@ -486,7 +504,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                         const mimeType = selectedAsset.mimeType || 'image/jpeg';
                         const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
                         
-                        
+                        console.log("[ItemForm] Image convertie en base64 pour le web");
                         // Stocker directement l'URI base64 pour la prévisualisation et l'upload
                         setLocalImage({ uri: base64Uri, needsUpload: true });
                     } else {
@@ -496,6 +514,14 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
                 } else {
                     // Sur les plateformes natives, on utilise l'URI standard
                     setLocalImage({ uri: selectedAsset.uri, needsUpload: true });
+                }
+                console.log("[ItemForm] handleImagePreview - Image sélectionnée avec succès");
+            } else {
+                console.log("[ItemForm] handleImagePreview - Sélection d'image annulée ou aucun asset.");
+                if (result.canceled) {
+                    console.log("[ItemForm] handleImagePreview - Utilisateur a annulé la sélection");
+                } else {
+                    console.log("[ItemForm] handleImagePreview - Aucun asset dans le résultat:", result);
                 }
             }
         } catch (error) {
@@ -636,31 +662,25 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
         queryClient.invalidateQueries({ queryKey: ['containers'] });
         queryClient.invalidateQueries({ queryKey: ['categories'] });
         
-        // Récupérer le dernier container ajouté
-        const fetchedContainers = queryClient.getQueryData<Container[]>(['containers']);
-        if (fetchedContainers && fetchedContainers.length > 0) {
-            // Trier par date de création pour obtenir le plus récent
-            const sortedContainers = [...fetchedContainers].sort((a, b) => 
-                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-            );
-            
-            // Si notre container actuel n'est pas défini, sélectionner automatiquement le plus récent
-            if (!item.containerId) {
-                setItem(prev => ({ ...prev, containerId: sortedContainers[0].id }));
-            }
-        }
+        // NE PAS sélectionner automatiquement un container - laisser l'utilisateur choisir
         
-        // Récupérer la dernière catégorie ajoutée
+        // Récupérer la catégorie "Bags" par défaut
         const fetchedCategories = queryClient.getQueryData<Category[]>(['categories']);
         if (fetchedCategories && fetchedCategories.length > 0) {
-            // Trier par date de création pour obtenir la plus récente
-            const sortedCategories = [...fetchedCategories].sort((a, b) => 
-                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-            );
+            // Chercher spécifiquement la catégorie "Bags"
+            const bagsCategory = fetchedCategories.find(cat => cat.name === 'Bags');
             
-            // Si notre catégorie actuelle n'est pas définie, sélectionner automatiquement la plus récente
+            // Si notre catégorie actuelle n'est pas définie, sélectionner "Bags" ou la première par défaut
             if (!item.categoryId) {
-                setItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
+                if (bagsCategory) {
+                    setItem(prev => ({ ...prev, categoryId: bagsCategory.id }));
+                } else {
+                    // Si "Bags" n'existe pas, prendre la première triée par created_at
+                    const sortedCategories = [...fetchedCategories].sort((a, b) => 
+                        new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+                    );
+                    setItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
+                }
             }
         }
         
@@ -671,7 +691,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories, onSuccess }
             // Supprimer l'état sauvegardé pour éviter de l'utiliser à nouveau
             queryClient.removeQueries({ queryKey: ['temp_item_form_state'] });
         }
-    }, [queryClient, item.containerId, item.categoryId]);
+    }, [queryClient, item.categoryId]); // Retirer item.containerId des dépendances
 
     const styles = getThemedStyles(activeTheme);
 

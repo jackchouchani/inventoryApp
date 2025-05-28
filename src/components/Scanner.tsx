@@ -10,7 +10,6 @@ import {
     FlatList,
   Platform,
     Alert,
-    Linking
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { BlurView } from 'expo-blur';
@@ -30,7 +29,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import QrScanner from 'qr-scanner';
-import { checkCameraPermissionPWA, requestCameraPermissionPWA, isPWAMode, getCameraInstructionsPWA } from '../utils/pwaPermissions';
+import { checkCameraPermissionPWA, requestCameraPermissionPWA, getCameraInstructionsPWA } from '../utils/pwaPermissions';
 
 // Types
 export type ScanMode = 'container' | 'items';
@@ -504,7 +503,7 @@ const WebCamera: React.FC<{
             } as BarcodeScanningResult);
           },
           {
-            onDecodeError: (error) => {
+            onDecodeError: () => {
               // Ne pas logger tous les erreurs de décodage car c'est normal
               // console.log("Pas de QR code détecté dans cette frame");
             },

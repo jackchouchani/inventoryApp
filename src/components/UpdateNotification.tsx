@@ -101,13 +101,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
       }, 1000);
     }
   };
-
-  const checkForUpdates = () => {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'CHECK_UPDATE' });
-    }
-  };
-
+  
   // Interface web pour les notifications
   if (typeof window !== 'undefined' && updateAvailable) {
     return (

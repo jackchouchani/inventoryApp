@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Container } from '../../src/types/container';
 import { Item } from '../../src/types/item';
@@ -49,6 +50,7 @@ const ContainerInfo: React.FC<ContainerInfoProps> = ({ containerId, containers, 
 const ContainerScreen = () => {
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
   const [editingContainer, setEditingContainer] = useState<Container | null>(null);
@@ -348,7 +350,7 @@ const ContainerScreen = () => {
       backgroundColor: activeTheme.backgroundSecondary,
       borderBottomWidth: 1,
       borderBottomColor: activeTheme.border,
-      marginTop: Platform.OS === 'ios' ? 47 : 0,
+      // marginTop sera défini dynamiquement avec useSafeAreaInsets
     },
     backButton: {
       flexDirection: 'row',
@@ -778,8 +780,8 @@ const ContainerScreen = () => {
 
   if (!containers || containers.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.topBar}>
+      <View style={styles.container}>
+        <View style={[styles.topBar, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
@@ -856,14 +858,14 @@ const ContainerScreen = () => {
           onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.topBar}>
+      <View style={styles.container}>
+        <View style={[styles.topBar, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(stack)/settings')}
@@ -1114,7 +1116,7 @@ const ContainerScreen = () => {
           onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
         />
-      </SafeAreaView>
+      </View>
     </ErrorBoundary>
   );
 };

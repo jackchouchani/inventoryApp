@@ -2,17 +2,20 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStats } from '../../src/hooks/useStats';
 import { StatsChart } from '../../src/components/StatsChart';
 import { formatCurrency } from '../../src/utils/formatters';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
+
 import { Stack } from 'expo-router';
 import PeriodSelector from '../../src/components/PeriodSelector';
 
 const StatsScreen = () => {
+  const { activeTheme } = useAppTheme();
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
@@ -23,6 +26,7 @@ const StatsScreen = () => {
   });
   
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { stats, monthlyStats, isLoading, error } = useStats(selectedPeriod);
 
   // Reset tooltip function
@@ -48,12 +52,13 @@ const StatsScreen = () => {
     });
   }, []);
 
-
+  // Créer les styles dynamiques basés sur le thème
+  const styles = createStyles(activeTheme);
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={activeTheme.primary} />
       </View>
     );
   }
@@ -93,15 +98,15 @@ const StatsScreen = () => {
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <Stack.Screen options={{ title: 'Statistiques' }} />
 
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(tabs)/stock')}
           >
-            <Icon name="arrow_back_ios" size={18} color="#007AFF" />
+            <Icon name="arrow_back_ios" size={18} color={activeTheme.primary} />
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -189,7 +194,7 @@ const StatsScreen = () => {
             {/* Display Totals for selected period */}
             <View style={styles.totalsContainer}>
               {isLoading ? (
-                <Text>Chargement des statistiques...</Text>
+                <Text style={styles.loadingText}>Chargement des statistiques...</Text>
               ) : (
                 monthlyStats.revenue.length > 0 ? (
                   <>
@@ -197,7 +202,7 @@ const StatsScreen = () => {
                     <Text style={styles.totalText}>Total Marge Période: {formatCurrency(totalMarge_periode)}</Text>
                   </>
                 ) : (
-                  <Text>Aucune donnée de vente pour cette période.</Text>
+                  <Text style={styles.noDataText}>Aucune donnée de vente pour cette période.</Text>
                 )
               )}
             </View>
@@ -229,25 +234,24 @@ const StatsScreen = () => {
             ))}
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </ErrorBoundary>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.background,
   },
   topBar: {
     height: Platform.OS === 'ios' ? 44 : 56,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
+    borderBottomColor: theme.border,
   },
   backButton: {
     flexDirection: 'row',
@@ -257,38 +261,42 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 17,
-    color: '#007AFF',
+    color: theme.primary,
     marginLeft: -4,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: theme.background,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    backgroundColor: theme.background,
   },
   errorText: {
-    color: '#FF3B30',
+    color: theme.error,
     fontSize: 16,
     textAlign: 'center',
   },
   content: {
     flex: 1,
+    backgroundColor: theme.background,
   },
   section: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.border,
+    backgroundColor: theme.background,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#1a1a1a',
+    color: theme.text.primary,
   },
   statRow: {
     flexDirection: 'row',
@@ -301,11 +309,11 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#007AFF',
+    color: theme.primary,
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
     marginTop: 4,
   },
   financialStats: {
@@ -319,19 +327,19 @@ const styles = StyleSheet.create({
   },
   financialLabel: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
   },
   financialValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text.primary,
   },
   totalProfitLabel: {
-    color: '#1a1a1a',
+    color: theme.text.primary,
     fontWeight: '600',
   },
   totalProfitValue: {
-    color: '#34C759',
+    color: theme.success,
     fontSize: 18,
   },
   periodWrapper: {
@@ -342,12 +350,12 @@ const styles = StyleSheet.create({
   },
   tooltip: {
     position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.backdrop,
     padding: 8,
     borderRadius: 6,
   },
   tooltipText: {
-    color: 'white',
+    color: theme.text.inverse,
     fontSize: 12,
   },
   categoryRow: {
@@ -356,19 +364,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.border,
   },
   categoryNameContainer: {
     flex: 1,
   },
   categoryName: {
     fontSize: 16,
-    color: '#1a1a1a',
+    color: theme.text.primary,
     fontWeight: '600',
   },
   itemCount: {
     fontSize: 12,
-    color: '#666',
+    color: theme.text.secondary,
     marginTop: 4,
   },
   categoryStats: {
@@ -382,41 +390,48 @@ const styles = StyleSheet.create({
   },
   categoryStatLabel: {
     fontSize: 12,
-    color: '#666',
+    color: theme.text.secondary,
     marginBottom: 4,
   },
   categoryValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   categoryMargin: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#34C759',
+    color: theme.success,
   },
   tooltipTextDate: {
-    color: 'white',
+    color: theme.text.inverse,
     fontSize: 10,
     marginBottom: 4,
   },
   tooltipContainer: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surface,
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
+    borderColor: theme.border,
+    ...(Platform.OS === 'web' ? {
+      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    } : {
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    }),
   },
   tooltipTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#1a1a1a',
+    color: theme.text.primary,
     textAlign: 'center',
   },
   tooltipRow: {
@@ -426,12 +441,12 @@ const styles = StyleSheet.create({
   },
   tooltipLabel: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
   },
   tooltipValue: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#007AFF',
+    color: theme.primary,
   },
   totalsContainer: {
     flexDirection: 'row',
@@ -442,7 +457,15 @@ const styles = StyleSheet.create({
   totalText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: theme.text.primary,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: theme.text.secondary,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: theme.text.secondary,
   },
 });
 

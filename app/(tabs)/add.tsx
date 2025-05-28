@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'expo-router';
 import { database } from '../../src/database/database';
@@ -37,7 +37,7 @@ const AddScreenContent: React.FC = () => {
   const queryClient = useQueryClient();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
   const { activeTheme } = useAppTheme();
-
+  
   const { data: containers = [], isLoading: containersLoading, error: containersError } = useQuery<Container[], QueryError>({
     queryKey: [QUERY_KEYS.containers, refreshTimestamp],
     queryFn: async () => {
@@ -112,11 +112,11 @@ const AddScreenContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: activeTheme.background }]}>
+      <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={activeTheme.primary} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -126,7 +126,7 @@ const AddScreenContent: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: activeTheme.background }]}>
+    <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
       <View style={styles.content}>
         <ItemForm 
           containers={containers} 
@@ -134,7 +134,7 @@ const AddScreenContent: React.FC = () => {
           onSuccess={handleSuccess}
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -157,7 +157,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     // backgroundColor sera défini par le thème
-    paddingBottom: Platform.OS === 'ios' ? 0 : 0,
   },
   content: {
     flex: 1,

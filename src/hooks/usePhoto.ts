@@ -164,22 +164,28 @@ export const usePhoto = () => {
     try {
       setState({ uri: null, loading: true, error: null });
 
-      const isValid = await validatePhoto(uri);
-      if (!isValid) {
-        setState({ uri: null, loading: false, error: new Error("Validation photo échouée") });
-        return null;
-      }
-
       let processedUri = uri;
+      
+      // COMPRESSION D'ABORD - avant la validation
       if (shouldCompress) {
         try {
-          console.log(`[usePhoto] uploadPhoto - Compression de l'image...`);
+          console.log(`[usePhoto] uploadPhoto - Compression de l'image avant validation...`);
           processedUri = await compressImage(uri);
-          console.log(`[usePhoto] uploadPhoto - Compression terminée.`);
+          console.log(`[usePhoto] uploadPhoto - Compression terminée, validation de l'image compressée...`);
         } catch (compressError) {
-          console.warn(`[usePhoto] uploadPhoto - Erreur ou échec de la compression, utilisation de l'image originale.`, compressError);
+          console.warn(`[usePhoto] uploadPhoto - Erreur de compression, utilisation de l'image originale:`, compressError);
           processedUri = uri;
         }
+      }
+
+      // VALIDATION APRÈS COMPRESSION - et non-bloquante
+      try {
+        const isValid = await validatePhoto(processedUri);
+        if (!isValid) {
+          console.warn(`[usePhoto] uploadPhoto - Validation échouée, mais on continue l'upload...`);
+        }
+      } catch (validationError) {
+        console.warn(`[usePhoto] uploadPhoto - Erreur de validation, mais on continue l'upload:`, validationError);
       }
 
       const timestamp = Date.now();
@@ -200,7 +206,7 @@ export const usePhoto = () => {
         }
       }
 
-      console.log(`[usePhoto] uploadPhoto - Upload de la nouvelle image R2: ${filename}`);
+      console.log(`[usePhoto] uploadPhoto - Upload de l'image vers R2: ${filename}`);
       const uploadedFilename = await uploadToR2Worker(processedUri, filename);
       console.log(`[usePhoto] uploadPhoto - Upload R2 terminé, nom retourné: ${uploadedFilename}`);
 

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal, TextStyle, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 import ItemList from '../../src/components/ItemList';
 // import { FilterBar } from '../../src/components/FilterBar'; // Temporarily remove or replace
@@ -127,7 +128,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) =>
 
 const StockScreenContent = () => {
   const { activeTheme } = useAppTheme();
-  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => getThemedStyles(activeTheme, insets), [activeTheme, insets]);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   // --- STATES ---
@@ -548,11 +550,10 @@ export default function StockScreen() {
   );
 }
 
-const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType, insets?: { bottom: number }) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
-    paddingBottom: Platform.OS === 'ios' ? 85 : 65,
   },
   errorContainer: {
     flex: 1,

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../../src/components';
 import { useSelector } from 'react-redux';
 import { useRefreshStore } from '../../src/store/refreshStore';
@@ -17,6 +18,7 @@ const SettingsScreen = () => {
   const { activeTheme, themeMode, setThemeMode } = useAppTheme();
   const systemScheme = useColorScheme();
   const isSystemDark = systemScheme === 'dark';
+  const insets = useSafeAreaInsets();
   useRefreshStore();
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
@@ -132,7 +134,7 @@ const SettingsScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
-      <View style={[styles.topBar, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}]}>
+      <View style={[styles.topBar, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => router.push('/(tabs)/stock')}
@@ -254,7 +256,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     // backgroundColor and borderBottomColor will be set by activeTheme
     borderBottomWidth: 1,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
+    // marginTop sera défini dynamiquement avec useSafeAreaInsets
     justifyContent: 'space-between',
   },
   backButton: {

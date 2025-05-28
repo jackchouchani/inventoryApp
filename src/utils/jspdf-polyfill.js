@@ -1,5 +1,15 @@
-// Polyfill pour jsPDF compatible avec Metro/Expo - utilise SimplePDF
-import { SimplePDF } from './simple-pdf.ts';
+// Polyfill pour jsPDF compatible avec Metro/Expo
+import { SimplePDF } from './simple-pdf';
+
+// Essayer d'importer le vrai jsPDF en premier
+let RealJsPDF = null;
+try {
+  const jsPDFModule = require('jspdf');
+  RealJsPDF = jsPDFModule.jsPDF || jsPDFModule.default;
+  console.log('[jspdf-polyfill] Real jsPDF loaded successfully');
+} catch (error) {
+  console.log('[jspdf-polyfill] Real jsPDF not available, falling back to SimplePDF:', error.message);
+}
 
 // Polyfill pour les dépendances dynamiques
 if (typeof window !== 'undefined') {
@@ -26,12 +36,17 @@ if (typeof window !== 'undefined') {
   };
 }
 
-// Fonction qui retourne SimplePDF directement (pas une instance)
+// Fonction qui retourne la meilleure option disponible
 const getJsPDF = () => {
-  console.log('[jspdf-polyfill] getJsPDF called, returning SimplePDF class:', SimplePDF);
-  return SimplePDF;
+  if (RealJsPDF) {
+    console.log('[jspdf-polyfill] getJsPDF called, returning real jsPDF class');
+    return RealJsPDF;
+  } else {
+    console.log('[jspdf-polyfill] getJsPDF called, returning SimplePDF fallback class');
+    return SimplePDF;
+  }
 };
 
-// Export de SimplePDF comme jsPDF
-export const jsPDF = SimplePDF;
+// Export de la meilleure option disponible
+export const jsPDF = RealJsPDF || SimplePDF;
 export default getJsPDF; 
