@@ -40,18 +40,18 @@ export const ImagePicker: React.FC<ImagePickerProps> = memo(({
     <TouchableOpacity 
       style={[
         styles.button,
-        { backgroundColor: theme.colors.primary },
+        { backgroundColor: theme.primary },
         disabled && styles.buttonDisabled
       ]}
       onPress={handlePress}
       disabled={disabled || isLoading}
     >
       {isLoading ? (
-        <ActivityIndicator color={theme.colors.background} />
+        <ActivityIndicator color={theme.background} />
       ) : (
         <Text style={[
           styles.buttonText,
-          { color: theme.colors.background }
+          { color: theme.background }
         ]}>
           Sélectionner une image
         </Text>

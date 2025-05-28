@@ -23,17 +23,17 @@ export const {
 
 // Sélecteurs mémorisés
 export const selectItemsByContainer = createSelector(
-  [selectAllItems, (state, containerId: number) => containerId],
+  [selectAllItems, (_state, containerId: number) => containerId],
   (items, containerId) => items.filter(item => item.containerId === containerId)
 );
 
 export const selectItemsByCategory = createSelector(
-  [selectAllItems, (state, categoryId: number) => categoryId],
+  [selectAllItems, (_state, categoryId: number) => categoryId],
   (items, categoryId) => items.filter(item => item.categoryId === categoryId)
 );
 
 export const selectFilteredItems = createSelector(
-  [selectAllItems, (state, filter: string) => filter.toLowerCase()],
+  [selectAllItems, (_state, filter: string) => filter.toLowerCase()],
   (items, filter) => {
     if (!filter) return items;
     return items.filter(item => 

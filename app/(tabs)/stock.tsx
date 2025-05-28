@@ -1,27 +1,19 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, Text, Platform, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal, TextStyle, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 import ItemList from '../../src/components/ItemList';
-// import { FilterBar } from '../../src/components/FilterBar'; // Temporarily remove or replace
-import { useDispatch } from 'react-redux';
 import { useStockActions } from '../../src/hooks/useStockActions';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import type { Item } from '../../src/types/item';
-import type { Container } from '../../src/types/container';
-import type { Category } from '../../src/types/category';
-import { useQuery } from '@tanstack/react-query';
-import { database } from '../../src/database/database';
-import { setCategories } from '../../src/store/categorySlice';
-import { setContainers } from '../../src/store/containersSlice';
-import * as Sentry from '@sentry/react-native';
+
+// Hooks Redux pour les entités principales  
+import { useItems } from '../../src/hooks/useItems';
+import { useCategories } from '../../src/hooks/useCategories';
+import { useContainers } from '../../src/hooks/useContainers';
+
 import { useRefreshStore } from '../../src/store/refreshStore';
-import { QUERY_KEYS as APP_QUERY_KEYS } from '../../src/constants/queryKeys';
-
-// Importer également useDefaultStyles et DateType si nécessaire pour les types
-import DateTimePicker, { useDefaultStyles } from 'react-native-ui-datepicker';
-
 import AlgoliaStockList from '../../src/components/AlgoliaStockList';
+import DateTimePicker, { useDefaultStyles } from 'react-native-ui-datepicker';
 
 // Interface pour les filtres de stock
 interface StockFilters {
@@ -37,20 +29,6 @@ interface SearchBoxProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
 }
-
-// Removed: interface StockData - not used
-
-const CACHE_CONFIG = {
-  staleTime: 5 * 60 * 1000, // 5 minutes
-  gcTime: 30 * 60 * 1000, // 30 minutes
-  retry: 3,
-} as const;
-
-type QueryError = Error;
-
-
-// Removed: Helper debounce function
-// Removed: NOUVEAUX COMPOSANTS DE FILTRE commented out
 
 const MemoizedItemList = React.memo(ItemList);
 
@@ -128,14 +106,12 @@ const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) =>
 
 const StockScreenContent = () => {
   const { activeTheme } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => getThemedStyles(activeTheme, insets), [activeTheme, insets]);
+  const styles = getThemedStyles(activeTheme);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   // --- STATES ---
   const [filters, setFilters] = useState<StockFilters>({ status: 'available' });
   const [searchQuery, setSearchQuery] = useState('');
-  const dispatch = useDispatch();
   const refreshTimestamp = useRefreshStore(state => state.refreshTimestamp);
 
   // *** ÉTATS POUR LE MODAL DE DATE DE VENTE ***
@@ -150,62 +126,12 @@ const StockScreenContent = () => {
 
   // --- REFS ---
 
-  // --- React Query for Inventory --- //
-  // Cette requête est utilisée quand il n'y a PAS de recherche Algolia active
-  const { data: inventoryData, isLoading: isLoadingInventory, error: errorInventory } = useQuery<Item[], QueryError>({
-    queryKey: [APP_QUERY_KEYS.INVENTORY, refreshTimestamp], // Depend on refreshTimestamp to refetch when store is refreshed
-    queryFn: async () => {
-      try {
-        const items = await database.getItems();
-        return items || [];
-      } catch (error) {
-        console.error('[StockScreen] Error fetching inventory:', error);
-        Sentry.captureException(error, { tags: { type: 'inventory_fetch_error' } });
-        throw new Error('Erreur lors du chargement de l\'inventaire');
-      }
-    },
-    ...CACHE_CONFIG,
-    // Désactive la requête React Query si Algolia est actif (searchQuery non vide)
-    // Cela signifie que quand l'utilisateur tape dans la barre de recherche, la liste React Query ne se rafraîchit pas inutilement.
-    enabled: !searchQuery,
-    refetchOnWindowFocus: true,
-    refetchOnMount: true,
-  });
+  // --- Utilisation des hooks Redux pour les entités principales --- //
+  const { data: inventoryData, isLoading: isLoadingInventory, error: errorInventory } = useItems();
 
-  // Fetch categories and containers using React Query
-  const { data: categoriesData, isLoading: isLoadingCategories, error: errorCategories } = useQuery<Category[], QueryError>({
-    queryKey: [APP_QUERY_KEYS.CATEGORIES, refreshTimestamp],
-    queryFn: async () => {
-      try {
-        const data = await database.getCategories();
-        if (data && data.length > 0) {
-          dispatch(setCategories(data));
-        }
-        return data || [];
-      } catch (error) {
-        Sentry.captureException(error, { tags: { type: 'categories_fetch_error' } });
-        throw new Error('Erreur lors de la récupération des catégories');
-      }
-    },
-    ...CACHE_CONFIG
-  });
-
-  const { data: containersData, isLoading: isLoadingContainers, error: errorContainers } = useQuery<Container[], QueryError>({
-    queryKey: [APP_QUERY_KEYS.CONTAINERS, refreshTimestamp],
-    queryFn: async () => {
-      try {
-        const data = await database.getContainers();
-        if (data && data.length > 0) {
-          dispatch(setContainers(data));
-        }
-        return data || [];
-      } catch (error) {
-        Sentry.captureException(error, { tags: { type: 'containers_fetch_error' } });
-        throw new Error('Erreur lors de la récupération des containers');
-      }
-    },
-    ...CACHE_CONFIG
-  });
+  // Utiliser les hooks Redux pour categories et containers
+  const { categories: categoriesData, isLoading: isLoadingCategories, error: errorCategories } = useCategories();
+  const { data: containersData, isLoading: isLoadingContainers, error: errorContainers } = useContainers();
 
   // Utiliser le hook d'actions du stock
   const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
@@ -261,16 +187,25 @@ const StockScreenContent = () => {
 
                 console.log('[handleDateConfirm] handleMarkAsSold result:', updateResult);
 
+                // Fermer le modal et nettoyer l'état APRÈS la mise à jour réussie
+                setDatePickerVisibility(false);
                 setItemToMarkSold(null);
                 stableCallbacks.current.currentItemToMarkSold = null;
             } catch (error) {
                 console.error('[handleDateConfirm] Error during update:', error);
+                // En cas d'erreur, fermer quand même le modal
+                setDatePickerVisibility(false);
+                setItemToMarkSold(null);
+                stableCallbacks.current.currentItemToMarkSold = null;
             }
         } else {
             console.error('[handleDateConfirm] Cannot proceed: itemToProcess or selectedSoldDate is null',
                 { itemToProcess, selectedSoldDate });
+            // Fermer le modal si les données sont invalides
+            setDatePickerVisibility(false);
+            setItemToMarkSold(null);
+            stableCallbacks.current.currentItemToMarkSold = null;
         }
-        setDatePickerVisibility(false);
     },
     handleDateCancel: () => {
         setDatePickerVisibility(false);
@@ -401,16 +336,17 @@ const StockScreenContent = () => {
   // Inclure le chargement Algolia si isSearchActive est true
   if (isLoading || isLoadingCategories || isLoadingContainers) { // Include loading for categories and containers
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Chargement des données...</Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={activeTheme.primary} />
       </View>
     );
   }
 
-  // Afficher les erreurs seulement si Algolia n'est pas actif
-  if (!isSearchActive && (errorToDisplay || errorCategories || errorContainers)) { // Include errors for categories and containers
-    const errorMessage = errorToDisplay?.message || errorCategories?.message || errorContainers?.message || 'Une erreur inconnue est survenue';
+  // Show error message (but not for Algolia search errors)
+  if (errorToDisplay || errorCategories || errorContainers) {
+    // Traitement des erreurs string et Error
+    const errorMessage = errorToDisplay || errorCategories || errorContainers || 'Une erreur inconnue est survenue';
+
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Une erreur est survenue :</Text>
@@ -464,9 +400,6 @@ const StockScreenContent = () => {
             onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
             categories={categoriesData || []}
             containers={containersData || []}
-            selectedItem={selectedItem}
-            onEditSuccess={stableCallbacks.current.handleEditSuccess}
-            onEditCancel={stableCallbacks.current.handleEditCancel}
             onEndReached={handleLoadMore} // onEndReached pour la liste locale ne fait rien
             isLoadingMore={isLoadingMore} // toujours false pour la liste locale
           />
@@ -491,33 +424,33 @@ const StockScreenContent = () => {
                             ...defaultPickerStyles,
                             selected_label: {
                                 ...(defaultPickerStyles.selected_label as TextStyle),
-                                color: '#FFFFFF',
+                                color: activeTheme.text.onPrimary,
                             },
                             selected: {
                                 ...(defaultPickerStyles.selected as ViewStyle),
-                                backgroundColor: '#007AFF',
+                                backgroundColor: activeTheme.primary,
                             },
                             today: {
                                 ...(defaultPickerStyles.today as ViewStyle),
-                                borderColor: '#007AFF',
+                                borderColor: activeTheme.primary,
                                 borderWidth: 1,
                             },
                             day_label: {
                                 ...(defaultPickerStyles.day_label as TextStyle),
-                                color: '#000000',
+                                color: activeTheme.text.primary,
                             },
                             disabled_label: {
                                 ...(defaultPickerStyles.disabled_label as TextStyle),
-                                color: '#aaaaaa',
+                                color: activeTheme.text.disabled,
                             },
                             month_label: {
                                 ...(defaultPickerStyles.month_label as TextStyle),
-                                color: '#000000',
+                                color: activeTheme.text.primary,
                                 fontWeight: 'bold',
                             },
                             year_label: {
                                 ...(defaultPickerStyles.year_label as TextStyle),
-                                color: '#000000',
+                                color: activeTheme.text.primary,
                                 fontWeight: 'bold',
                             },
                          }}
@@ -550,7 +483,7 @@ export default function StockScreen() {
   );
 }
 
-const getThemedStyles = (theme: AppThemeType, insets?: { bottom: number }) => StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -639,11 +572,11 @@ const getThemedStyles = (theme: AppThemeType, insets?: { bottom: number }) => St
     borderRadius: 15,
     marginRight: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: theme.border,
   },
   filterButtonActive: {
     backgroundColor: theme.primary,
-    borderColor: theme.primaryLight,
+    borderColor: theme.primary,
   },
   filterButtonText: {
     fontSize: 13,
@@ -677,7 +610,7 @@ const getThemedStyles = (theme: AppThemeType, insets?: { bottom: number }) => St
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Standard overlay, theme.overlay if defined
+    backgroundColor: theme.backdrop,
   },
   datePickerModalContent: {
     backgroundColor: theme.surface,

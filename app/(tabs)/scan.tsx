@@ -25,15 +25,14 @@ const ScanScreen: React.FC = () => {
   const [mode, setMode] = useState<ScanScreenMode>('scanner');
   
   // Données d'inventaire
-  const { data: inventoryData, isLoading, refetch } = useInventoryData({});
+  const { data: inventoryData, isLoading } = useInventoryData({});
   const items = inventoryData?.items ?? [];
   const containers = inventoryData?.containers ?? [];
 
   // Utilisation du hook de workflow de scan
   const { handleScan, updateItemInDatabase, finalizeScan } = useScannerWorkflow(
     items,
-    containers,
-    refetch
+    containers
   );
   
   // Gestionnaire de changement de mode (scanner/manuel)

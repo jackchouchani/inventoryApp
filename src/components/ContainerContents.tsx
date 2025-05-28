@@ -1,103 +1,62 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Text, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
-import { Item } from '../types/item';
-import { useInventoryData } from '../hooks/useInventoryData';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { Icon } from './Icon';
+import { useAppTheme } from '../contexts/ThemeContext';
 import ItemCard from './ItemCard';
-import { ErrorBoundary } from '../components/ErrorBoundary';
-import { useTheme } from '../hooks/useTheme';
-import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import { handleError, ErrorType } from '../utils/errorHandler';
-
-const PAGE_SIZE = 25;
+import { useInventoryData } from '../hooks/useInventoryData';
+import type { Item } from '../types/item';
+import type { Container } from '../types/container';
 
 interface ContainerContentsProps {
-  containerId: number;
-  onItemPress?: (item: Item) => void;
-  onRefresh?: () => Promise<void>;
+  container: Container;
+  onItemPress: (item: Item) => void;
 }
 
-export const ContainerContents: React.FC<ContainerContentsProps> = React.memo(({ 
-  containerId,
+export const ContainerContents: React.FC<ContainerContentsProps> = ({
+  container,
   onItemPress,
-  onRefresh 
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
+  const { activeTheme } = useAppTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const theme = useTheme();
-  const { isConnected } = useNetworkStatus();
 
+  // Utiliser le hook d'inventaire avec filtre par container
   const {
-    items,
+    data: inventoryData,
     isLoading,
     error,
-    hasMore,
-    totalCount,
-    fetchNextPage,
-    refetch
+    refetch,
   } = useInventoryData({
-    containerId,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 15, // 15 minutes
-    enabled: isConnected
+    containerId: container.id,
   });
 
-  const handleLoadMore = useCallback(async () => {
-    try {
-      if (hasMore && !isLoading) {
-        setCurrentPage(prev => prev + 1);
-        await fetchNextPage();
-      }
-    } catch (err) {
-      handleError(err, ErrorType.CONTAINER_CONTENTS_LOAD_MORE);
-    }
-  }, [hasMore, isLoading, fetchNextPage]);
+  const items = inventoryData?.items || [];
+  const hasMore = false; // Pas de pagination pour l'instant
+  const totalCount = items.length;
 
   const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
       await refetch();
-      if (onRefresh) {
-        await onRefresh();
-      }
     } catch (err) {
-      handleError(err, ErrorType.CONTAINER_CONTENTS_REFRESH);
+      console.error('Erreur lors du rafraîchissement:', err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [refetch, onRefresh]);
+  }, [refetch]);
 
-  const renderFooter = useMemo(() => {
-    if (!hasMore) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color={theme.colors.primary} />
-      </View>
-    );
-  }, [hasMore, theme.colors.primary]);
-
-  const renderItem = useCallback(({ item }: { item: Item }) => (
-    <ItemCard 
-      item={item}
-      onPress={() => onItemPress?.(item)}
-    />
-  ), [onItemPress]);
-
-  const keyExtractor = useCallback((item: Item) => 
-    item.id?.toString() || '', 
-  []);
-
-  const renderEmptyComponent = useMemo(() => (
+  const emptyComponent = useMemo(() => (
     <View style={styles.emptyContainer}>
-      <Text style={[styles.emptyText, { color: theme.colors.text }]}>
-        Aucun article dans ce container
+      <Icon name="inventory" size={48} color={activeTheme.text.secondary} />
+      <Text style={[styles.emptyText, { color: activeTheme.text.primary }]}>
+        Aucun article dans ce conteneur
       </Text>
     </View>
-  ), [theme.colors.text]);
+  ), [activeTheme.text.primary, activeTheme.text.secondary]);
 
-  if (isLoading && items.length === 0) {
+  if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color={activeTheme.primary} />
       </View>
     );
   }
@@ -105,48 +64,57 @@ export const ContainerContents: React.FC<ContainerContentsProps> = React.memo(({
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={[styles.errorText, { color: theme.colors.error }]}>
-          {error.message}
+        <Text style={[styles.errorText, { color: activeTheme.error }]}>
+          {error}
         </Text>
       </View>
     );
   }
 
+  const renderItem = useCallback(({ item }: { item: Item }) => (
+    <ItemCard
+      item={item}
+      onPress={() => onItemPress(item)}
+    />
+  ), [onItemPress]);
+
   return (
-    <ErrorBoundary>
-      <View style={styles.container}>
-        <FlatList
-          data={items}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={renderEmptyComponent}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={true}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={[theme.colors.primary]}
-            />
-          }
-          contentContainerStyle={items.length === 0 && styles.emptyListContent}
-        />
-        {totalCount > 0 && (
-          <View style={[styles.paginationInfo, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.paginationText, { color: theme.colors.text }]}>
-              {`${items.length} sur ${totalCount} articles`}
-            </Text>
-          </View>
-        )}
-      </View>
-    </ErrorBoundary>
+    <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
+      <FlatList
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id.toString()}
+        ListEmptyComponent={emptyComponent}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={[activeTheme.primary]}
+          />
+        }
+      />
+      
+      {hasMore && (
+        <View style={styles.loadMoreContainer}>
+          <ActivityIndicator 
+            size="small" 
+            color={activeTheme.primary}
+          />
+        </View>
+      )}
+      
+      {totalCount > 0 && (
+        <View style={[styles.paginationInfo, { backgroundColor: activeTheme.surface }]}>
+          <Text style={[styles.paginationText, { color: activeTheme.text.primary }]}>
+            {totalCount} article{totalCount > 1 ? 's' : ''} dans ce conteneur
+          </Text>
+        </View>
+      )}
+    </View>
   );
-});
+};
 
 ContainerContents.displayName = 'ContainerContents';
 
@@ -188,9 +156,15 @@ const styles = StyleSheet.create({
   paginationInfo: {
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
   },
   paginationText: {
     textAlign: 'center',
+  },
+  loadMoreContainer: {
+    padding: 10,
+    alignItems: 'center',
+  },
+  listContent: {
+    flexGrow: 1,
   },
 }); 

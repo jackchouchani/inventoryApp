@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { parseId, isValidId } from '../utils/identifierManager';
+import { parseId } from '../utils/identifierManager';
 import { handleQRCodeError } from '../utils/labelErrorHandler';
 
 /**

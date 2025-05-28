@@ -99,9 +99,9 @@ export function isContainerQrCode(id: string): boolean {
 
 /**
  * Vérifie si un identifiant est numérique
- * @param id L'identifiant à vérifier
+ * @param _id L'identifiant à vérifier
  * @returns false (Les identifiants numériques ne sont plus utilisés)
  */
-export function isNumericId(id: string): boolean {
+export function isNumericId(_id: string): boolean {
   return false; // Les identifiants numériques ne sont plus utilisés
 } 

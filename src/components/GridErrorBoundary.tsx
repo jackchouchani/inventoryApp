@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { ErrorBoundary } from './ErrorBoundary';
-import { useTheme } from '../hooks/useTheme';
-import { theme } from '../utils/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 interface GridErrorBoundaryProps {
   children: React.ReactNode;
@@ -15,34 +14,57 @@ const GridFallback = React.memo<{ error: Error; resetErrorBoundary: () => void; 
   resetErrorBoundary,
   gridName = 'grille'
 }) => {
-  const { colors } = useTheme();
+  const { activeTheme } = useAppTheme();
 
   return (
     <View 
-      style={[styles.container, { backgroundColor: colors.card }]}
+      style={[styles.container, { 
+        backgroundColor: activeTheme.surface,
+        padding: activeTheme.spacing.lg,
+        borderRadius: activeTheme.borderRadius.md,
+        margin: activeTheme.spacing.md,
+      }]}
       accessibilityRole="alert"
     >
       <Text 
-        style={[styles.title, { color: colors.text }]}
+        style={[styles.title, { 
+          color: activeTheme.text.primary,
+          fontSize: activeTheme.typography.h2.fontSize,
+          marginBottom: activeTheme.spacing.sm,
+        }]}
         accessibilityRole="header"
       >
         Erreur de chargement de la {gridName}
       </Text>
       <Text 
-        style={[styles.message, { color: colors.text }]}
+        style={[styles.message, { 
+          color: activeTheme.text.secondary,
+          fontSize: activeTheme.typography.body.fontSize,
+          marginBottom: activeTheme.spacing.lg,
+        }]}
         accessibilityRole="text"
       >
         {error?.message || `Impossible d'afficher les éléments de la ${gridName}`}
       </Text>
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
+          style={[styles.retryButton, { 
+            backgroundColor: activeTheme.primary,
+            paddingHorizontal: activeTheme.spacing.lg,
+            paddingVertical: activeTheme.spacing.md,
+            borderRadius: activeTheme.borderRadius.sm,
+          }]}
           onPress={resetErrorBoundary}
           accessibilityRole="button"
           accessibilityLabel="Réessayer"
           accessibilityHint="Appuyez pour recharger la grille"
         >
-          <Text style={styles.buttonText}>Réessayer</Text>
+          <Text style={[styles.buttonText, { 
+            color: activeTheme.text.onPrimary,
+            fontSize: activeTheme.typography.body.fontSize,
+          }]}>
+            Réessayer
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -72,34 +94,22 @@ GridErrorBoundary.displayName = 'GridErrorBoundary';
 
 const styles = StyleSheet.create({
   container: {
-    padding: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-    margin: theme.spacing.md,
     alignItems: 'center',
   },
   title: {
-    fontSize: theme.typography.h2.fontSize,
     fontWeight: 'bold',
-    marginBottom: theme.spacing.sm,
   },
   message: {
-    fontSize: theme.typography.body.fontSize,
     textAlign: 'center',
-    marginBottom: theme.spacing.lg,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
   },
   retryButton: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.sm,
-    boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)', elevation: 2,
+    elevation: 2,
   },
   buttonText: {
-    color: theme.colors.text.inverse,
-    fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
   },
 }); 

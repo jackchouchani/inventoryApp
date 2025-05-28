@@ -255,9 +255,21 @@ export class SupabaseDatabase implements DatabaseInterface {
       // S'assurer que le QR code est au bon format
       if (!container.qrCode || !container.qrCode.startsWith('CONT_')) {
         console.error('QR code container invalide ou manquant, génération d\'un nouveau code');
+        console.log('QR code reçu:', container.qrCode);
         // Import la fonction generateId si nécessaire
         const { generateId } = await import('../utils/identifierManager');
         container.qrCode = generateId('CONTAINER');
+        console.log('Nouveau QR code généré:', container.qrCode);
+      } else {
+        // Utiliser la validation appropriée
+        const { isContainerQrCode } = await import('../utils/identifierManager');
+        if (!isContainerQrCode(container.qrCode)) {
+          console.error('QR code container format invalide, génération d\'un nouveau code');
+          console.log('QR code invalide:', container.qrCode);
+          const { generateId } = await import('../utils/identifierManager');
+          container.qrCode = generateId('CONTAINER');
+          console.log('Nouveau QR code généré:', container.qrCode);
+        }
       }
       
       const supabaseContainer = {

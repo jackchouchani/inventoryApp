@@ -1,5 +1,5 @@
 import FastImage from 'react-native-fast-image';
-import { Item } from '../database/types';
+import { Item } from '../types/item';
 
 export const ImagePriority = {
   LOW: FastImage.priority.low,
@@ -61,9 +61,9 @@ export const preloadImages = (items: Item[]) => {
   cleanupFailedImages();
 
   const imagesToPreload = items
-    .filter(item => item.photoUri && canRetryImage(item.photoUri))
+    .filter(item => item.photo_storage_url && canRetryImage(item.photo_storage_url))
     .map(item => ({
-      uri: item.photoUri as string,
+      uri: item.photo_storage_url as string,
       priority: ImagePriority.NORMAL,
     }));
 

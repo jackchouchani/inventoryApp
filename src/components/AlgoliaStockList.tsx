@@ -26,7 +26,6 @@ const AlgoliaStockListInner: React.FC<AlgoliaStockListProps> = (props) => {
     items,
     isLoading,
     nbHits,
-    loadMore,
     search,
   } = useAlgoliaSearch();
 
@@ -60,11 +59,8 @@ const AlgoliaStockListInner: React.FC<AlgoliaStockListProps> = (props) => {
         onMarkAsAvailable={props.onMarkAsAvailable}
         categories={props.categories}
         containers={props.containers}
-        selectedItem={props.selectedItem}
-        onEditSuccess={props.onEditSuccess}
-        onEditCancel={props.onEditCancel}
-        onEndReached={loadMore}
-        isLoadingMore={isLoading && items.length > 0}
+        onEndReached={props.onEndReached}
+        isLoadingMore={props.isLoadingMore}
       />
     </>
   );

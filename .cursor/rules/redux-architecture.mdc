@@ -1,0 +1,251 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Architecture Redux Pure - Règles Obligatoires ✅ MIGRATION COMPLÈTE
+
+## 🎯 Statut de Migration (Mise à jour Décembre 2024)
+
+### ✅ **MIGRATION REDUX TERMINÉE AVEC SUCCÈS**
+- **Aucune référence React Query** restante dans le codebase
+- **Architecture Redux pure** pour toutes les entités principales
+- **Bug de synchronisation articles vendus/restockés RÉSOLU**
+- **Pattern d'invalidation cohérent** établi dans toute l'application
+
+### 📁 **Fichiers Migrés avec Succès**
+- ✅ `app/(stack)/multi-receipt.tsx` - React Query complètement supprimé
+- ✅ `app/(stack)/containers.tsx` - `useQueryClient` supprimé, remplacé par `dispatch(fetchItems())`
+- ✅ `src/components/ItemEditForm.tsx` - Gestion état query complexe supprimée
+- ✅ `src/components/ItemForm.tsx` - `useMutation` remplacée par fonction directe
+- ✅ `src/hooks/useStats.ts` - Migré vers hooks Redux (`useItems`, `useCategories`)
+- ✅ `app/(stack)/labels.tsx` - Imports React Query nettoyés
+
+### 🔍 **Vérification Technique**
+```bash
+# Vérification aucune référence React Query (✅ Validé)
+grep -r "useQuery\|useMutation\|useQueryClient\|@tanstack/react-query" --include="*.ts" --include="*.tsx" .
+# Résultat: 0 match trouvé
+```
+
+## Gestion d'État - Entités Principales
+
+**TOUJOURS utiliser Redux pour les entités principales, JAMAIS React Query :**
+
+### Entités Concernées
+- **Items** : Utiliser Redux store + thunks SEULEMENT
+- **Categories** : Utiliser Redux store + slice SEULEMENT  
+- **Containers** : Utiliser Redux store + slice SEULEMENT
+
+### Hooks Redux Obligatoires
+```typescript
+// ✅ CORRECT - Utiliser ces hooks Redux
+import { useItems } from '../../src/hooks/useItems';
+import { useCategories } from '../../src/hooks/useCategories'; 
+import { useContainers } from '../../src/hooks/useContainers';
+import { useItem } from '../../src/hooks/useItem'; // Pour un item spécifique
+
+// ❌ INTERDIT - Ne jamais utiliser React Query pour ces entités
+import { useQuery } from '@tanstack/react-query';
+```
+
+### Thunks Redux Disponibles
+- `fetchItems` - Récupération paginée des items
+- `fetchItemById` - Récupération d'un item spécifique
+- `updateItemStatus` - Mise à jour du statut (sold/available)
+- Référence : [src/store/itemsThunks.ts](mdc:src/store/itemsThunks.ts)
+
+## Format des Données - Conversion Obligatoire
+
+### Règle de Mapping
+- **Base de données** : snake_case (`purchase_price`, `selling_price`, `container_id`, `category_id`)
+- **Redux/Frontend** : camelCase (`purchasePrice`, `sellingPrice`, `containerId`, `categoryId`)
+
+### Pattern d'Adaptation Required
+```typescript
+// ✅ PATTERN OBLIGATOIRE pour les composants recevant des données DB
+const adaptedItem = useMemo(() => ({
+  ...item,
+  purchasePrice: item.purchase_price || 0,
+  sellingPrice: item.selling_price || 0,
+  containerId: item.container_id,
+  categoryId: item.category_id,
+  photoStorageUrl: item.photo_storage_url,
+  createdAt: item.created_at,
+  updatedAt: item.updated_at,
+  soldAt: item.sold_at,
+  createdBy: item.created_by,
+  userId: item.user_id
+}), [item]);
+```
+
+## Navigation - Routes Dédiées
+
+### Structure de Routes Obligatoire
+```
+app/
+  item/
+    _layout.tsx          # Navigation principale
+    [id]/
+      _layout.tsx        # Layout avec header navigation
+      info.tsx          # Page d'informations détaillées
+      edit.tsx          # Page d'édition
+```
+
+### Redirection au lieu de Modals
+```typescript
+// ✅ CORRECT - Utiliser la navigation
+router.push(`/item/${item.id}/edit`);
+router.push(`/item/${item.id}/info`);
+
+// ❌ ÉVITER - Plus de modals pour edit/info
+setShowEditModal(true);
+```
+
+## Synchronisation d'État
+
+### Règles de Mutation
+- **Toutes les mutations** DOIVENT passer par Redux thunks
+- **Invalidation automatique** via Redux, pas de `window.location.reload()`
+- **État global synchronisé** sur tous les composants
+
+### Pattern de Mise à Jour ✅ CONFIRMÉ
+```typescript
+// ✅ CORRECT - Mutation via Redux (Pattern validé dans migration)
+const dispatch = useDispatch<AppDispatch>();
+await dispatch(updateItemStatus({ itemId, status }));
+
+// ✅ INVALIDATION REDUX - Remplace queryClient.invalidateQueries()
+await dispatch(fetchItems({ page: 0, limit: 1000 }));
+
+// ❌ INTERDIT - Mutations directes Supabase dans composants
+await database.updateItem(itemId, data);
+
+// ❌ INTERDIT - Invalidation React Query (supprimé de toute l'app)
+queryClient.invalidateQueries({ queryKey: ['items'] });
+```
+
+## Éviter les Conflits de Cache ✅ RÉSOLU
+
+### Problèmes RÉSOLUS par la Migration
+- ✅ **Fin du mélange React Query + Redux** pour même entité
+- ✅ **Fin des items mis à jour via Redux mais lus via React Query**
+- ✅ **Fin du cache désynchronisé** entre sources de données
+- ✅ **Bug articles vendus/restockés CORRIGÉ**
+
+### Solutions Implémentées ✅ CONFIRMÉES
+- ✅ **Migration complète vers Redux** pour entités principales
+- ✅ **Hooks Redux uniformes** dans toute l'application
+- ✅ **Invalidation cohérente** via store Redux uniquement
+- ✅ **Pattern dispatch unique** : `dispatch(fetchItems())` au lieu de `queryClient.invalidateQueries()`
+
+## Composants - Bonnes Pratiques ✅ VALIDÉES
+
+### Adaptation des Données dans les Composants
+Référence d'implémentation : [app/item/[id]/edit.tsx](mdc:app/item/[id]/edit.tsx)
+
+```typescript
+// ✅ Pattern adapté pour éviter les re-renders infinis (validé dans migration)
+const adaptedItem = useMemo(() => ({
+  // mapping snake_case vers camelCase
+}), [item]);
+
+// Utiliser adaptedItem dans le composant, pas item directement
+```
+
+### Gestion d'Erreurs
+```typescript
+// ✅ Protection contre propriétés undefined
+const displayPrice = (salePrice || 0).toString();
+const categoryName = category?.name || 'Non spécifiée';
+```
+
+### TypeScript Dispatch Pattern ✅ CONFIRMÉ
+```typescript
+// ✅ OBLIGATOIRE - Typage dispatch correct (validé dans migration)
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../src/store/store';
+
+const dispatch = useDispatch<AppDispatch>();
+```
+
+## Fichiers de Référence ✅ VALIDÉS
+
+### Hooks Redux
+- [src/hooks/useItems.ts](mdc:src/hooks/useItems.ts) ✅ Validé
+- [src/hooks/useCategories.ts](mdc:src/hooks/useCategories.ts) ✅ Validé
+- [src/hooks/useContainers.ts](mdc:src/hooks/useContainers.ts) ✅ Validé
+- [src/hooks/useItem.ts](mdc:src/hooks/useItem.ts) ✅ Validé
+
+### Store Redux
+- [src/store/itemsThunks.ts](mdc:src/store/itemsThunks.ts) ✅ Validé
+- [src/store/itemsSlice.ts](mdc:src/store/itemsSlice.ts) ✅ Validé
+- [src/store/categorySlice.ts](mdc:src/store/categorySlice.ts) ✅ Validé
+- [src/store/containersSlice.ts](mdc:src/store/containersSlice.ts) ✅ Validé
+
+### Pages Modèles ✅ MIGRÉES
+- [app/item/[id]/info.tsx](mdc:app/item/[id]/info.tsx) ✅ Migré
+- [app/item/[id]/edit.tsx](mdc:app/item/[id]/edit.tsx) ✅ Migré
+- [app/(tabs)/add.tsx](mdc:app/(tabs)/add.tsx) ✅ Validé
+
+## Exemples d'Usage Correct ✅ CONFIRMÉS
+
+### Chargement d'Items
+```typescript
+const { data: items, isLoading, error } = useItems();
+// ✅ Validé - Pas useQuery pour les items
+```
+
+### Récupération Item Spécifique
+```typescript
+const { item, isLoading } = useItem(itemId);
+// ✅ Validé - Utilise Redux thunk fetchItemById
+```
+
+### Mise à Jour de Statut
+```typescript
+await dispatch(updateItemStatus({ 
+  itemId: item.id.toString(), 
+  status: 'sold',
+  soldDate: new Date().toISOString(),
+  salePrice: 100
+}));
+// ✅ Validé - Pattern utilisé dans migration
+```
+
+## 🚫 Patterns INTERDITS (Supprimés avec Succès)
+
+### ❌ React Query pour Entités Principales
+```typescript
+// ❌ SUPPRIMÉ de toute l'application
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+const { data: items } = useQuery(['items'], fetchItems);
+const mutation = useMutation(updateItem);
+queryClient.invalidateQueries(['items']);
+```
+
+### ❌ Mélange React Query + Redux
+```typescript
+// ❌ PROBLÈME RÉSOLU - Plus de conflit cache
+const { data: items } = useQuery(['items']); // Lecture React Query
+await dispatch(updateItem()); // Mutation Redux
+// ↑ Ce pattern causait le bug de synchronisation articles vendus/restockés
+```
+
+## 📊 Résultats de la Migration
+
+### Métriques de Succès
+- **0 référence React Query** dans le codebase
+- **6 fichiers migrés** avec succès
+- **1 bug critique résolu** (articles vendus/restockés)
+- **100% architecture Redux** pour entités principales
+- **Pattern d'invalidation uniforme** établi
+
+### Vérification Continue
+```bash
+# Commande de vérification à exécuter régulièrement
+npx tsc --noEmit --skipLibCheck | grep -i "react-query\|@tanstack"
+# Résultat attendu: aucune erreur React Query
+```
+
+Cette architecture Redux pure garantit une synchronisation cohérente et **élimine définitivement** les conflits de cache entre React Query et Redux.

@@ -19,9 +19,6 @@ interface ThunkError {
   originalError: unknown;
 }
 
-// Constantes
-const ITEMS_PER_PAGE = 20;
-
 // Fonction utilitaire pour convertir ErrorDetails en ThunkError
 const convertToThunkError = (error: ErrorDetails): ThunkError => ({
   message: error.message,
@@ -77,6 +74,48 @@ export const fetchItems = createAsyncThunk<
       items,
       total: count || 0,
       hasMore: (count || 0) > (page + 1) * limit
+    };
+  } catch (error) {
+    return rejectWithValue(handleThunkError(error));
+  }
+});
+
+export const fetchItemById = createAsyncThunk<
+  Item | null,
+  number,
+  { state: RootState; rejectValue: ThunkError }
+>('items/fetchItemById', async (itemId, { rejectWithValue }) => {
+  try {
+    console.log('[REDUX] Fetching item by ID:', itemId);
+    const { data, error } = await supabase
+      .from('items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('deleted', false)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // No rows returned
+      throw error;
+    }
+
+    if (!data) return null;
+
+    console.log('[REDUX] Item fetched successfully:', data);
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description || '',
+      purchasePrice: data.purchase_price,
+      sellingPrice: data.selling_price,
+      status: data.status,
+      photo_storage_url: data.photo_storage_url,
+      containerId: data.container_id,
+      categoryId: data.category_id,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      soldAt: data.sold_at
     };
   } catch (error) {
     return rejectWithValue(handleThunkError(error));
@@ -163,38 +202,14 @@ export const fetchSimilarItems = createAsyncThunk<
   }
 });
 
-// Type pour les mutations optimistes
-interface OptimisticMutation<T> {
-  execute: () => Promise<T>;
-  optimisticData: T;
-  rollback: () => void;
-}
-
-// Fonction utilitaire pour gérer les mutations optimistes
-const handleOptimisticMutation = async <T>(
-  mutation: OptimisticMutation<T>,
-  { dispatch, rejectWithValue }: any
-) => {
-  try {
-    // Appliquer la mise à jour optimiste
-    mutation.rollback();
-    
-    // Exécuter la mutation réelle
-    const result = await mutation.execute();
-    return result;
-  } catch (error) {
-    // Rollback en cas d'erreur
-    mutation.rollback();
-    return rejectWithValue(error instanceof Error ? error.message : 'Une erreur est survenue');
-  }
-};
-
 export const updateItemStatus = createAsyncThunk<
   Item,
   { itemId: number; status: string },
   { state: RootState; rejectValue: ThunkError }
 >('items/updateItemStatus', async ({ itemId, status }, { rejectWithValue }) => {
   try {
+    console.log('[REDUX updateItemStatus] Changement statut:', { itemId, status });
+    
     const { data, error } = await supabase
       .from('items')
       .update({
@@ -208,6 +223,56 @@ export const updateItemStatus = createAsyncThunk<
 
     if (error) throw error;
     if (!data) throw new Error('Item non trouvé');
+
+    console.log('[REDUX updateItemStatus] Données fraîches récupérées:', data);
+
+    // Retourner les données complètes et fraîches de la DB
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description || '',
+      purchasePrice: data.purchase_price,
+      sellingPrice: data.selling_price, // Prix récupéré de la DB
+      status: data.status,
+      photo_storage_url: data.photo_storage_url,
+      containerId: data.container_id,
+      categoryId: data.category_id,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      soldAt: data.sold_at
+    };
+  } catch (error) {
+    console.error('[REDUX updateItemStatus] Erreur:', error);
+    return rejectWithValue(handleThunkError(error));
+  }
+});
+
+// Nouveau thunk pour vendre un article avec prix et date
+export const sellItem = createAsyncThunk<
+  Item,
+  { itemId: number; soldDate: string; salePrice: number },
+  { state: RootState; rejectValue: ThunkError }
+>('items/sellItem', async ({ itemId, soldDate, salePrice }, { rejectWithValue }) => {
+  try {
+    console.log('[REDUX sellItem] Vente article:', { itemId, soldDate, salePrice });
+    
+    const { data, error } = await supabase
+      .from('items')
+      .update({
+        status: 'sold',
+        selling_price: salePrice,
+        sold_at: soldDate,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Item non trouvé');
+
+    console.log('[REDUX sellItem] Succès:', data);
 
     return {
       id: data.id,
@@ -225,6 +290,7 @@ export const updateItemStatus = createAsyncThunk<
       soldAt: data.sold_at
     };
   } catch (error) {
+    console.error('[REDUX sellItem] Erreur:', error);
     return rejectWithValue(handleThunkError(error));
   }
 });

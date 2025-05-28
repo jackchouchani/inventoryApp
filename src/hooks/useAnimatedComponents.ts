@@ -3,14 +3,10 @@ import {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withSequence,
-  withDelay,
   useSharedValue,
   WithSpringConfig,
   WithTimingConfig,
   Easing,
-  interpolate,
-  Extrapolate,
   EasingFunction,
 } from 'react-native-reanimated';
 

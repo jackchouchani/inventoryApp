@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { database } from '../database/database';
+import { useItems } from './useItems';
+import { useCategories } from './useCategories';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
 import { startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, eachDayOfInterval, eachMonthOfInterval, endOfDay } from 'date-fns';
@@ -223,19 +223,8 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
     }
   }, [selectedPeriod]);
 
-  const { data: items = [], error: itemsError } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => database.getItems(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 24 * 60 * 60 * 1000 // 24 heures
-  });
-
-  const { data: categories = [], error: categoriesError } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => database.getCategories(),
-    staleTime: 30 * 60 * 1000, // 30 minutes
-    gcTime: 24 * 60 * 60 * 1000 // 24 heures
-  });
+  const { data: items = [], error: itemsError } = useItems();
+  const { categories = [], error: categoriesError } = useCategories();
 
   const stats = useMemo(() => {
     if (itemsError || categoriesError) {

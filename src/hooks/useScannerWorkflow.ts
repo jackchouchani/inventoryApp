@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { updateItem } from '../store/itemsActions';
+import { fetchItems } from '../store/itemsThunks';
+import { AppDispatch } from '../store/store';
 import { databaseInterface, Container, Item } from '../database/database';
 import { parseId } from '../utils/identifierManager';
 
@@ -19,15 +20,14 @@ export interface ScanResult {
  * Hook personnalisé pour gérer le workflow de scan avec Scanner
  * @param items Liste des articles disponibles
  * @param containers Liste des containers disponibles
- * @param refetch Fonction pour rafraîchir les données
+ * @param refetch Fonction pour rafraîchir les données (pour compatibilité, peut être supprimée)
  */
 export const useScannerWorkflow = (
   items: Item[], 
   containers: Container[],
-  refetch: () => Promise<any>
+  refetch?: () => Promise<any> // Optionnel maintenant
 ) => {
-  const dispatch = useDispatch();
-  const queryClient = useQueryClient();
+  const dispatch = useDispatch<AppDispatch>();
   
   /**
    * Traitement du scan d'un code-barres
@@ -177,15 +177,17 @@ export const useScannerWorkflow = (
       // Mise à jour dans la base de données
       await databaseInterface.updateItem(item.id!, item);
       
-      // Invalider les requêtes pour rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ['items'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      // ✅ INVALIDATION REDUX - Remplace queryClient.invalidateQueries()
+      await dispatch(fetchItems({ page: 0, limit: 1000 }));
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
-      await refetch();
+      // Fallback vers refetch si fourni pour compatibilité
+      if (refetch) {
+        await refetch();
+      }
       throw new Error('Impossible de mettre à jour l\'article');
     }
-  }, [dispatch, queryClient, refetch]);
+  }, [dispatch, refetch]);
   
   /**
    * Finalisation du scan

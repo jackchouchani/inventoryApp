@@ -1,0 +1,342 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Gestion du Mode Sombre et Thème
+
+## ThemeContext Principal
+
+### Référence d'Implémentation
+- [src/contexts/ThemeContext.tsx](mdc:src/contexts/ThemeContext.tsx)
+
+### Utilisation Obligatoire du Hook useAppTheme
+**TOUJOURS utiliser useAppTheme pour accéder au thème actif**
+
+```typescript
+// ✅ CORRECT - Utiliser useAppTheme
+import { useAppTheme } from '../contexts/ThemeContext';
+
+const Component = () => {
+  const { activeTheme, themeMode, setThemeMode } = useAppTheme();
+  
+  return (
+    <View style={{ backgroundColor: activeTheme.background }}>
+      <Text style={{ color: activeTheme.text.primary }}>
+        Contenu
+      </Text>
+    </View>
+  );
+};
+```
+
+```typescript
+// ❌ INTERDIT - Ne pas utiliser de couleurs hardcodées
+<View style={{ backgroundColor: '#FFFFFF' }}>
+<Text style={{ color: '#000000' }}>Contenu</Text>
+```
+
+## Types de Thème
+
+### ThemeMode
+```typescript
+export type ThemeMode = 'light' | 'dark' | 'system';
+```
+
+### AppThemeType Structure
+```typescript
+export type AppThemeType = {
+  // Couleurs principales
+  primary: string;
+  primaryLight: string;
+  secondary: string;
+  
+  // Arrière-plans
+  background: string;
+  backgroundSecondary: string;
+  surface: string;
+  card: string;
+  
+  // États
+  error: string;
+  success: string;
+  successLight: string;
+  warning: string;
+  
+  // Texte
+  text: {
+    primary: string;
+    secondary: string;
+    disabled: string;
+    inverse: string;
+    onPrimary: string;
+  };
+  
+  // Bordures et autres
+  border: string;
+  backdrop: string;
+  
+  // Danger
+  danger: {
+    main: string;
+    light: string;
+    text: string;
+    background: string;
+  };
+  
+  // Design tokens
+  spacing: any;
+  typography: any;
+  borderRadius: any;
+  shadows: any;
+};
+```
+
+## Couleurs par Mode
+
+### Mode Clair (Light)
+```typescript
+const lightTheme = {
+  primary: '#007AFF',        // Bleu
+  background: '#F2F2F7',     // Gris très clair
+  surface: '#FFFFFF',        // Blanc
+  text: {
+    primary: '#000000',      // Noir
+    secondary: '#666666',    // Gris
+  },
+  // ... autres couleurs
+};
+```
+
+### Mode Sombre (Dark)
+```typescript
+const darkTheme = {
+  primary: '#0A84FF',        // Bleu plus vif
+  background: '#000000',     // Noir
+  surface: '#1C1C1E',        // Gris très sombre
+  text: {
+    primary: '#FFFFFF',      // Blanc
+    secondary: '#A0A0A0',    // Gris clair
+  },
+  // ... autres couleurs
+};
+```
+
+## Utilisation dans les Composants
+
+### Pattern de Base
+```typescript
+import { useAppTheme } from '../contexts/ThemeContext';
+
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  
+  return (
+    <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
+      <Text style={[styles.title, { color: activeTheme.text.primary }]}>
+        Titre
+      </Text>
+      <Text style={[styles.subtitle, { color: activeTheme.text.secondary }]}>
+        Sous-titre
+      </Text>
+    </View>
+  );
+};
+```
+
+### Styles Dynamiques avec StyleSheet
+```typescript
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
+  container: {
+    backgroundColor: theme.background,
+    borderColor: theme.border,
+  },
+  card: {
+    backgroundColor: theme.surface,
+    shadowColor: theme.text.primary,
+  },
+  primaryButton: {
+    backgroundColor: theme.primary,
+  },
+  primaryButtonText: {
+    color: theme.text.onPrimary,
+  },
+});
+
+// Utilisation
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = getThemedStyles(activeTheme);
+  
+  return <View style={styles.container} />;
+};
+```
+
+## Gestion des Modes de Thème
+
+### Changement de Mode
+```typescript
+const ThemeSelector = () => {
+  const { themeMode, setThemeMode } = useAppTheme();
+  
+  return (
+    <View>
+      {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => (
+        <TouchableOpacity
+          key={mode}
+          onPress={() => setThemeMode(mode)}
+          style={[
+            styles.themeButton,
+            { backgroundColor: themeMode === mode ? activeTheme.primary : activeTheme.surface }
+          ]}
+        >
+          <Text style={{ color: themeMode === mode ? activeTheme.text.onPrimary : activeTheme.text.primary }}>
+            {mode === 'light' ? 'Clair' : mode === 'dark' ? 'Sombre' : 'Système'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+```
+
+### Détection du Mode Système
+```typescript
+import { useColorScheme } from 'react-native';
+
+const Component = () => {
+  const { themeMode, activeTheme } = useAppTheme();
+  const systemScheme = useColorScheme();
+  
+  // Affichage du mode actuel
+  const currentThemeDisplay = useMemo(() => {
+    switch (themeMode) {
+      case 'system':
+        return `Système (${systemScheme === 'dark' ? 'Sombre' : 'Clair'})`;
+      case 'dark':
+        return 'Sombre';
+      case 'light':
+        return 'Clair';
+      default:
+        return 'Clair';
+    }
+  }, [themeMode, systemScheme]);
+  
+  return (
+    <Text style={{ color: activeTheme.text.primary }}>
+      Mode actuel: {currentThemeDisplay}
+    </Text>
+  );
+};
+```
+
+## Couleurs Sémantiques
+
+### États et Actions
+```typescript
+// Succès
+backgroundColor: activeTheme.success
+color: activeTheme.success
+
+// Erreur
+backgroundColor: activeTheme.error
+color: activeTheme.error
+
+// Avertissement
+backgroundColor: activeTheme.warning
+color: activeTheme.warning
+
+// Danger
+backgroundColor: activeTheme.danger.main
+color: activeTheme.danger.text
+```
+
+### Hiérarchie de Texte
+```typescript
+// Titre principal
+color: activeTheme.text.primary
+
+// Texte secondaire
+color: activeTheme.text.secondary
+
+// Texte désactivé
+color: activeTheme.text.disabled
+
+// Texte sur fond coloré
+color: activeTheme.text.inverse
+color: activeTheme.text.onPrimary
+```
+
+### Surfaces et Conteneurs
+```typescript
+// Arrière-plan principal
+backgroundColor: activeTheme.background
+
+// Arrière-plan secondaire
+backgroundColor: activeTheme.backgroundSecondary
+
+// Cartes et modales
+backgroundColor: activeTheme.surface
+
+// Bordures
+borderColor: activeTheme.border
+
+// Overlay/backdrop
+backgroundColor: activeTheme.backdrop
+```
+
+## Bonnes Pratiques
+
+### Éviter les Couleurs Hardcodées
+```typescript
+// ✅ CORRECT
+<View style={{ backgroundColor: activeTheme.surface }}>
+
+// ❌ INTERDIT
+<View style={{ backgroundColor: '#FFFFFF' }}>
+```
+
+### Utiliser useMemo pour les Styles Complexes
+```typescript
+const styles = useMemo(() => StyleSheet.create({
+  container: {
+    backgroundColor: activeTheme.background,
+    borderColor: activeTheme.border,
+  },
+}), [activeTheme]);
+```
+
+### Gestion des Transitions
+```typescript
+// Les changements de thème sont automatiques
+// Pas besoin de gestion manuelle des transitions
+```
+
+## Persistance du Thème
+
+### Sauvegarde Automatique
+- Le mode de thème est automatiquement sauvegardé dans AsyncStorage
+- Restauration automatique au démarrage de l'application
+- Synchronisation avec les changements système (mode 'system')
+
+### Exemple d'Implémentation
+Référence : [app/(stack)/settings.tsx](mdc:app/(stack)/settings.tsx)
+
+## Compatibilité Plateforme
+
+### iOS
+- Support natif du mode sombre
+- Transitions automatiques
+- Respect des préférences système
+
+### Android
+- Support du mode sombre Android 10+
+- Fallback gracieux pour versions antérieures
+- Thème adaptatif
+
+### Web
+- Support des media queries CSS
+- Respect des préférences navigateur
+- Performance optimisée
+
+Cette approche garantit une expérience utilisateur cohérente et accessible sur toutes les plateformes avec un support complet du mode sombre.

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { secureStorage } from '../services/secureStorage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 
 export const useSecureStorage = (key: string) => {
@@ -11,7 +11,7 @@ export const useSecureStorage = (key: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const storedValue = await secureStorage.getItem(key);
+      const storedValue = await AsyncStorage.getItem(key);
       setValue(storedValue);
       return storedValue;
     } catch (error) {
@@ -29,10 +29,11 @@ export const useSecureStorage = (key: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await secureStorage.setItem(key, newValue);
+      await AsyncStorage.setItem(key, newValue);
       setValue(newValue);
       return true;
     } catch (error) {
+      console.error('Erreur AsyncStorage setItem:', error);
       Sentry.captureException(error, {
         tags: { context: 'secure_storage', operation: 'set' }
       });
@@ -47,7 +48,7 @@ export const useSecureStorage = (key: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await secureStorage.removeItem(key);
+      await AsyncStorage.removeItem(key);
       setValue(null);
       return true;
     } catch (error) {

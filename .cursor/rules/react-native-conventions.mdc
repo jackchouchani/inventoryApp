@@ -1,0 +1,254 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Conventions React Native/Expo - Bonnes Pratiques
+
+## Stack Technologique
+
+### Framework Principal
+- **React Native** avec **Expo Router** (file-based routing)
+- **Redux Toolkit** pour la gestion d'état
+- **TypeScript** obligatoire
+- **Supabase** pour la base de données
+
+### Plateforme Cible
+- **Web App** principalement (ne pas s'occuper d'iOS/Android natif)
+- Compatible mobile via responsive design
+- PWA capabilities
+
+## Structure de Navigation
+
+### Router Structure
+```
+app/
+  (auth)/           # Routes d'authentification
+  (stack)/          # Stack navigation
+  (tabs)/           # Tab navigation principale
+    stock.tsx       # Page inventaire
+    add.tsx         # Ajout d'article
+  item/
+    _layout.tsx     # Layout navigation items
+    [id]/
+      _layout.tsx   # Layout avec header
+      info.tsx      # Informations article
+      edit.tsx      # Édition article
+```
+
+### Navigation Pattern
+```typescript
+// ✅ CORRECT - Navigation avec Expo Router
+import { useRouter } from 'expo-router';
+const router = useRouter();
+router.push(`/item/${item.id}/edit`);
+
+// ❌ ÉVITER - Navigation manuelle complexe
+navigation.navigate('EditScreen', { itemId: item.id });
+```
+
+## Gestion des Composants
+
+### Structure des Composants
+```typescript
+// ✅ Pattern de composant TypeScript
+interface ComponentProps {
+  item: Item;
+  onPress: (item: Item) => void;
+}
+
+const Component: React.FC<ComponentProps> = ({ item, onPress }) => {
+  // Logique composant
+  return (
+    // JSX
+  );
+};
+
+export default Component;
+```
+
+### Hooks Pattern
+- **Custom hooks** dans `src/hooks/`
+- **Redux hooks** préférés aux hooks React Query
+- **useMemo** pour éviter re-renders inutiles
+
+Référence : [src/hooks/useItem.ts](mdc:src/hooks/useItem.ts)
+
+## Gestion des Thèmes
+
+### Theme Provider
+```typescript
+import { useAppTheme } from '../../src/contexts/ThemeContext';
+
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  
+  return (
+    <View style={{ backgroundColor: activeTheme.background }}>
+      <Text style={{ color: activeTheme.text.primary }}>
+        Content
+      </Text>
+    </View>
+  );
+};
+```
+
+### Styles Responsables
+```typescript
+const getThemedStyles = (theme: AppThemeType, insets?: { bottom: number }) => StyleSheet.create({
+  container: {
+    backgroundColor: theme.background,
+    paddingBottom: insets?.bottom || 0,
+  },
+  // Platform-specific styles
+  searchBox: {
+    padding: Platform.OS === 'web' ? 12 : 8,
+  }
+});
+```
+
+## Gestion d'État Redux
+
+### Store Structure
+```
+src/store/
+  store.ts              # Configuration Redux
+  itemsSlice.ts         # Slice items
+  itemsThunks.ts        # Thunks async
+  itemsAdapter.ts       # Entity adapter
+  categorySlice.ts      # Slice categories
+  containersSlice.ts    # Slice containers
+```
+
+### Thunks Pattern
+```typescript
+// ✅ Thunk avec createAsyncThunk
+export const fetchItems = createAsyncThunk(
+  'items/fetchItems',
+  async ({ page, limit }: { page: number; limit: number }) => {
+    const items = await database.getItems(page, limit);
+    return items;
+  }
+);
+```
+
+Référence : [src/store/itemsThunks.ts](mdc:src/store/itemsThunks.ts)
+
+## Gestion des Formulaires
+
+### Pattern d'Adaptation des Données
+```typescript
+// ✅ Adaptation snake_case → camelCase avec useMemo
+const adaptedItem = useMemo(() => ({
+  ...item,
+  purchasePrice: item.purchase_price || 0,
+  sellingPrice: item.selling_price || 0,
+  // ... autres mappings
+}), [item]);
+
+// Utiliser adaptedItem dans les formulaires
+<ItemForm initialData={adaptedItem} />
+```
+
+### Validation et Protection
+```typescript
+// ✅ Protection contre undefined
+const displayPrice = (item?.sellingPrice || 0).toString();
+const categoryName = category?.name || 'Non spécifiée';
+```
+
+## Gestion des Erreurs
+
+### Error Boundaries
+```typescript
+// ✅ Wrapper avec ErrorBoundary
+export default function Screen() {
+  return (
+    <ErrorBoundary>
+      <ScreenContent />
+    </ErrorBoundary>
+  );
+}
+```
+
+Référence : [src/components/ErrorBoundary.tsx](mdc:src/components/ErrorBoundary.tsx)
+
+### Error Handling Pattern
+```typescript
+// ✅ Gestion d'erreur avec try/catch
+try {
+  await dispatch(updateItemStatus({ itemId, status })).unwrap();
+} catch (error) {
+  console.error('Update failed:', error);
+  // Afficher message d'erreur utilisateur
+}
+```
+
+## Performance et Optimisation
+
+### Memoization Pattern
+```typescript
+// ✅ Memo pour composants lourds
+const MemoizedItemList = React.memo(ItemList);
+
+// ✅ useMemo pour calculs coûteux
+const filteredItems = useMemo(() => {
+  return items.filter(item => /* logique filtre */);
+}, [items, filters]);
+
+// ✅ useCallback pour fonctions stables
+const handlePress = useCallback((item: Item) => {
+  router.push(`/item/${item.id}/info`);
+}, [router]);
+```
+
+### Éviter Re-renders
+```typescript
+// ✅ useRef pour valeurs stables
+const stableCallbacks = useRef({
+  handleItemPress: (item: Item) => setSelectedItem(item),
+  // ... autres callbacks
+});
+```
+
+## Responsive Design
+
+### Platform Detection
+```typescript
+// ✅ Adaptations platform-specific
+const styles = StyleSheet.create({
+  container: {
+    padding: Platform.OS === 'web' ? 12 : 8,
+    borderWidth: Platform.OS === 'web' ? 1 : 0,
+  }
+});
+```
+
+### Safe Area Handling
+```typescript
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const Component = () => {
+  const insets = useSafeAreaInsets();
+  
+  return (
+    <View style={{ paddingTop: insets.top }}>
+      {/* Content */}
+    </View>
+  );
+};
+```
+
+## Fichiers de Référence
+
+### Composants Modèles
+- [src/components/ItemList.tsx](mdc:src/components/ItemList.tsx)
+- [src/components/ItemForm.tsx](mdc:src/components/ItemForm.tsx)
+- [app/(tabs)/stock.tsx](mdc:app/(tabs))
+
+### Configuration
+- [app.json](mdc:app.json) - Configuration Expo
+- [tsconfig.json](mdc:tsconfig.json) - Configuration TypeScript
+- [metro.config.js](mdc:metro.config.js) - Configuration Metro bundler
+
+Ces conventions garantissent un code maintenable et performant pour l'application inventory.

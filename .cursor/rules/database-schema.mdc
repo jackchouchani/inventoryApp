@@ -1,0 +1,172 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Structure Base de Données - Schéma de Référence
+
+## Tables Principales
+
+### Table `items`
+```sql
+id: int8 (PK, Auto-increment)
+name: text
+description: text
+purchase_price: numeric
+selling_price: numeric
+status: text  -- 'available' | 'sold'
+qr_code: text
+container_id: int8 (FK → containers.id)
+category_id: int8 (FK → categories.id)
+created_at: timestamptz
+updated_at: timestamptz
+sold_at: timestamptz
+created_by: uuid (FK → auth.users.id)
+deleted: bool
+user_id: uuid (FK → auth.users.id)
+photo_storage_url: text
+```
+
+### Table `categories`
+```sql
+id: int8 (PK, Auto-increment)
+name: text
+description: text
+created_at: timestamptz
+updated_at: timestamptz
+deleted: bool
+user_id: uuid (FK → auth.users.id)
+icon: text
+```
+
+### Table `containers`
+```sql
+id: int8 (PK, Auto-increment)
+number: int4
+name: text
+description: text
+qr_code: text
+created_at: timestamptz
+updated_at: timestamptz
+deleted: bool
+user_id: uuid (FK → auth.users.id)
+```
+
+## Relations de Clés Étrangères
+
+### Items
+- `items.container_id` → `containers.id`
+- `items.category_id` → `categories.id`
+- `items.created_by` → `auth.users.id`
+- `items.user_id` → `auth.users.id`
+
+### Categories & Containers
+- `categories.user_id` → `auth.users.id`
+- `containers.user_id` → `auth.users.id`
+
+## Conventions de Nommage
+
+### Base de Données (PostgreSQL/Supabase)
+- **Convention** : `snake_case`
+- **Exemples** : `purchase_price`, `selling_price`, `container_id`, `category_id`
+- **Dates** : `created_at`, `updated_at`, `sold_at`
+- **URLs** : `photo_storage_url`
+
+### Interface TypeScript
+- **Convention** : `camelCase`  
+- **Exemples** : `purchasePrice`, `sellingPrice`, `containerId`, `categoryId`
+- **Dates** : `createdAt`, `updatedAt`, `soldAt`
+- **URLs** : `photoStorageUrl`
+
+## Types TypeScript de Référence
+
+### Interface Item
+```typescript
+interface Item {
+  id: number;
+  name: string;
+  description: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  status: 'available' | 'sold';
+  qrCode: string;
+  containerId: number;
+  categoryId: number;
+  createdAt: string;
+  updatedAt: string;
+  soldAt?: string;
+  createdBy: string;
+  deleted: boolean;
+  userId: string;
+  photoStorageUrl?: string;
+}
+```
+
+Référence : [src/types/item.ts](mdc:src/types/item.ts)
+
+### Interface Category 
+```typescript
+interface Category {
+  id: number;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted: boolean;
+  userId: string;
+  icon?: string;
+}
+```
+
+Référence : [src/types/category.ts](mdc:src/types/category.ts)
+
+### Interface Container
+```typescript
+interface Container {
+  id: number;
+  number: number;
+  name: string;
+  description: string;
+  qrCode: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted: boolean;
+  userId: string;
+}
+```
+
+Référence : [src/types/container.ts](mdc:src/types/container.ts)
+
+## Gestion des Statuts
+
+### Statuts Item
+- `available` : Article disponible à la vente
+- `sold` : Article vendu (avec `sold_at` renseigné)
+
+### Logique Business
+- Passage `available` → `sold` : Définir `sold_at` + `selling_price` final
+- Passage `sold` → `available` : Effacer `sold_at`
+- Soft delete : `deleted = true` (ne pas supprimer physiquement)
+
+## Service Database
+
+### Référence d'Implémentation
+- [src/database/database.ts](mdc:src/database/database.ts)
+- Toutes les requêtes Supabase centralisées
+- Gestion automatique de la conversion snake_case ↔ camelCase
+- Filtrage automatique `deleted = false`
+
+### Exemples de Requêtes
+```typescript
+// Récupération avec relations
+const items = await database.getItems();
+// Retourne automatiquement en camelCase
+
+// Mise à jour
+await database.updateItem(id, {
+  sellingPrice: 100,  // Converti en selling_price
+  status: 'sold'
+});
+```
+
+Cette structure garantit la cohérence entre la base de données PostgreSQL et l'interface TypeScript.

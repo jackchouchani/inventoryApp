@@ -1,51 +1,12 @@
 // Dans src/hooks/useStockActions.ts
 import { useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { database } from '../database/database';
+import { useDispatch } from 'react-redux';
+import { updateItemStatus, sellItem, moveItem } from '../store/itemsThunks';
+import { AppDispatch } from '../store/store';
 import { handleError } from '../utils/errorHandler';
-import type { Item } from '../types/item';
-import { QUERY_KEYS } from '../constants/queryKeys';
 
 export function useStockActions() {
-  const queryClient = useQueryClient();
-
-  const markItem = useCallback(async (
-    itemId: number,
-    updates: Partial<Item>,
-    optimisticData: (oldItem: Item) => Item
-  ) => {
-    const previousData = queryClient.getQueryData<Item[]>([QUERY_KEYS.INVENTORY]) || [];
-
-    // Mise à jour optimiste
-    queryClient.setQueryData<Item[]>([QUERY_KEYS.INVENTORY], oldItems =>
-      (oldItems || []).map(item =>
-        item.id === itemId ? optimisticData(item) : item
-      )
-    );
-    console.log('[DEBUG useStockActions] Mise à jour optimiste appliquée pour item:', itemId); // Log optimiste
-
-    try {
-      console.log('[DEBUG useStockActions] Envoi à database.updateItem:', { itemId, updates }); // Log avant l'appel API
-      await database.updateItem(itemId, updates);
-      console.log('[DEBUG useStockActions] database.updateItem SUCCESS pour item:', itemId); // Log succès API
-
-      // Invalidation douce pour resynchronisation
-      await queryClient.invalidateQueries({
-        queryKey: [QUERY_KEYS.INVENTORY],
-        refetchType: 'active',
-      });
-      console.log('[DEBUG useStockActions] Invalidation de requête déclenchée pour item:', itemId); // Log invalidation
-
-
-      return true;
-    } catch (error) {
-      console.error('[DEBUG useStockActions] database.updateItem ERREUR pour item:', itemId, error); // Log erreur API
-      // Rollback en cas d'erreur
-      queryClient.setQueryData([QUERY_KEYS.INVENTORY], previousData);
-      handleError(error, 'Erreur de mise à jour', { showAlert: true });
-      return false;
-    }
-  }, [queryClient]);
+  const dispatch = useDispatch<AppDispatch>();
 
   const handleMarkAsSold = useCallback(async (itemIdString: string, soldDate: string, salePrice?: number) => {
     const itemId = Number(itemIdString);
@@ -55,22 +16,24 @@ export function useStockActions() {
     }
 
     const finalSalePrice = salePrice ?? 0;
+    console.log('[DEBUG useStockActions] Envoi Redux sellItem:', { itemId, soldDate, salePrice: finalSalePrice }); 
 
-    return markItem(
-      itemId,
-      {
-        status: 'sold',
-        soldAt: new Date(soldDate).toISOString(),
-        sellingPrice: finalSalePrice
-      },
-      (oldItem) => ({
-        ...oldItem,
-        status: 'sold',
-        soldAt: new Date(soldDate).toISOString(),
-        sellingPrice: finalSalePrice
-      })
-    );
-  }, [markItem]);
+    try {
+      // Utiliser le nouveau thunk sellItem qui gère prix et date
+      const result = await dispatch(sellItem({ 
+        itemId, 
+        soldDate,
+        salePrice: finalSalePrice
+      })).unwrap();
+      
+      console.log('[DEBUG useStockActions] Redux sellItem SUCCESS pour item:', itemId, result);
+      return true;
+    } catch (error) {
+      console.error('[DEBUG useStockActions] Redux sellItem ERREUR pour item:', itemId, error);
+      handleError(error, 'Erreur de mise à jour', { showAlert: true });
+      return false;
+    }
+  }, [dispatch]);
 
   const handleMarkAsAvailable = useCallback(async (itemIdString: string) => {
     const itemId = Number(itemIdString);
@@ -79,12 +42,27 @@ export function useStockActions() {
       return false;
     }
 
-    return markItem(
-      itemId,
-      { status: 'available', soldAt: undefined },
-      (oldItem) => ({ ...oldItem, status: 'available', soldAt: undefined })
-    );
-  }, [markItem]);
+    console.log('[DEBUG useStockActions] Envoi Redux updateItemStatus:', { itemId, status: 'available' });
+
+    try {
+      const result = await dispatch(updateItemStatus({ 
+        itemId, 
+        status: 'available' 
+      })).unwrap();
+      
+      console.log('[DEBUG useStockActions] Redux updateItemStatus SUCCESS pour item:', itemId, result);
+      console.log('[DEBUG useStockActions] Prix dans le résultat:', result.sellingPrice);
+      
+      // Petit délai pour laisser Redux propager la mise à jour
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      return true;
+    } catch (error) {
+      console.error('[DEBUG useStockActions] Redux updateItemStatus ERREUR pour item:', itemId, error);
+      handleError(error, 'Erreur de mise à jour', { showAlert: true });
+      return false;
+    }
+  }, [dispatch]);
 
   const handleUpdateSellingPrice = useCallback(async (itemIdString: string, newSellingPrice: number) => {
     const itemId = Number(itemIdString);
@@ -93,16 +71,57 @@ export function useStockActions() {
       return false;
     }
 
-    return markItem(
-      itemId,
-      { sellingPrice: newSellingPrice },
-      (oldItem) => ({ ...oldItem, sellingPrice: newSellingPrice })
-    );
-  }, [markItem]);
+    // Pour mettre à jour seulement le prix, on peut utiliser la fonction database directement
+    // car updateItemStatus ne gère que le status
+    console.log('[DEBUG useStockActions] Mise à jour prix via database pour item:', itemId, newSellingPrice);
+    
+    try {
+      // Ici on pourrait créer un nouveau thunk updateItemSellingPrice
+      // Pour l'instant, on utilise la méthode directe database
+      const { database } = await import('../database/database');
+      await database.updateItem(itemId, { sellingPrice: newSellingPrice });
+      
+      // Puis on recharge les données Redux
+      const { fetchItemById } = await import('../store/itemsThunks');
+      await dispatch(fetchItemById(itemId));
+      
+      console.log('[DEBUG useStockActions] Mise à jour prix SUCCESS pour item:', itemId);
+      return true;
+    } catch (error) {
+      console.error('[DEBUG useStockActions] Mise à jour prix ERREUR pour item:', itemId, error);
+      handleError(error, 'Erreur de mise à jour du prix', { showAlert: true });
+      return false;
+    }
+  }, [dispatch]);
+
+  const handleMoveItem = useCallback(async (itemIdString: string, containerId: number | null) => {
+    const itemId = Number(itemIdString);
+    if (isNaN(itemId)) {
+      handleError(new Error('ID invalide'), 'ID d\'article invalide', { showAlert: true });
+      return false;
+    }
+
+    console.log('[DEBUG useStockActions] Envoi Redux moveItem:', { itemId, containerId });
+
+    try {
+      const result = await dispatch(moveItem({ 
+        itemId, 
+        containerId 
+      })).unwrap();
+      
+      console.log('[DEBUG useStockActions] Redux moveItem SUCCESS pour item:', itemId, result);
+      return true;
+    } catch (error) {
+      console.error('[DEBUG useStockActions] Redux moveItem ERREUR pour item:', itemId, error);
+      handleError(error, 'Erreur de déplacement', { showAlert: true });
+      return false;
+    }
+  }, [dispatch]);
 
   return {
     handleMarkAsSold,
     handleMarkAsAvailable,
-    handleUpdateSellingPrice
+    handleUpdateSellingPrice,
+    handleMoveItem
   };
 }

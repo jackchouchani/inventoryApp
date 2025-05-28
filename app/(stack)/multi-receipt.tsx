@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,17 +14,14 @@ import {
 } from 'react-native';
 import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
-import { database } from '../../src/database/database';
-import { useQuery } from '@tanstack/react-query';
 import { searchItems, SearchFilters } from '../../src/services/searchService';
 import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
 import { getImageUrl } from '../../src/utils/r2Client';
-import { theme } from '../../src/utils/theme';
 import { formatCurrency } from '../../src/utils/format';
 import { supabase } from '../../src/config/supabase';
+import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 
 // Types
-// Import the Item type from the types directory
 import type { Item } from '../../src/types/item';
 
 // Define type for items with added properties for receipt generation
@@ -33,39 +30,26 @@ interface ReceiptItem extends Item {
   quantity?: number;
 }
 
-interface Category {
-  id: number;
-  name: string;
-}
-
-interface Container {
-  id: number;
-  name: string;
-}
-
-interface MultiReceiptData {
-  categories: Category[];
-  containers: Container[];
-}
-
 // Component for searching and selecting items
-const SearchBox = ({ query, setQuery }: { query: string; setQuery: (q: string) => void }) => {
+const SearchBox = ({ query, setQuery, theme }: { query: string; setQuery: (q: string) => void; theme: AppThemeType }) => {
+  const styles = useMemo(() => getThemedStyles(theme), [theme]);
+  
   return (
     <View style={styles.searchBoxContainer}>
-      <Icon name="search" size={20} color="#777" style={styles.searchIcon} />
+      <Icon name="search" size={20} color={theme.text.secondary} style={styles.searchIcon} />
       <TextInput
         style={styles.searchBoxInput}
         value={query}
         onChangeText={setQuery}
         placeholder="Rechercher des articles..."
-        placeholderTextColor="#999"
+        placeholderTextColor={theme.text.secondary}
         clearButtonMode="always"
         autoCapitalize="none"
         autoCorrect={false}
       />
       {query.length > 0 && (
         <TouchableOpacity onPress={() => setQuery('')} style={styles.clearButton}>
-          <Icon name="clear" size={20} color="#777" />
+          <Icon name="clear" size={20} color={theme.text.secondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -74,6 +58,7 @@ const SearchBox = ({ query, setQuery }: { query: string; setQuery: (q: string) =
 
 const MultiReceiptScreen = () => {
   const router = useRouter();
+  const { activeTheme } = useAppTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState<Map<number, ReceiptItem>>(new Map());
   const [searchResults, setSearchResults] = useState<ReceiptItem[]>([]);
@@ -85,21 +70,8 @@ const MultiReceiptScreen = () => {
   const [showMarkAsSoldConfirmation, setShowMarkAsSoldConfirmation] = useState(false);
   const [isUpdatingItems, setIsUpdatingItems] = useState(false);
   
-  // Fetch categories and containers for filters (if needed)
-  useQuery<MultiReceiptData>({
-    queryKey: ['multiReceiptData'],
-    queryFn: async () => {
-      const [categoriesData, containersDataFromDB] = await Promise.all([
-        database.getCategories(),
-        database.getContainers()
-      ]);
-      return {
-        categories: categoriesData || [],
-        containers: containersDataFromDB || []
-      };
-    }
-  });
-
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  
   // Function to search for items using Supabase
   const searchItemsCallback = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -171,7 +143,7 @@ const MultiReceiptScreen = () => {
   // Calculate total price of selected items
   const calculateTotal = useCallback(() => {
     return Array.from(selectedItems.values()).reduce((total, item) => {
-      const price = item.actualSellingPrice || item.sellingPrice;
+      const price = item.actualSellingPrice || item.sellingPrice || 0;
       return total + price;
     }, 0);
   }, [selectedItems]);
@@ -201,7 +173,7 @@ const MultiReceiptScreen = () => {
     if (totalDiscount > 0) {
       const total = calculateTotal();
       items = items.map(item => {
-        const price = item.actualSellingPrice || item.sellingPrice;
+        const price = item.actualSellingPrice || item.sellingPrice || 0;
         // Calculate item's proportion of the total
         const proportion = price / total;
         // Calculate this item's share of the discount
@@ -342,7 +314,7 @@ const MultiReceiptScreen = () => {
             />
           ) : (
             <View style={styles.noImagePlaceholder}>
-              <Icon name="image_not_supported" size={24} color="#999" />
+              <Icon name="image_not_supported" size={24} color={activeTheme.text.secondary} />
             </View>
           )}
         </View>
@@ -359,9 +331,9 @@ const MultiReceiptScreen = () => {
         
         <View style={styles.selectionIndicator}>
           {isSelected ? (
-            <Icon name="check_circle" size={24} color={theme.colors.primary} />
+            <Icon name="check_circle" size={24} color={activeTheme.primary} />
           ) : (
-            <Icon name="radio_button_unchecked" size={24} color="#ccc" />
+            <Icon name="radio_button_unchecked" size={24} color={activeTheme.text.disabled} />
           )}
         </View>
       </TouchableOpacity>
@@ -378,7 +350,7 @@ const MultiReceiptScreen = () => {
         <View style={styles.selectedItemHeader}>
           <Text style={styles.selectedItemName} numberOfLines={1}>{item.name}</Text>
           <TouchableOpacity onPress={() => toggleItemSelection(item)}>
-            <Icon name="close" size={20} color="#777" />
+            <Icon name="close" size={20} color={activeTheme.text.secondary} />
           </TouchableOpacity>
         </View>
         
@@ -393,6 +365,7 @@ const MultiReceiptScreen = () => {
             }}
             keyboardType="numeric"
             placeholder={item.sellingPrice.toString()}
+            placeholderTextColor={activeTheme.text.secondary}
           />
           <Text style={styles.priceUnit}>€</Text>
         </View>
@@ -414,7 +387,7 @@ const MultiReceiptScreen = () => {
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Icon name="arrow_back" size={24} color={theme.colors.primary} />
+          <Icon name="arrow_back" size={24} color={activeTheme.primary} />
           <Text style={styles.backButtonText}>Retour</Text>
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Facture Multiple</Text>
@@ -437,7 +410,7 @@ const MultiReceiptScreen = () => {
         <>
           {/* Search Area */}
           <View style={styles.searchArea}>
-            <SearchBox query={searchQuery} setQuery={setSearchQuery} />
+            <SearchBox query={searchQuery} setQuery={setSearchQuery} theme={activeTheme} />
           </View>
 
           {/* Selected Items Area */}
@@ -476,6 +449,7 @@ const MultiReceiptScreen = () => {
                     }}
                     keyboardType="numeric"
                     placeholder="0"
+                    placeholderTextColor={activeTheme.text.secondary}
                   />
                   <TouchableOpacity 
                     style={styles.applyDiscountButton}
@@ -512,7 +486,7 @@ const MultiReceiptScreen = () => {
             
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <ActivityIndicator size="large" color={activeTheme.primary} />
                 <Text style={styles.loadingText}>Recherche en cours...</Text>
               </View>
             ) : (
@@ -527,12 +501,12 @@ const MultiReceiptScreen = () => {
               ) : (
                 searchQuery.trim() ? (
                   <View style={styles.emptyResultsContainer}>
-                    <Icon name="search-off" size={40} color="#ccc" />
+                    <Icon name="search-off" size={40} color={activeTheme.text.disabled} />
                     <Text style={styles.emptyResultsText}>Aucun résultat trouvé</Text>
                   </View>
                 ) : (
                   <View style={styles.startSearchContainer}>
-                    <Icon name="search" size={40} color="#ccc" />
+                    <Icon name="search" size={40} color={activeTheme.text.disabled} />
                     <Text style={styles.startSearchText}>
                       Commencez votre recherche pour trouver des articles
                     </Text>
@@ -547,20 +521,20 @@ const MultiReceiptScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 50 : 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: theme.border,
   },
   backButton: {
     flexDirection: 'row',
@@ -569,7 +543,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     marginLeft: 4,
-    color: theme.colors.primary,
+    color: theme.primary,
   },
   topBarTitle: {
     flex: 1,
@@ -577,20 +551,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginRight: 40, // To balance the back button
+    color: theme.text.primary,
   },
   searchArea: {
     padding: 12,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: theme.border,
   },
   searchBoxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.background,
     borderRadius: 8,
     paddingHorizontal: 12,
     height: 44,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   searchIcon: {
     marginRight: 8,
@@ -599,16 +576,16 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     fontSize: 16,
-    color: '#333',
+    color: theme.text.primary,
   },
   clearButton: {
     padding: 6,
   },
   selectedItemsContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: theme.border,
   },
   selectedItemsHeader: {
     flexDirection: 'row',
@@ -620,7 +597,7 @@ const styles = StyleSheet.create({
   selectedItemsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
   },
   clearSelectionButton: {
     paddingVertical: 4,
@@ -628,19 +605,19 @@ const styles = StyleSheet.create({
   },
   clearSelectionText: {
     fontSize: 14,
-    color: theme.colors.primary,
+    color: theme.primary,
   },
   selectedItemsScrollView: {
     paddingLeft: 12,
   },
   selectedItemCard: {
     width: 140,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: theme.background,
     marginRight: 8,
     borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
   },
   selectedItemHeader: {
     flexDirection: 'row',
@@ -653,17 +630,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
     marginRight: 4,
+    color: theme.text.primary,
   },
   selectedItemPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2e7d32',
+    color: theme.success,
     marginBottom: 8,
   },
   priceControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.surface,
     borderRadius: 4,
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -672,23 +650,28 @@ const styles = StyleSheet.create({
   priceLabel: {
     fontSize: 13,
     marginRight: 8,
+    color: theme.text.secondary,
   },
   priceInput: {
     width: 55, // Largeur fixe pour le champ de prix
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 4,
     paddingHorizontal: 3,
     paddingVertical: 4,
     fontSize: 13,
     textAlign: 'left',
     marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: theme.border,
+    color: theme.text.primary,
   },
   priceUnit: {
     marginLeft: 0,
     fontSize: 13,
+    color: theme.text.secondary,
   },
   itemDiscountContainer: {
-    backgroundColor: '#fff0f0',
+    backgroundColor: theme.danger.light,
     borderRadius: 4,
     paddingVertical: 4,
     paddingHorizontal: 6,
@@ -696,22 +679,23 @@ const styles = StyleSheet.create({
   },
   itemDiscountText: {
     fontSize: 11,
-    color: '#c0392b',
+    color: theme.danger.main,
     textAlign: 'center',
   },
   discountControlContainer: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
     marginHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: theme.border,
   },
   discountControlLabel: {
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 8,
+    color: theme.text.primary,
   },
   discountInputRow: {
     flexDirection: 'row',
@@ -719,17 +703,18 @@ const styles = StyleSheet.create({
   },
   discountInput: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 4,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 14,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: theme.border,
     marginRight: 8,
+    color: theme.text.primary,
   },
   applyDiscountButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4,
@@ -741,13 +726,13 @@ const styles = StyleSheet.create({
   },
   totalDiscountText: {
     fontSize: 13,
-    color: '#c0392b',
+    color: theme.danger.main,
     marginTop: 8,
     textAlign: 'right',
   },
   generateReceiptButton: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -776,26 +761,29 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   confirmationDialog: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 20,
     width: '85%',
     maxWidth: 400,
     alignItems: 'center',
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 5,
   },
   confirmationTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
-    color: '#333',
+    color: theme.text.primary,
   },
   confirmationText: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    color: '#555',
+    color: theme.text.secondary,
     lineHeight: 22,
   },
   confirmationButtons: {
@@ -812,10 +800,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   confirmButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
   },
   cancelButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.text.disabled,
   },
   confirmationButtonText: {
     fontSize: 16,
@@ -824,18 +812,18 @@ const styles = StyleSheet.create({
   },
   searchResultsContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: theme.border,
   },
   searchResultsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: theme.text.primary,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.border,
   },
   searchResultsList: {
     flex: 1,
@@ -847,18 +835,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: '#fff',
+    borderBottomColor: theme.border,
+    backgroundColor: theme.surface,
   },
   selectedItem: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: theme.successLight,
   },
   itemImageContainer: {
     width: 60,
     height: 60,
     borderRadius: 6,
     overflow: 'hidden',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -871,7 +859,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: theme.background,
   },
   itemDetails: {
     flex: 1,
@@ -881,18 +869,18 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#333',
+    color: theme.text.primary,
     marginBottom: 4,
   },
   itemDescription: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
     marginBottom: 4,
   },
   itemPrice: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2e7d32',
+    color: theme.success,
   },
   selectionIndicator: {
     justifyContent: 'center',
@@ -907,7 +895,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
   },
   emptyResultsContainer: {
     flex: 1,
@@ -918,7 +906,7 @@ const styles = StyleSheet.create({
   emptyResultsText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
     textAlign: 'center',
   },
   startSearchContainer: {
@@ -930,7 +918,7 @@ const styles = StyleSheet.create({
   startSearchText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: theme.text.secondary,
     textAlign: 'center',
     maxWidth: 240,
   },

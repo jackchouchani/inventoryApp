@@ -5,7 +5,8 @@ import { database, Category, Container } from '../database/database';
 import { useRefreshStore } from '../store/refreshStore';
 import { generateId } from '../utils/identifierManager';
 import { addItem } from '../store/itemsActions';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { AppDispatch } from '../store/store';
+import { fetchItems } from '../store/itemsThunks';
 import { Icon } from '../../src/components';
 import type { MaterialIconName } from '../types/icons';
 import AdaptiveImage from './AdaptiveImage';
@@ -309,8 +310,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
     const categories = Array.isArray(propCategories) 
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
-    const dispatch = useDispatch();
-    const queryClient = useQueryClient();
+    const dispatch = useDispatch<AppDispatch>();
     const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
     const { uploadPhoto } = usePhoto();
@@ -388,79 +388,59 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
     }, [item]);
 
     /**
-     * Mutation pour l'ajout d'un item avec React Query
+     * Fonction pour l'ajout d'un item avec Redux
      */
-    const addItemMutation = useMutation({
-        mutationFn: async (formData: ItemFormState) => {
-            try {
-                const qrCode = generateId('ITEM');
-                const uploadedUrl = formData.photo_storage_url;
-                
-                // Assurer que categoryId n'est pas null (mais peut être undefined)
-                const categoryId = formData.categoryId || undefined;
-                
-                const data: ItemInput = {
-                    name: formData.name.trim(),
-                    description: formData.description.trim(),
-                    purchasePrice: parseFloat(formData.purchasePrice),
-                    sellingPrice: parseFloat(formData.sellingPrice),
-                    status: formData.status,
-                    photo_storage_url: uploadedUrl,
-                    containerId: formData.containerId || null,
-                    categoryId, // Utilisez la version sans null
-                    qrCode
-                };
-                
-                // Optimistic update
-                queryClient.setQueryData(['items'], (oldData: Item[] = []) => {
-                    const tempItem: Item = {
-                        ...data,
-                        id: Date.now(), // ID temporaire pour l'update optimiste
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    return [...oldData, tempItem];
-                });
-                
-                // Réelle insertion en base de données
-                const itemId = await database.addItem(data);
-                
-                // Mettre à jour le cache avec le vrai ID
-                queryClient.setQueryData(['items'], (oldData: Item[] = []) => {
-                    return oldData.map(item => 
-                        item.id === Date.now() ? { ...item, id: itemId } : item
-                    );
-                });
-                
-                // Rafraîchir les données pour être sûr
-                await queryClient.invalidateQueries({ queryKey: ['items'] });
-                triggerRefresh();
-                
-                // Créer un objet Item à partir de ItemInput pour le dispatch
-                const itemForRedux: Item = {
-                    ...data,
-                    id: itemId,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                
-                // Dispatch pour le store Redux
-                dispatch(addItem(itemForRedux));
-                
-                resetForm();
-                onSuccess?.();
-                
-                return itemId;
-            } catch (error) {
-                console.error('Error in addItemMutation:', error);
-                handleError(error, 'Erreur lors de l\'ajout de l\'article', {
-                    source: 'addItemMutation',
-                    showAlert: true
-                });
-                throw error;
-            }
+    const addItemToDatabase = useCallback(async (formData: ItemFormState) => {
+        try {
+            const qrCode = generateId('ITEM');
+            const uploadedUrl = formData.photo_storage_url;
+            
+            // Assurer que categoryId n'est pas null (mais peut être undefined)
+            const categoryId = formData.categoryId || undefined;
+            
+            const data: ItemInput = {
+                name: formData.name.trim(),
+                description: formData.description.trim(),
+                purchasePrice: parseFloat(formData.purchasePrice),
+                sellingPrice: parseFloat(formData.sellingPrice),
+                status: formData.status,
+                photo_storage_url: uploadedUrl,
+                containerId: formData.containerId || null,
+                categoryId, // Utilisez la version sans null
+                qrCode
+            };
+            
+            // Réelle insertion en base de données
+            const itemId = await database.addItem(data);
+            
+            // Créer un objet Item à partir de ItemInput pour le dispatch
+            const itemForRedux: Item = {
+                ...data,
+                id: itemId,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Dispatch pour le store Redux
+            dispatch(addItem(itemForRedux));
+            
+            // Rafraîchir les données Redux
+            await dispatch(fetchItems({ page: 0, limit: 1000 }));
+            triggerRefresh();
+            
+            resetForm();
+            onSuccess?.();
+            
+            return itemId;
+        } catch (error) {
+            console.error('Error in addItemToDatabase:', error);
+            handleError(error, 'Erreur lors de l\'ajout de l\'article', {
+                source: 'addItemToDatabase',
+                showAlert: true
+            });
+            throw error;
         }
-    });
+    }, [dispatch, triggerRefresh, resetForm, onSuccess]);
 
     // Ajouter une fonction pour la sélection d'image directement comme dans ItemEditForm
     const handleImagePreview = useCallback(async () => {
@@ -602,13 +582,8 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
             console.log("[ItemForm] handleSubmit - Données à ajouter:", JSON.stringify(data, null, 2));
 
-            // Utilisation directe de addItemMutation
-            // La mutation s'occupe de l'optimistic update et de l'insertion DB
-            await addItemMutation.mutateAsync(data as unknown as ItemFormState);
-
-            // La réinitialisation du formulaire et l'appel à onSuccess sont gérés dans onSuccess de la mutation
-            // resetForm();
-            // onSuccess?.(); // Appelé dans addItemMutation.mutateAsync().then(...)
+            // Utilisation directe de addItemToDatabase
+            await addItemToDatabase(data as unknown as ItemFormState);
 
         } catch (error) {
             console.error("[ItemForm] handleSubmit - Erreur générale lors de la sauvegarde:", error);
@@ -641,57 +616,34 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
     // Remplacer les fonctions de gestion modale par la navigation
     const navigateToAddContainer = useCallback(() => {
-        // Enregistrer l'état actuel du formulaire dans queryClient pour le récupérer ensuite
-        queryClient.setQueryData(['temp_item_form_state'], item);
-        
         // Naviguer vers la page d'ajout de container
         router.push('/containers');
-    }, [router, queryClient, item]);
+    }, [router]);
 
     const navigateToAddCategory = useCallback(() => {
-        // Enregistrer l'état actuel du formulaire dans queryClient pour le récupérer ensuite
-        queryClient.setQueryData(['temp_item_form_state'], item);
-        
         // Naviguer vers la page d'ajout de catégorie
         router.push('/add-category');
-    }, [router, queryClient, item]);
+    }, [router]);
 
-    // Ajouter un effet pour rafraîchir les données lorsqu'on revient à cet écran
+    // Ajouter un effet pour sélectionner la catégorie par défaut
     useEffect(() => {
-        // Rafraîchir les données des containers et catégories
-        queryClient.invalidateQueries({ queryKey: ['containers'] });
-        queryClient.invalidateQueries({ queryKey: ['categories'] });
-        
-        // NE PAS sélectionner automatiquement un container - laisser l'utilisateur choisir
-        
         // Récupérer la catégorie "Bags" par défaut
-        const fetchedCategories = queryClient.getQueryData<Category[]>(['categories']);
-        if (fetchedCategories && fetchedCategories.length > 0) {
+        if (categories && categories.length > 0 && !item.categoryId) {
             // Chercher spécifiquement la catégorie "Bags"
-            const bagsCategory = fetchedCategories.find(cat => cat.name === 'Bags');
+            const bagsCategory = categories.find((cat: Category) => cat.name === 'Bags');
             
             // Si notre catégorie actuelle n'est pas définie, sélectionner "Bags" ou la première par défaut
-            if (!item.categoryId) {
-                if (bagsCategory) {
-                    setItem(prev => ({ ...prev, categoryId: bagsCategory.id }));
-                } else {
-                    // Si "Bags" n'existe pas, prendre la première triée par created_at
-                    const sortedCategories = [...fetchedCategories].sort((a, b) => 
-                        new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-                    );
-                    setItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
-                }
+            if (bagsCategory) {
+                setItem(prev => ({ ...prev, categoryId: bagsCategory.id }));
+            } else {
+                // Si "Bags" n'existe pas, prendre la première triée par created_at
+                const sortedCategories = [...categories].sort((a, b) => 
+                    new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+                );
+                setItem(prev => ({ ...prev, categoryId: sortedCategories[0].id }));
             }
         }
-        
-        // Restaurer l'état du formulaire s'il a été sauvegardé avant de naviguer
-        const savedState = queryClient.getQueryData<ItemFormState>(['temp_item_form_state']);
-        if (savedState) {
-            setItem(savedState);
-            // Supprimer l'état sauvegardé pour éviter de l'utiliser à nouveau
-            queryClient.removeQueries({ queryKey: ['temp_item_form_state'] });
-        }
-    }, [queryClient, item.categoryId]); // Retirer item.containerId des dépendances
+    }, [categories, item.categoryId]);
 
     const styles = getThemedStyles(activeTheme);
 

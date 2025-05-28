@@ -112,13 +112,13 @@ export const selectContainersWithStats = createSelector(
 
 // Sélecteur pour obtenir un container spécifique avec ses statistiques
 export const selectContainerWithStats = createSelector(
-  [selectContainersWithStats, (state: RootState, containerId: number) => containerId],
+  [selectContainersWithStats, (_state: RootState, containerId: number) => containerId],
   (containersWithStats, containerId) => 
     containersWithStats.find(container => container.id === containerId)
 );
 
 export const selectContainerByNumber = createSelector(
-  [selectAllContainers, (state, number: number) => number],
+  [selectAllContainers, (_state, number: number) => number],
   (containers, number) => containers.find(
     container => container.number === number
   )

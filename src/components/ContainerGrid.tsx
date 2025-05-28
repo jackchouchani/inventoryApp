@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions, Refresh
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import { GridErrorBoundary } from './GridErrorBoundary';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 interface ContainerGridProps {
   containers: Container[];
@@ -14,27 +15,33 @@ interface ContainerGridProps {
 const ContainerCard = React.memo(({ 
   container, 
   itemCount, 
-  onPress 
+  onPress,
+  activeTheme
 }: { 
   container: Container; 
   itemCount: number; 
   onPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={styles.containerCard}
-    onPress={onPress}
-  >
-    <Text style={styles.containerName} numberOfLines={2}>
-      {container.name}
-    </Text>
-    <Text style={styles.containerNumber}>#{container.number}</Text>
-    <View style={styles.statsContainer}>
-      <Text style={styles.itemCount}>
-        {itemCount} article{itemCount > 1 ? 's' : ''}
+  activeTheme: any;
+}) => {
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  
+  return (
+    <TouchableOpacity
+      style={styles.containerCard}
+      onPress={onPress}
+    >
+      <Text style={styles.containerName} numberOfLines={2}>
+        {container.name}
       </Text>
-    </View>
-  </TouchableOpacity>
-));
+      <Text style={styles.containerNumber}>#{container.number}</Text>
+      <View style={styles.statsContainer}>
+        <Text style={styles.itemCount}>
+          {itemCount} article{itemCount > 1 ? 's' : ''}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export const ContainerGrid: React.FC<ContainerGridProps> = ({
   containers,
@@ -42,6 +49,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
   onContainerPress,
   onRetry,
 }) => {
+  const { activeTheme } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
 
@@ -81,9 +89,10 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
         container={container}
         itemCount={itemCount}
         onPress={() => container.id && onContainerPress(container.id)}
+        activeTheme={activeTheme}
       />
     );
-  }, [getItemCount, onContainerPress]);
+  }, [getItemCount, onContainerPress, activeTheme]);
 
   const keyExtractor = useCallback((item: Container) => 
     `container-${item.id}`, []);
@@ -94,8 +103,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       numColumns={2}
-      contentContainerStyle={styles.grid}
-      columnWrapperStyle={styles.row}
+      contentContainerStyle={getThemedStyles(activeTheme).grid}
+      columnWrapperStyle={getThemedStyles(activeTheme).row}
       initialNumToRender={8}
       maxToRenderPerBatch={4}
       windowSize={5}
@@ -105,8 +114,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          colors={['#007AFF']}
-          tintColor={'#007AFF'}
+          colors={[activeTheme.primary]}
+          tintColor={activeTheme.primary}
         />
       }
     />
@@ -126,7 +135,7 @@ const { width } = Dimensions.get('window');
 const CARD_MARGIN = 8;
 const CARD_WIDTH = (width - (CARD_MARGIN * 6)) / 2;
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: any) => StyleSheet.create({
   grid: {
     padding: CARD_MARGIN,
     flexGrow: 1,
@@ -137,7 +146,7 @@ const styles = StyleSheet.create({
   },
   containerCard: {
     width: CARD_WIDTH,
-    backgroundColor: '#fff',
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 16,
     margin: CARD_MARGIN,
@@ -145,18 +154,18 @@ const styles = StyleSheet.create({
     elevation: 3,
     minHeight: 120,
     justifyContent: 'space-between',
-    borderColor: '#E5E5E5',
+    borderColor: theme.border,
     borderWidth: 1,
   },
   containerName: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#000',
+    color: theme.text.primary,
   },
   containerNumber: {
     fontSize: 14,
-    color: '#666',
+    color: theme.text.secondary,
     marginBottom: 8,
   },
   statsContainer: {
@@ -167,7 +176,7 @@ const styles = StyleSheet.create({
   },
   itemCount: {
     fontSize: 14,
-    color: '#007AFF',
+    color: theme.primary,
     fontWeight: '600',
   },
 });

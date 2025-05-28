@@ -1,0 +1,190 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Utilisation du Composant Icon Personnalisé
+
+## Composant Icon Principal
+
+### Référence d'Implémentation
+- [src/components/Icon.tsx](mdc:src/components/Icon.tsx)
+
+### Utilisation Obligatoire
+**TOUJOURS utiliser le composant Icon personnalisé au lieu de @expo/vector-icons**
+
+```typescript
+// ✅ CORRECT - Utiliser le composant Icon personnalisé
+import { Icon } from '../../src/components';
+// ou
+import Icon from '../../src/components/Icon';
+
+<Icon name="arrow_back" size={24} color={activeTheme.primary} />
+<Icon name="inventory" size={48} color={activeTheme.text.secondary} />
+<Icon name="category" size={24} color={activeTheme.primary} />
+```
+
+```typescript
+// ❌ INTERDIT - Ne plus utiliser @expo/vector-icons directement
+import { MaterialIcons } from '@expo/vector-icons';
+<MaterialIcons name="inventory" size={48} color={activeTheme.text.secondary} />
+```
+
+## Interface du Composant Icon
+
+### Props Disponibles
+```typescript
+interface IconProps {
+  name: string;                    // Nom de l'icône Material Icons
+  size?: number;                   // Taille (défaut: 24)
+  color?: string;                  // Couleur (défaut: '#000')
+  variant?: 'filled' | 'outlined' | 'round' | 'sharp' | 'two-tone'; // Variante (défaut: 'filled')
+  style?: any;                     // Styles additionnels
+}
+```
+
+### Exemples d'Utilisation
+```typescript
+// Icône basique
+<Icon name="home" />
+
+// Icône avec taille et couleur
+<Icon name="search" size={20} color={activeTheme.primary} />
+
+// Icône avec variante
+<Icon name="favorite" variant="outlined" size={24} color="#FF0000" />
+
+// Icône avec styles personnalisés
+<Icon 
+  name="settings" 
+  size={28} 
+  color={activeTheme.text.primary}
+  style={{ marginRight: 8 }}
+/>
+```
+
+## Compatibilité Plateforme
+
+### Web
+- Utilise les classes CSS Material Icons
+- Support complet des variantes (`material-icons`, `material-icons-outlined`, etc.)
+- Rendu via élément `<span>` avec classes CSS
+
+### Mobile (iOS/Android)
+- Utilise `@expo/vector-icons/MaterialIcons`
+- Rendu natif optimisé
+- Fallback automatique pour les variantes
+
+## Icônes Couramment Utilisées
+
+### Navigation
+```typescript
+<Icon name="arrow_back" />        // Retour
+<Icon name="arrow_back_ios" />    // Retour iOS
+<Icon name="chevron_right" />     // Flèche droite
+<Icon name="close" />             // Fermer
+```
+
+### Actions
+```typescript
+<Icon name="add" />               // Ajouter
+<Icon name="edit" />              // Éditer
+<Icon name="delete" />            // Supprimer
+<Icon name="search" />            // Rechercher
+<Icon name="filter_list" />       // Filtrer
+```
+
+### Inventaire
+```typescript
+<Icon name="inventory" />         // Inventaire
+<Icon name="category" />          // Catégorie
+<Icon name="inbox" />             // Container
+<Icon name="qr_code" />           // QR Code
+<Icon name="label" />             // Étiquette
+```
+
+### Statuts
+```typescript
+<Icon name="check_circle" />      // Succès
+<Icon name="error" />             // Erreur
+<Icon name="warning" />           // Avertissement
+<Icon name="info" />              // Information
+```
+
+## Intégration avec le Thème
+
+### Utilisation avec ThemeContext
+```typescript
+import { useAppTheme } from '../contexts/ThemeContext';
+
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  
+  return (
+    <Icon 
+      name="settings" 
+      size={24} 
+      color={activeTheme.primary}
+    />
+  );
+};
+```
+
+### Couleurs Thématiques Recommandées
+```typescript
+// Icônes principales
+color={activeTheme.primary}
+
+// Icônes secondaires
+color={activeTheme.text.secondary}
+
+// Icônes de texte
+color={activeTheme.text.primary}
+
+// Icônes de danger
+color={activeTheme.danger.main}
+
+// Icônes de succès
+color={activeTheme.success}
+```
+
+## Migration depuis @expo/vector-icons
+
+### Pattern de Remplacement
+```typescript
+// Avant
+import { MaterialIcons } from '@expo/vector-icons';
+<MaterialIcons name="home" size={24} color="#007AFF" />
+
+// Après
+import { Icon } from '../../src/components';
+<Icon name="home" size={24} color="#007AFF" />
+```
+
+### Recherche et Remplacement
+```bash
+# Rechercher les utilisations de MaterialIcons
+grep -r "MaterialIcons" --include="*.tsx" --include="*.ts" .
+
+# Rechercher les imports @expo/vector-icons
+grep -r "@expo/vector-icons" --include="*.tsx" --include="*.ts" .
+```
+
+## Avantages du Composant Icon
+
+### Performance Web
+- Utilise les polices Material Icons natives
+- Pas de bundle JavaScript supplémentaire
+- Rendu CSS optimisé
+
+### Consistance
+- Interface unifiée sur toutes les plateformes
+- Gestion automatique des variantes
+- Intégration native avec le système de thème
+
+### Maintenance
+- Point d'entrée unique pour toutes les icônes
+- Facilite les changements globaux
+- Type safety avec TypeScript
+
+Cette approche garantit une utilisation cohérente et performante des icônes dans toute l'application.

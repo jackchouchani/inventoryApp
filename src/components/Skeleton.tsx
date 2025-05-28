@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
+import { Animated, StyleSheet, ViewStyle } from 'react-native';
 
 interface SkeletonProps {
   style?: ViewStyle;

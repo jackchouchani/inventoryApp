@@ -4,14 +4,10 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../../src/components';
 import { useSelector } from 'react-redux';
-import { useRefreshStore } from '../../src/store/refreshStore';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
-import { useQueryClient } from '@tanstack/react-query';
-import { handleError } from '../../src/utils/errorHandler';
 import { useAppTheme, ThemeMode } from '../../src/contexts/ThemeContext';
 import * as Sentry from '@sentry/react-native';
-import { clearImageCache } from '../../src/utils/s3AuthClient';
 
 const SettingsScreen = () => {
   const router = useRouter();
@@ -19,11 +15,8 @@ const SettingsScreen = () => {
   const systemScheme = useColorScheme();
   const isSystemDark = systemScheme === 'dark';
   const insets = useSafeAreaInsets();
-  useRefreshStore();
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
-  const queryClient = useQueryClient();
-  const [clearingCache, setClearingCache] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -59,50 +52,6 @@ const SettingsScreen = () => {
       });
     }
   }, [signOut, router]);
-
-  const handleClearImageCache = useCallback(async () => {
-    Alert.alert(
-      'Vider le cache d\'images',
-      'Êtes-vous sûr de vouloir vider le cache d\'images ? Cette opération peut aider à libérer de l\'espace de stockage mais entraînera un nouveau téléchargement des images lors de la prochaine utilisation.',
-      [
-        {
-          text: 'Annuler',
-          style: 'cancel'
-        },
-        {
-          text: 'Vider le cache',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setClearingCache(true);
-              
-              Sentry.addBreadcrumb({
-                category: 'cache',
-                message: 'User initiated image cache clearing',
-                level: 'info'
-              });
-              
-              await clearImageCache();
-              
-              queryClient.invalidateQueries({ queryKey: ['items'] });
-              
-              Alert.alert(
-                'Cache vidé',
-                'Le cache d\'images a été vidé avec succès.'
-              );
-            } catch (error) {
-              handleError(error, 'Erreur lors du nettoyage du cache d\'images');
-              Sentry.captureException(error, {
-                tags: { action: 'clear_image_cache' }
-              });
-            } finally {
-              setClearingCache(false);
-            }
-          }
-        }
-      ]
-    );
-  }, [queryClient]);
 
   if (!categories) {
     return (
@@ -214,22 +163,6 @@ const SettingsScreen = () => {
         <Icon name="receipt" size={24} color={activeTheme.primary} />
         <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Facture multi-articles</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
-        onPress={handleClearImageCache}
-        disabled={clearingCache}
-      >
-        <Icon name="cleaning_services" size={24} color={activeTheme.warning} />
-        <Text style={[styles.menuText, { color: clearingCache ? activeTheme.text.disabled : activeTheme.warning }]}>
-          {clearingCache ? 'Nettoyage en cours...' : 'Vider le cache d\'images'}
-        </Text>
-        {clearingCache ? (
-          <ActivityIndicator size="small" color={activeTheme.warning} />
-        ) : (
-          <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
-        )}
       </TouchableOpacity>
 
       <TouchableOpacity 

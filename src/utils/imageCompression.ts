@@ -50,7 +50,7 @@ export const compressImage = async (uri: string): Promise<string> => {
  * Cette méthode est plus fiable sur Safari iOS
  */
 const compressImageWithCanvas = async (dataUri: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     try {
       const img = new Image();
       img.onload = () => {

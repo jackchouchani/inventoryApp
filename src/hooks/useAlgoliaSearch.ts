@@ -6,7 +6,7 @@ export const useAlgoliaSearch = () => {
   const { query, refine: refineSearch } = useSearchBox();
   const { results, refresh, status } = useInstantSearch();
   const { refine: refinePage, currentRefinement: currentPage, isFirstPage, isLastPage } = usePagination();
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized] = useState(false);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const mountCount = useRef(0);
   const loadingPageRef = useRef(false);

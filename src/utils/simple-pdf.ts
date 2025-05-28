@@ -114,7 +114,7 @@ export class SimplePDF {
     });
   }
 
-  addImage(imageData: string, format: string, x: number, y: number, width: number, height: number): void {
+  addImage(imageData: string, _format: string, x: number, y: number, width: number, height: number): void {
     this.content.push({
       type: 'image',
       imageData,
@@ -200,7 +200,7 @@ export class SimplePDF {
     });
 
     // Convertir nos éléments en appels jsPDF
-    this.content.forEach((item) => {
+    this.content.forEach((item, _index) => {
       if (item.type === 'text') {
         // Configurer la police
         if (item.fontFamily) {
@@ -404,7 +404,7 @@ export class SimplePDF {
       currentPage += '<div style="position: absolute; left: 10mm; top: 10mm; font-size: 16px; color: red;">Aucun contenu généré - Problème de génération d\'étiquettes</div>';
     }
     
-    this.content.forEach((item, index) => {
+    this.content.forEach((item, _index) => {
       if (item.type === 'pageBreak') {
         currentPage += '</div>';
         html += currentPage;
@@ -470,7 +470,7 @@ export class SimplePDF {
         });
 
         // Convertir nos éléments en appels jsPDF (même logique que generateRealPDF)
-        this.content.forEach((item) => {
+        this.content.forEach((item, _index) => {
           if (item.type === 'text') {
             if (item.fontFamily) {
               doc.setFont(item.fontFamily, item.fontStyle === 'bold' ? 'bold' : 'normal');

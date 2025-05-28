@@ -6,6 +6,7 @@ import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
 import { getImageUrl } from '../utils/r2Client';
 import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
+import { useRouter } from 'expo-router';
 
 export interface ItemCardProps {
   item: Item;
@@ -28,7 +29,6 @@ export interface ItemCardProps {
 
 const ItemCard: React.FC<ItemCardProps> = ({ 
   item, 
-  onPress,
   onMarkAsSold,
   onMarkAsAvailable,
   fadeAnimation,
@@ -36,14 +36,19 @@ const ItemCard: React.FC<ItemCardProps> = ({
 }) => {
   const { activeTheme } = useAppTheme();
   const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  const router = useRouter();
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localStatus, setLocalStatus] = useState(item.status);
 
   const handlePress = useCallback(() => {
-    onPress?.(item);
-  }, [item, onPress]);
+    // Priorité 1: Utiliser la nouvelle route dédiée
+    router.push(`/item/${item.id}/info`);
+    
+    // Priorité 2: Fallback vers l'ancienne méthode si fournie
+    // onPress?.(item);
+  }, [item.id, router]);
 
   const handlePressIn = useCallback(() => {
     scaleAnimation?.scaleUp({ duration: 150 });
@@ -76,7 +81,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
 
   const statusTextStyle = useMemo(() => [
     styles.statusText,
-    { color: localStatus === 'sold' ? activeTheme.danger.text : activeTheme.text.inverse }
+    { color: localStatus === 'sold' ? activeTheme.text.inverse : activeTheme.text.inverse }
   ], [localStatus, activeTheme]);
 
   useEffect(() => {

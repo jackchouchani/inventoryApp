@@ -66,7 +66,7 @@ const StatsScreen = () => {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error.message}</Text>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }

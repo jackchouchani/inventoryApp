@@ -90,7 +90,7 @@ class ImageServiceClass {
     try {
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
-        const { uri, timestamp, size } = JSON.parse(cached);
+        const { uri, timestamp } = JSON.parse(cached);
         if (Date.now() - timestamp < IMAGE_CACHE_DURATION) {
           const fileInfo = await FileSystem.getInfoAsync(uri);
           if (fileInfo.exists) {
@@ -197,7 +197,6 @@ class ImageServiceClass {
   }
 
   async deleteImage(path: string): Promise<void> {
-    const basePath = path.replace('full_', '');
     const thumbPath = path.replace('full_', 'thumb_');
 
     await Promise.all([

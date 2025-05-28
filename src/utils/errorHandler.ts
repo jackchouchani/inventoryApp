@@ -6,19 +6,15 @@ import NetInfo from '@react-native-community/netinfo';
 import { AuthError } from '@supabase/supabase-js';
 
 // Types d'erreurs
-export const ErrorType = {
-  DATABASE: 'DATABASE',
-  AUTHENTICATION: 'AUTHENTICATION',
-  NETWORK: 'NETWORK',
-  SCANNER: 'SCANNER',
-  VALIDATION: 'VALIDATION',
-  UNKNOWN: 'UNKNOWN',
-  CONTAINER_CONTENTS_LOAD_MORE: 'CONTAINER_CONTENTS_LOAD_MORE',
-  CONTAINER_CONTENTS_REFRESH: 'CONTAINER_CONTENTS_REFRESH',
-  GRID_ERROR: 'GRID_ERROR'
-} as const;
+export enum ErrorTypeEnum {
+  NETWORK = 'NETWORK',
+  DATABASE = 'DATABASE',
+  AUTHENTICATION = 'AUTHENTICATION',
+  VALIDATION = 'VALIDATION',
+  UNKNOWN = 'UNKNOWN'
+}
 
-export type ErrorTypeEnum = typeof ErrorType[keyof typeof ErrorType];
+export const ErrorType = ErrorTypeEnum;
 
 // Structure pour les messages d'erreur traduits
 interface ErrorMessage {
@@ -131,10 +127,6 @@ const genericErrors: Record<ErrorTypeEnum, ErrorMessage> = {
     fr: 'Erreur de connexion réseau.',
     en: 'Network connection error.'
   },
-  [ErrorType.SCANNER]: {
-    fr: 'Erreur lors du scan.',
-    en: 'Scanner error.'
-  },
   [ErrorType.VALIDATION]: {
     fr: 'Erreur de validation des données.',
     en: 'Data validation error.'
@@ -143,18 +135,6 @@ const genericErrors: Record<ErrorTypeEnum, ErrorMessage> = {
     fr: 'Une erreur inattendue s\'est produite.',
     en: 'An unexpected error occurred.'
   },
-  [ErrorType.CONTAINER_CONTENTS_LOAD_MORE]: {
-    fr: 'Erreur lors du chargement des éléments supplémentaires.',
-    en: 'Error loading more items.'
-  },
-  [ErrorType.CONTAINER_CONTENTS_REFRESH]: {
-    fr: 'Erreur lors du rafraîchissement des éléments.',
-    en: 'Error refreshing items.'
-  },
-  [ErrorType.GRID_ERROR]: {
-    fr: 'Erreur dans l\'affichage de la grille.',
-    en: 'Grid display error.'
-  }
 };
 
 interface ErrorContext {
@@ -301,8 +281,6 @@ class ErrorHandler {
         return 'Erreur d\'authentification';
       case ErrorType.NETWORK:
         return 'Erreur réseau';
-      case ErrorType.SCANNER:
-        return 'Erreur de scanner';
       case ErrorType.VALIDATION:
         return 'Erreur de validation';
       default:
@@ -341,7 +319,7 @@ export const handleDatabaseError = (error: PostgrestError | Error): ErrorDetails
 };
 
 export const handleScannerError = (error: Error): ErrorDetails => {
-  return errorHandler.handleError(error, { context: ErrorType.SCANNER });
+  return errorHandler.handleError(error, { context: ErrorType.UNKNOWN });
 };
 
 export const handleNetworkError = (error: Error): ErrorDetails => {

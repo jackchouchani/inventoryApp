@@ -4,8 +4,10 @@ import { itemsAdapter, ItemWithId } from './itemsAdapter';
 import {
   fetchItems,
   fetchItemByBarcode,
+  fetchItemById,
   fetchSimilarItems,
   updateItemStatus,
+  sellItem,
   moveItem,
   bulkUpdateItems
 } from './itemsThunks';
@@ -96,11 +98,23 @@ const itemsSlice = createSlice({
           itemsAdapter.upsertOne(state, action.payload as ItemWithId);
         }
       })
+      .addCase(fetchItemById.fulfilled, (state, action) => {
+        if (action.payload) {
+          state.selectedItem = action.payload;
+          itemsAdapter.upsertOne(state, action.payload as ItemWithId);
+        }
+      })
       .addCase(fetchSimilarItems.fulfilled, (state, action) => {
         state.similarItems = action.payload;
         itemsAdapter.upsertMany(state, action.payload as ItemWithId[]);
       })
       .addCase(updateItemStatus.fulfilled, (state, action) => {
+        itemsAdapter.upsertOne(state, action.payload as ItemWithId);
+        if (state.selectedItem?.id === action.payload.id) {
+          state.selectedItem = action.payload;
+        }
+      })
+      .addCase(sellItem.fulfilled, (state, action) => {
         itemsAdapter.upsertOne(state, action.payload as ItemWithId);
         if (state.selectedItem?.id === action.payload.id) {
           state.selectedItem = action.payload;

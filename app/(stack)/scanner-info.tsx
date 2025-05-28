@@ -269,7 +269,7 @@ export default function ScannerInfoScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(false);
+  const [imageLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [similarItems, setSimilarItems] = useState<any[]>([]); // Sera typé plus tard
   const [containerName, setContainerName] = useState<string | null>(null);
@@ -394,64 +394,17 @@ export default function ScannerInfoScreen() {
         return;
       }
 
-      const itemWithRelations = {
-        ...supabaseItem,
-        container_name: (supabaseItem.containers as { name: string })?.name || 'N/A',
-        category_name: (supabaseItem.categories as { name: string })?.name || 'N/A',
-      };
+      // Rediriger directement vers la page d'informations de l'article
+      console.log('Article trouvé, redirection vers la page d\'informations:', supabaseItem.id);
+      router.replace(`/item/${supabaseItem.id}/info`);
 
-      const objectID = supabaseItem.id.toString();
-      setAlgoliaObjectID(objectID);
-      console.log("Utilisation de supabaseItem.id comme objectID Algolia:", objectID);
-
-      let updatedScannedItem: ScannedItemWithAlgolia = { 
-        ...itemWithRelations, 
-        objectID 
-      };
-      setScannedItem(updatedScannedItem);
-
-      // Récupérer les données d'image d'Algolia
-      try {
-        // Récupérer l'image depuis Algolia
-        const algoliaItem = await itemsIndex.getObject(objectID, {
-          attributesToRetrieve: ['photo_storage_url', 'name'],
-        });
-        
-        // Utiliser photo_storage_url d'Algolia si disponible
-        if (algoliaItem && algoliaItem.photo_storage_url) {
-          console.log("Utilisation de photo_storage_url d'Algolia:", algoliaItem.photo_storage_url);
-          const imageUrl = getImageUrl(algoliaItem.photo_storage_url);
-          console.log("URL générée pour l'image:", imageUrl);
-          setImageUrl(imageUrl);
-          setImageLoading(false);
-          setImageError(false);
-          // Mettre à jour l'item avec photo_storage_url
-          updatedScannedItem = { ...updatedScannedItem, photo_storage_url: algoliaItem.photo_storage_url };
-          setScannedItem(updatedScannedItem);
-        } else {
-          // Fallback si aucune image n'est trouvée
-          console.log("Aucune photo_storage_url trouvée dans Algolia");
-          setImageUrl(FALLBACK_IMAGE_URL || null);
-        }
-      } catch (algoliaGetError) {
-        console.error("Erreur lors de la récupération de l'article depuis Algolia:", algoliaGetError);
-        if (supabaseItem.photo_url) {
-          console.log("Erreur getObject Algolia, utilisation de Supabase photo_url:", supabaseItem.photo_url);
-          setImageUrl(getImageUrl(supabaseItem.photo_url));
-          setImageLoading(false);
-          setImageError(false);
-        } else {
-          console.log("Erreur getObject Algolia et pas de photo_url Supabase.");
-          setImageUrl(FALLBACK_IMAGE_URL || null);
-        }
-      }
     } catch (e: any) {
       console.error('Erreur globale dans handleBarCodeScanned:', e);
       setError(e.message || 'Une erreur est survenue.');
-    } finally {
       setLoading(false);
+      setIsScanning(true);
     }
-  }, [loading]);
+  }, [loading, router]);
 
   // Effet pour récupérer les articles similaires une fois que l'objectID est connu
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, SafeAreaView, Alert, ActivityIndicator, TextInput, ScrollView, Platform, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,21 +8,23 @@ import { Item } from '../../src/types/item';
 import { Category } from '../../src/types/category';
 import { ContainerGrid } from '../../src/components/ContainerGrid';
 import { ContainerForm } from '../../src/components/ContainerForm';
-import { useInventoryData } from '../../src/hooks/useInventoryData';
+import { useItems } from '../../src/hooks/useItems';
+import { useCategories } from '../../src/hooks/useCategories';
+import { useContainers } from '../../src/hooks/useContainers';
 import { supabase } from '../../src/config/supabase';
 import { useRefreshStore } from '../../src/store/refreshStore';
 import { Icon } from '../../src/components';
 import { useDispatch, useSelector } from 'react-redux';
-import { updateItem, setItems } from '../../src/store/itemsActions';
+import { updateItem } from '../../src/store/itemsActions';
 import { selectAllItems } from '../../src/store/itemsAdapter';
-import { RootState } from '../../src/store/store';
+import { RootState, AppDispatch } from '../../src/store/store';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import { useContainerManagement } from '../../src/hooks/useContainerManagement';
 import { useSearchDebounce } from '../../src/hooks/useSearchDebounce';
-import { removeContainer, setContainers, selectAllContainers, updateContainer, addContainer } from '../../src/store/containersSlice';
-import { useQueryClient } from '@tanstack/react-query';
+import { removeContainer, updateContainer, addContainer } from '../../src/store/containersSlice';
 import ConfirmationDialog from '../../src/components/ConfirmationDialog';
+import { fetchItems } from '../../src/store/itemsThunks';
 
 interface ContainerInfoProps {
   containerId: number | null;
@@ -48,8 +50,7 @@ const ContainerInfo: React.FC<ContainerInfoProps> = ({ containerId, containers, 
 };
 
 const ContainerScreen = () => {
-  const dispatch = useDispatch();
-  const queryClient = useQueryClient();
+  const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
   const [showContainerForm, setShowContainerForm] = useState(false);
@@ -58,13 +59,13 @@ const ContainerScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
   const { searchQuery, setSearchQuery } = useSearchDebounce();
-  const { data: inventoryData, isLoading: isLoadingInventory, refetch } = useInventoryData({ 
-    forceRefresh: refreshing 
-  });
-  const initialItems = inventoryData?.items ?? [];
-  const containers = useSelector((state: RootState) => selectAllContainers(state));
-  const categories = inventoryData?.categories ?? [];
-  const items = useSelector((state: RootState) => selectAllItems(state));
+  
+  // Utiliser les hooks Redux dédiés pour chaque entité
+  const { data: containers, refetch } = useContainers();
+  const { isLoading: isLoadingItems, refetch: refetchItems } = useItems();
+  const { categories, isLoading: isLoadingCategories } = useCategories();
+  
+  const itemsInRedux = useSelector((state: RootState) => selectAllItems(state));
   const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
   const router = useRouter();
   const { handleContainerSubmit } = useContainerManagement();
@@ -77,28 +78,18 @@ const ContainerScreen = () => {
   });
   const { activeTheme, themeMode } = useAppTheme();
 
-  useEffect(() => {
-    if (initialItems?.length > 0) {
-      dispatch(setItems(initialItems));
-    }
-    
-    if (inventoryData?.containers && inventoryData.containers.length > 0 && containers.length === 0) {
-      dispatch(setContainers(inventoryData.containers));
-    }
-  }, [initialItems, inventoryData?.containers, dispatch, containers.length]);
-
   const { assignedItems, filteredAvailableItems } = useMemo(() => {
-    const assigned = items.filter(item => 
+    const assigned = itemsInRedux.filter((item: Item) => 
       item.containerId === selectedContainer?.id && 
       item.status === 'available'
     );
 
-    const available = items.filter(item => 
+    const available = itemsInRedux.filter((item: Item) => 
       item.status === 'available' && 
       (item.containerId === null || item.containerId !== selectedContainer?.id)
     );
     
-    const filtered = available.filter(item => {
+    const filtered = available.filter((item: Item) => {
       const matchesSearch = searchQuery ? 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) : true;
       const matchesCategory = selectedCategory ? 
@@ -110,7 +101,7 @@ const ContainerScreen = () => {
       assignedItems: assigned,
       filteredAvailableItems: filtered
     };
-  }, [items, selectedContainer?.id, searchQuery, selectedCategory, forceUpdate]);
+  }, [itemsInRedux, selectedContainer?.id, searchQuery, selectedCategory, forceUpdate]);
 
   const handleContainerPress = useCallback((containerId: number) => {
     const container = containers.find((c: Container) => c.id === containerId);
@@ -128,7 +119,7 @@ const ContainerScreen = () => {
   const handleAddToContainer = useCallback(async (itemId: number) => {
     if (!selectedContainer?.id) return;
 
-    const itemToUpdate = items.find(item => item.id === itemId);
+    const itemToUpdate = itemsInRedux.find((item: Item) => item.id === itemId);
     if (!itemToUpdate) return;
 
     const updatedItemData = {
@@ -159,8 +150,7 @@ const ContainerScreen = () => {
             'Une erreur est survenue lors de l\'ajout de l\'article au container.'
           );
         } else {
-          queryClient.invalidateQueries({ queryKey: ['items'] });
-          queryClient.invalidateQueries({ queryKey: ['inventory'] });
+          await dispatch(fetchItems({ page: 0, limit: 1000 }));
         }
       } catch (error) {
         dispatch(updateItem(itemToUpdate));
@@ -168,10 +158,10 @@ const ContainerScreen = () => {
       }
     })();
 
-  }, [selectedContainer, items, dispatch, queryClient, forceUpdate]);
+  }, [selectedContainer, itemsInRedux, dispatch, forceUpdate]);
 
   const handleDeleteFromContainer = useCallback(async (itemId: number) => {
-    const itemToUpdate = items.find(item => item.id === itemId);
+    const itemToUpdate = itemsInRedux.find((item: Item) => item.id === itemId);
     if (!itemToUpdate) return;
 
     const updatedItemData = {
@@ -201,14 +191,13 @@ const ContainerScreen = () => {
           'Une erreur est survenue lors de la suppression de l\'article du container.'
         );
       } else {
-        queryClient.invalidateQueries({ queryKey: ['items'] });
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        await dispatch(fetchItems({ page: 0, limit: 1000 }));
       }
     } catch (error) {
       dispatch(updateItem(itemToUpdate));
       console.error('Erreur lors de la suppression du container:', error);
     }
-  }, [items, dispatch, queryClient, forceUpdate]);
+  }, [itemsInRedux, dispatch, forceUpdate]);
 
   const handleDeleteContainer = useCallback(async (containerId: number) => {
     setConfirmDialog({
@@ -222,8 +211,6 @@ const ContainerScreen = () => {
     if (!containerId) return;
 
     try {
-      // Étape 1: Détacher tous les articles associés à ce conteneur dans la base de données
-      // Cela met à jour le champ container_id des articles liés à null.
       const { error: updateItemsError } = await supabase
         .from('items')
         .update({ container_id: null, updated_at: new Date().toISOString() })
@@ -231,38 +218,27 @@ const ContainerScreen = () => {
 
       if (updateItemsError) {
         console.error('Erreur lors du détachement des articles dans Supabase:', updateItemsError);
-        // Si le détachement des articles échoue, on peut choisir d'arrêter ou de continuer.
-        // Pour une soft delete, il pourrait être acceptable de continuer même si le détachement échoue,
-        // mais l'idéal est que les articles ne soient plus liés à un container "supprimé".
-        // Lançons une erreur pour l'instant pour signaler le problème.
         throw new Error(`Impossible de détacher les articles du container : ${updateItemsError.message}`);
       }
 
       console.log(`[Supabase] Articles détachés pour container ${containerId}.`);
 
-      // Étape 2: Effectuer la suppression douce du conteneur dans Supabase
-      // On met à jour le champ 'deleted' à true au lieu de supprimer la ligne.
       const { error: softDeleteContainerError } = await supabase
         .from('containers')
-        .update({ deleted: true, updated_at: new Date().toISOString() }) // Assurez-vous que 'deleted' est le bon nom de colonne et qu'elle existe.
+        .update({ deleted: true, updated_at: new Date().toISOString() })
         .eq('id', containerId);
 
       if (softDeleteContainerError) {
         console.error('Erreur lors de la suppression douce du conteneur dans Supabase:', softDeleteContainerError);
-        // Si la suppression douce échoue
         throw new Error(`Impossible de marquer le container comme supprimé : ${softDeleteContainerError.message}`);
       }
 
       console.log(`[Supabase] Container ${containerId} marqué comme supprimé.`);
 
-      // Étape 3: Si les opérations Supabase réussissent, mettre à jour l'état local (Redux)
-      // Supprimer le conteneur de l'état Redux (car l'UI ne doit plus l'afficher)
       dispatch(removeContainer(containerId));
       console.log(`[Redux] Container ${containerId} retiré de l'état local (UI).`);
 
-
-      // Mettre à jour localement les items qui étaient dans ce container pour les "détacher" dans Redux
-      const itemsInContainer = items.filter(item => item.containerId === containerId);
+      const itemsInContainer = itemsInRedux.filter(item => item.containerId === containerId);
        console.log(`[Redux] Trouvé ${itemsInContainer.length} articles à détacher localement.`);
 
       itemsInContainer.forEach(item => {
@@ -270,40 +246,30 @@ const ContainerScreen = () => {
           dispatch(updateItem({
             ...item,
             containerId: null,
-            updatedAt: new Date().toISOString() // Mettre à jour la date localement aussi
+            updatedAt: new Date().toISOString()
           }));
            console.log(`[Redux] Article ${item.id} détaché localement.`);
         }
       });
 
+      setSelectedContainer(null);
 
-      setSelectedContainer(null); // Fermer la modale du container
+      // Rafraîchir les données via Redux
+      await dispatch(fetchItems({ page: 0, limit: 1000 }));
 
-      // Invalider les caches React Query pour forcer le rafraîchissement des données
-      // Cela est crucial pour que la liste des containers ne recharge pas le container "supprimé".
-      queryClient.invalidateQueries({ queryKey: ['containers'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] }); // Souvent l'inventaire inclut les containers et items
-      queryClient.invalidateQueries({ queryKey: ['items'] }); // Invalider aussi les items car certains ont été mis à jour
+      console.log('[Redux] Items rechargés après suppression container.');
 
-      console.log('[React Query] Caches invalidés.');
-
-      // Déclencher un rafraîchissement global si nécessaire
       triggerRefresh();
       console.log('[App] Refresh global déclenché.');
 
-
     } catch (error: any) {
       console.error('Erreur globale lors de la suppression douce du container:', error);
-      // Afficher une alerte à l'utilisateur
       Alert.alert('Erreur de suppression', error.message || 'Une erreur inconnue est survenue lors de la suppression du container.');
 
-      // Ne pas modifier l'état local si les opérations BD ont échoué.
-
     } finally {
-      // Quoi qu'il arrive, fermer la boîte de dialogue de confirmation
       setConfirmDialog({ visible: false, containerId: null });
     }
-  }, [confirmDialog.containerId, dispatch, items, queryClient, triggerRefresh, setSelectedContainer]);
+  }, [confirmDialog.containerId, dispatch, itemsInRedux, triggerRefresh, setSelectedContainer]);
 
   const handleCancelDelete = useCallback(() => {
     setConfirmDialog({ visible: false, containerId: null });
@@ -312,20 +278,18 @@ const ContainerScreen = () => {
   const handleRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
-      await refetch();
-      if (inventoryData?.containers) {
-        dispatch(setContainers(inventoryData.containers));
-      }
-      if (inventoryData?.items) {
-        dispatch(setItems(inventoryData.items));
-      }
+      // Rafraîchir les données via les hooks dédiés
+      await Promise.all([
+        refetchItems(), // Items et categories
+        refetch() // Containers via Redux
+      ]);
       setForceUpdate(prev => prev + 1);
     } catch (error) {
       console.error('Erreur lors du rafraîchissement:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [refetch, inventoryData, dispatch, setForceUpdate]);
+  }, [refetchItems, refetch, setForceUpdate]);
 
   const renderItem = useCallback(({ item }: { item: Item }) => (
     <ItemListItem
@@ -350,7 +314,6 @@ const ContainerScreen = () => {
       backgroundColor: activeTheme.backgroundSecondary,
       borderBottomWidth: 1,
       borderBottomColor: activeTheme.border,
-      // marginTop sera défini dynamiquement avec useSafeAreaInsets
     },
     backButton: {
       flexDirection: 'row',
@@ -391,7 +354,7 @@ const ContainerScreen = () => {
       padding: 15,
       margin: 10,
       borderRadius: 12,
-      elevation: 2, // For Android shadow
+      elevation: 2,
     },
     addIcon: {
       marginRight: 8,
@@ -762,14 +725,19 @@ const ContainerScreen = () => {
               style={[styles.itemContainer, !item.containerId && styles.noContainer]}
             />
           </View>
-          <Text style={styles.itemPrice}>{item.sellingPrice !== null && item.sellingPrice !== undefined ? `${item.sellingPrice}€` : ''}</Text>
+          <Text style={styles.itemPrice}>
+            {item.sellingPrice !== null && item.sellingPrice !== undefined 
+              ? `${item.sellingPrice}€` 
+              : ''
+            }
+          </Text>
         </View>
         <Icon name="add_circle_outline" size={24} color={itemListItemIconColor} />
       </TouchableOpacity>
     );
   });
 
-  if (isLoadingInventory) {
+  if (isLoadingItems || isLoadingCategories) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -885,7 +853,7 @@ const ContainerScreen = () => {
 
         <ContainerGrid
           containers={containers}
-          items={items}
+          items={itemsInRedux}
           onContainerPress={handleContainerPress}
           onRetry={handleRefresh}
         />

@@ -4,7 +4,8 @@ import { useDispatch } from 'react-redux';
 import { database, Category, Container } from '../database/database';
 import { Icon } from '../../src/components';
 import { deleteItem, updateItem } from '../store/itemsActions';
-import { useQueryClient } from '@tanstack/react-query';
+import { AppDispatch } from '../store/store';
+import { fetchItems } from '../store/itemsThunks';
 import type { MaterialIconName } from '../types/icons';
 import type { Item } from '../types/item';
 import { validateItemName } from '../utils/validation';
@@ -13,7 +14,7 @@ import { checkPhotoPermissions } from '../utils/permissions';
 import { usePhoto } from '../hooks/usePhoto';
 import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
-import { theme } from '../utils/theme';
+import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { LabelGenerator } from './LabelGenerator';
 
@@ -39,120 +40,146 @@ interface EditedItemForm {
 const ContainerOption = memo(({ 
     container, 
     isSelected, 
-    onSelect 
+    onSelect,
+    theme
 }: { 
     container: Container; 
     isSelected: boolean; 
     onSelect: () => void;
-}) => (
-    <TouchableOpacity
-        style={[styles.option, isSelected && styles.optionSelected]}
-        onPress={onSelect}
-    >
-        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-            {container.name}#{container.number}
-        </Text>
-    </TouchableOpacity>
-));
+    theme: AppThemeType;
+}) => {
+    const styles = useMemo(() => getThemedStyles(theme), [theme]);
+    
+    return (
+        <TouchableOpacity
+            style={[styles.option, isSelected && styles.optionSelected]}
+            onPress={onSelect}
+        >
+            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                {container.name}#{container.number}
+            </Text>
+        </TouchableOpacity>
+    );
+});
 
 const CategoryOption = memo(({ 
     category, 
     isSelected, 
-    onSelect 
+    onSelect,
+    theme
 }: { 
     category: Category; 
     isSelected: boolean; 
     onSelect: () => void;
-}) => (
-    <TouchableOpacity
-        style={[styles.option, isSelected && styles.optionSelected]}
-        onPress={onSelect}
-    >
-        <Icon
-            name={(category.icon as MaterialIconName) || 'folder'}
-            size={20}
-            color={isSelected ? '#fff' : '#666'}
-            style={styles.categoryIcon}
-        />
-        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-            {category.name}
-        </Text>
-    </TouchableOpacity>
-));
+    theme: AppThemeType;
+}) => {
+    const styles = useMemo(() => getThemedStyles(theme), [theme]);
+    
+    return (
+        <TouchableOpacity
+            style={[styles.option, isSelected && styles.optionSelected]}
+            onPress={onSelect}
+        >
+            <Icon
+                name={(category.icon as MaterialIconName) || 'folder'}
+                size={20}
+                color={isSelected ? theme.text.onPrimary : theme.text.secondary}
+                style={styles.categoryIcon}
+            />
+            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                {category.name}
+            </Text>
+        </TouchableOpacity>
+    );
+});
 
 const ContainerList = memo(({ 
     containers, 
     selectedId, 
     onSelect,
-    onAddNew 
+    onAddNew,
+    theme
 }: { 
     containers: Container[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
     onAddNew: () => void;
-}) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-        <View style={styles.optionsContainer}>
-            {containers.map((container) => (
-                <ContainerOption
-                    key={container.id}
-                    container={container}
-                    isSelected={selectedId === container.id}
-                    onSelect={() => onSelect(container.id)}
-                />
-            ))}
-            <TouchableOpacity
-                style={styles.addNewOption}
-                onPress={onAddNew}
-            >
-                <Icon
-                    name="add_circle"
-                    size={20}
-                    color="#007AFF"
-                    style={styles.addIcon}
-                />
-                <Text style={styles.addNewText}>Ajouter un container</Text>
-            </TouchableOpacity>
-        </View>
-    </ScrollView>
-));
+    theme: AppThemeType;
+}) => {
+    const styles = useMemo(() => getThemedStyles(theme), [theme]);
+    
+    return (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+            <View style={styles.optionsContainer}>
+                {containers.map((container) => (
+                    <ContainerOption
+                        key={container.id}
+                        container={container}
+                        isSelected={selectedId === container.id}
+                        onSelect={() => onSelect(container.id)}
+                        theme={theme}
+                    />
+                ))}
+                <TouchableOpacity
+                    style={styles.addNewOption}
+                    onPress={onAddNew}
+                >
+                    <Icon
+                        name="add_circle"
+                        size={20}
+                        color={theme.primary}
+                        style={styles.addIcon}
+                    />
+                    <Text style={styles.addNewText}>Ajouter un container</Text>
+                </TouchableOpacity>
+            </View>
+        </ScrollView>
+    );
+});
 
 const CategoryList = memo(({ 
     categories, 
     selectedId, 
     onSelect,
-    onAddNew 
+    onAddNew,
+    theme
 }: { 
     categories: Category[];
     selectedId?: number | null;
     onSelect: (id: number) => void;
     onAddNew: () => void;
-}) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
-        <View style={styles.optionsContainer}>
-            {categories.map((category) => (
-                <CategoryOption
-                    key={category.id}
-                    category={category}
-                    isSelected={selectedId === category.id}
-                    onSelect={() => onSelect(category.id)}
-                />
-            ))}
-            <TouchableOpacity
-                style={styles.addNewOption}
-                onPress={onAddNew}
-            >
-                <Icon
-                    name="add_circle"
-                    size={20}
-                    color="#007AFF"
-                    style={styles.addIcon}
-                />
-                <Text style={styles.addNewText}>Ajouter une catégorie</Text>
-            </TouchableOpacity>
-        </View>
-    </ScrollView>
-));
+    theme: AppThemeType;
+}) => {
+    const styles = useMemo(() => getThemedStyles(theme), [theme]);
+    
+    return (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScrollView}>
+            <View style={styles.optionsContainer}>
+                {categories.map((category) => (
+                    <CategoryOption
+                        key={category.id}
+                        category={category}
+                        isSelected={selectedId === category.id}
+                        onSelect={() => onSelect(category.id)}
+                        theme={theme}
+                    />
+                ))}
+                <TouchableOpacity
+                    style={styles.addNewOption}
+                    onPress={onAddNew}
+                >
+                    <Icon
+                        name="add_circle"
+                        size={20}
+                        color={theme.primary}
+                        style={styles.addIcon}
+                    />
+                    <Text style={styles.addNewText}>Ajouter une catégorie</Text>
+                </TouchableOpacity>
+            </View>
+        </ScrollView>
+    );
+});
 
 const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProps) => {
     return (
@@ -164,14 +191,50 @@ const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProp
 };
 
 export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
+    console.log('=== DEBUG ITEM EDIT FORM ===');
+    console.log('18. Props reçues dans ItemEditForm:');
+    console.log('  - item brut:', item);
+    console.log('  - item.purchasePrice:', item?.purchasePrice, 'type:', typeof item?.purchasePrice);
+    console.log('  - item.sellingPrice:', item?.sellingPrice, 'type:', typeof item?.sellingPrice);
+    console.log('  - item.containerId:', item?.containerId, 'type:', typeof item?.containerId);
+    console.log('  - item.categoryId:', item?.categoryId, 'type:', typeof item?.categoryId);
+    
+    const { activeTheme } = useAppTheme();
+    const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+    
+    // Adapter l'item pour s'assurer que les champs sont en camelCase - MÉMORISÉ pour éviter les re-renders
+    const adaptedItem = useMemo(() => {
+        const adapted = {
+            ...item,
+            purchasePrice: item.purchasePrice ?? (item as any).purchase_price ?? 0,
+            sellingPrice: item.sellingPrice ?? (item as any).selling_price ?? 0,
+            containerId: item.containerId ?? (item as any).container_id ?? null,
+            categoryId: item.categoryId ?? (item as any).category_id ?? null,
+        };
+        
+        console.log('18b. Item adapté dans ItemEditForm (useMemo):');
+        console.log('  - adaptedItem.purchasePrice:', adapted.purchasePrice, 'type:', typeof adapted.purchasePrice);
+        console.log('  - adaptedItem.sellingPrice:', adapted.sellingPrice, 'type:', typeof adapted.sellingPrice);
+        console.log('  - adaptedItem.containerId:', adapted.containerId, 'type:', typeof adapted.containerId);
+        console.log('  - adaptedItem.categoryId:', adapted.categoryId, 'type:', typeof adapted.categoryId);
+        
+        return adapted;
+    }, [item]);
+    
+    console.log('  - propContainers:', propContainers?.length, propContainers);
+    console.log('  - propCategories:', propCategories?.length, propCategories);
+
     const containers = Array.isArray(propContainers) ? propContainers : [];
     // Trier les catégories par created_at (plus ancien en premier) pour que "Bags" soit en premier
     const categories = Array.isArray(propCategories) 
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
 
-    const dispatch = useDispatch();
-    const queryClient = useQueryClient();
+    console.log('19. Après traitement des props:');
+    console.log('  - containers final:', containers.length, containers);
+    console.log('  - categories final:', categories.length, categories);
+
+    const dispatch = useDispatch<AppDispatch>();
     const { uploadPhoto, deletePhoto, loadImage, state: photoHookState, validatePhoto } = usePhoto();
 
     const router = useRouter();
@@ -180,26 +243,53 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const [localImageNeedsUpload, setLocalImageNeedsUpload] = useState(false);
 
     const [editedItem, setEditedItem] = useState<EditedItemForm>({
-        name: item.name,
-        description: item.description || '',
-        purchasePrice: (typeof item.purchasePrice === 'number' && !isNaN(item.purchasePrice)) ? item.purchasePrice.toString() : '0',
-        sellingPrice: (typeof item.sellingPrice === 'number' && !isNaN(item.sellingPrice)) ? item.sellingPrice.toString() : '0',
-        status: item.status,
-        photo_storage_url: item.photo_storage_url,
-        containerId: item.containerId,
-        categoryId: item.categoryId
+        name: adaptedItem.name,
+        description: adaptedItem.description || '',
+        purchasePrice: (typeof adaptedItem.purchasePrice === 'number' && !isNaN(adaptedItem.purchasePrice)) ? adaptedItem.purchasePrice.toString() : '0',
+        sellingPrice: (typeof adaptedItem.sellingPrice === 'number' && !isNaN(adaptedItem.sellingPrice)) ? adaptedItem.sellingPrice.toString() : '0',
+        status: adaptedItem.status,
+        photo_storage_url: adaptedItem.photo_storage_url,
+        containerId: adaptedItem.containerId,
+        categoryId: adaptedItem.categoryId
     });
 
-    const initialItemState = useMemo(() => ({
-        name: item.name,
-        description: item.description || '',
-        purchasePrice: (typeof item.purchasePrice === 'number' && !isNaN(item.purchasePrice)) ? item.purchasePrice.toString() : '0',
-        sellingPrice: (typeof item.sellingPrice === 'number' && !isNaN(item.sellingPrice)) ? item.sellingPrice.toString() : '0',
-        status: item.status,
-        photo_storage_url: item.photo_storage_url,
-        containerId: item.containerId,
-        categoryId: item.categoryId
-    }), [item]);
+    console.log('20. État initial editedItem après useState:');
+    console.log('  - name:', editedItem.name);
+    console.log('  - description:', editedItem.description);
+    console.log('  - purchasePrice:', editedItem.purchasePrice, 'type:', typeof editedItem.purchasePrice);
+    console.log('  - sellingPrice:', editedItem.sellingPrice, 'type:', typeof editedItem.sellingPrice);
+    console.log('  - containerId:', editedItem.containerId, 'type:', typeof editedItem.containerId);
+    console.log('  - categoryId:', editedItem.categoryId, 'type:', typeof editedItem.categoryId);
+    console.log('  - editedItem complet:', editedItem);
+
+    const initialItemState = useMemo(() => {
+        console.log('[ItemEditForm] Calculating initialItemState with adaptedItem:', adaptedItem);
+        console.log('[ItemEditForm] adaptedItem.purchasePrice:', typeof adaptedItem.purchasePrice, adaptedItem.purchasePrice);
+        console.log('[ItemEditForm] adaptedItem.sellingPrice:', typeof adaptedItem.sellingPrice, adaptedItem.sellingPrice);
+        console.log('[ItemEditForm] adaptedItem.containerId:', typeof adaptedItem.containerId, adaptedItem.containerId);
+        console.log('[ItemEditForm] adaptedItem.categoryId:', typeof adaptedItem.categoryId, adaptedItem.categoryId);
+        
+        const result = {
+            name: adaptedItem.name,
+            description: adaptedItem.description || '',
+            purchasePrice: (typeof adaptedItem.purchasePrice === 'number' && !isNaN(adaptedItem.purchasePrice)) ? adaptedItem.purchasePrice.toString() : '0',
+            sellingPrice: (typeof adaptedItem.sellingPrice === 'number' && !isNaN(adaptedItem.sellingPrice)) ? adaptedItem.sellingPrice.toString() : '0',
+            status: adaptedItem.status,
+            photo_storage_url: adaptedItem.photo_storage_url,
+            containerId: adaptedItem.containerId,
+            categoryId: adaptedItem.categoryId
+        };
+        
+        console.log('[ItemEditForm] Final initialItemState:', result);
+        return result;
+    }, [adaptedItem]);
+
+    console.log('21. initialItemState calculé:');
+    console.log('  - purchasePrice:', initialItemState.purchasePrice);
+    console.log('  - sellingPrice:', initialItemState.sellingPrice);
+    console.log('  - containerId:', initialItemState.containerId);
+    console.log('  - categoryId:', initialItemState.categoryId);
+    console.log('=== FIN DEBUG ITEM EDIT FORM ===');
 
     const [confirmDialog, setConfirmDialog] = useState<{
         visible: boolean;
@@ -212,14 +302,14 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const [showLabelGenerator, setShowLabelGenerator] = useState(false);
 
     useEffect(() => {
-        console.log("[ItemEditForm] useEffect - Initializing form with item:", item.id);
+        console.log("[ItemEditForm] useEffect - Initializing form with item:", adaptedItem.id);
         setEditedItem(initialItemState);
         setLocalImageUri(null);
         setLocalImageNeedsUpload(false);
 
-        if (item.photo_storage_url && typeof item.photo_storage_url === 'string') {
-            console.log("[ItemEditForm] useEffect - Loading initial image from R2:", item.photo_storage_url);
-            loadImage(item.photo_storage_url);
+        if (adaptedItem.photo_storage_url && typeof adaptedItem.photo_storage_url === 'string') {
+            console.log("[ItemEditForm] useEffect - Loading initial image from R2:", adaptedItem.photo_storage_url);
+            loadImage(adaptedItem.photo_storage_url);
         } else {
              console.log("[ItemEditForm] useEffect - No initial image to load or photo_storage_url is null.");
         }
@@ -228,7 +318,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
              console.log("[ItemEditForm] useEffect - Cleanup");
         };
 
-    }, [initialItemState, item.photo_storage_url, item.id, loadImage]);
+    }, [initialItemState, adaptedItem.photo_storage_url, adaptedItem.id, loadImage]);
 
     const hasFormChanged = useMemo(() => {
         const fieldsChanged =
@@ -287,12 +377,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             console.error("[ItemEditForm] validateForm - Erreur:", error);
             handleError(error, 'Erreur de validation', {
                 source: 'item_edit_form_validation',
-                message: `Erreur lors de la validation de l'article ${item.id}`,
+                message: `Erreur lors de la validation de l'article ${adaptedItem.id}`,
                  showAlert: true
             });
             return false;
         }
-    }, [editedItem, item.id]);
+    }, [editedItem, adaptedItem.id]);
 
     const handleImagePreview = useCallback(async () => {
         try {
@@ -369,11 +459,11 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             console.error("handleImagePreview - Erreur:", error);
             handleError(error, 'Erreur sélection photo', {
                 source: 'item_edit_form_image_preview',
-                message: `Échec de la sélection de la photo pour l'article ${item.id}`,
+                message: `Échec de la sélection de la photo pour l'article ${adaptedItem.id}`,
                 showAlert: true
             });
         }
-    }, [item.id, validatePhoto]);
+    }, [adaptedItem.id, validatePhoto]);
 
     const handleSubmit = useCallback(async () => {
         console.log("[ItemEditForm] handleSubmit - Début de la sauvegarde");
@@ -389,7 +479,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             return;
         }
 
-        if (!item.id) {
+        if (!adaptedItem.id) {
             console.error("[ItemEditForm] handleSubmit - ID de l'article manquant");
             Alert.alert('Erreur interne', "Impossible de sauvegarder: ID de l'article manquant.");
             return;
@@ -398,14 +488,14 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         let finalPhotoStorageUrl = editedItem.photo_storage_url;
 
         // Cas 1: Suppression d'une image existante (bouton "Supprimer" cliqué)
-        if (item.photo_storage_url && editedItem.photo_storage_url === null) {
-            console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${item.photo_storage_url} demandée.`);
+        if (adaptedItem.photo_storage_url && editedItem.photo_storage_url === null) {
+            console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${adaptedItem.photo_storage_url} demandée.`);
             try {
-                await deletePhoto(item.photo_storage_url);
-                console.log(`[ItemEditForm] handleSubmit - Image R2 ${item.photo_storage_url} supprimée.`);
+                await deletePhoto(adaptedItem.photo_storage_url);
+                console.log(`[ItemEditForm] handleSubmit - Image R2 ${adaptedItem.photo_storage_url} supprimée.`);
                 finalPhotoStorageUrl = null;
             } catch (deleteError) {
-                console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${item.photo_storage_url}:`, deleteError);
+                console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${adaptedItem.photo_storage_url}:`, deleteError);
                 handleError(deleteError, 'Avertissement Suppression Image', {
                     source: 'item_edit_form_delete_existing_r2_onsave',
                     message: `Échec de la suppression de l'image existante. L'article sera mis à jour sans l'image.`,
@@ -419,7 +509,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         else if (localImageUri && localImageNeedsUpload) {
             console.log("[ItemEditForm] handleSubmit - Upload d'une nouvelle image nécessaire.");
             try {
-                const uploadedFilename = await uploadPhoto(localImageUri, true, item.photo_storage_url || undefined);
+                const uploadedFilename = await uploadPhoto(localImageUri, true, adaptedItem.photo_storage_url || undefined);
                 if (uploadedFilename) {
                     console.log(`[ItemEditForm] handleSubmit - Nouvelle image R2 uploadée: ${uploadedFilename}`);
                     finalPhotoStorageUrl = uploadedFilename;
@@ -456,23 +546,22 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${item.id} dans la base de données`);
-            await database.updateItem(item.id, itemToUpdateToSendToDB);
+            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${adaptedItem.id} dans la base de données`);
+            await database.updateItem(adaptedItem.id, itemToUpdateToSendToDB);
 
             const updatedItem: Item = {
-                ...item,
+                ...adaptedItem,
                 ...itemToUpdateToSendToDB,
                 updatedAt: new Date().toISOString()
             };
 
             dispatch(updateItem(updatedItem));
-            queryClient.invalidateQueries({ queryKey: ['items'] });
-            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-            if (item.photo_storage_url) {
-                queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
+            await dispatch(fetchItems({ page: 0, limit: 1000 }));
+            if (adaptedItem.photo_storage_url) {
+                await dispatch(fetchItems({ page: 0, limit: 1000 }));
             }
             if (finalPhotoStorageUrl && typeof finalPhotoStorageUrl === 'string') {
-                queryClient.invalidateQueries({ queryKey: ['photo', finalPhotoStorageUrl] });
+                await dispatch(fetchItems({ page: 0, limit: 1000 }));
             }
 
             if (onSuccess) onSuccess();
@@ -480,23 +569,23 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour finale de la base de données:", error);
             handleError(error, 'Erreur lors de la mise à jour', {
                 source: 'item_edit_form_update_db',
-                message: `Échec de la mise à jour de l'article ${item.id}.`,
+                message: `Échec de la mise à jour de l'article ${adaptedItem.id}.`,
                 showAlert: true
             });
         }
-    }, [editedItem, item, validateForm, deletePhoto, uploadPhoto, dispatch, onSuccess, queryClient, localImageUri, localImageNeedsUpload, hasFormChanged]);
+    }, [editedItem, adaptedItem, validateForm, deletePhoto, uploadPhoto, dispatch, onSuccess, localImageUri, localImageNeedsUpload, hasFormChanged]);
 
     const handleDelete = useCallback(async () => {
-        if (!item.id) {
+        if (!adaptedItem.id) {
              console.warn("[ItemEditForm] handleDelete - ID de l'article manquant.");
              return;
         }
 
         setConfirmDialog({
             visible: true,
-            itemId: item.id
+            itemId: adaptedItem.id
         });
-    }, [item.id]);
+    }, [adaptedItem.id]);
 
     const handleConfirmDelete = useCallback(async () => {
         const itemId = confirmDialog.itemId;
@@ -510,13 +599,13 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             console.log(`[ItemEditForm] handleConfirmDelete - Suppression optimiste de l'article ${itemId} dans Redux.`);
             dispatch(deleteItem(itemId));
 
-            if (item.photo_storage_url) {
-                console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'image R2 associée: ${item.photo_storage_url}`);
+            if (adaptedItem.photo_storage_url) {
+                console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'image R2 associée: ${adaptedItem.photo_storage_url}`);
                  try {
-                    await deletePhoto(item.photo_storage_url);
+                    await deletePhoto(adaptedItem.photo_storage_url);
                     console.log(`[ItemEditForm] handleConfirmDelete - Image R2 associée supprimée avec succès.`);
                  } catch (deleteError) {
-                    console.warn(`[ItemEditForm] handleConfirmDelete - Échec de la suppression de l'image R2 ${item.photo_storage_url} lors de la suppression de l'item:`, deleteError);
+                    console.warn(`[ItemEditForm] handleConfirmDelete - Échec de la suppression de l'image R2 ${adaptedItem.photo_storage_url} lors de la suppression de l'item:`, deleteError);
                      handleError(deleteError, 'Avertissement Suppression Image', {
                         source: 'item_edit_form_delete_item_image',
                          message: `L'article a été supprimé, mais son image n'a pas pu être supprimée du serveur.`,
@@ -530,11 +619,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article DB réussie.`);
 
             console.log("[ItemEditForm] handleConfirmDelete - Invalidation des queries React Query.");
-            queryClient.invalidateQueries({ queryKey: ['items'] });
-            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-            if (item.photo_storage_url) {
-                queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
-            }
+            await dispatch(fetchItems({ page: 0, limit: 1000 }));
 
             if (onCancel) {
                 console.log("[ItemEditForm] handleConfirmDelete - Appel du callback onCancel");
@@ -543,16 +628,16 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         } catch (error) {
             console.error("[ItemEditForm] handleConfirmDelete - Erreur lors de la suppression finale de l'article:", error);
             console.warn("[ItemEditForm] handleConfirmDelete - Rollback Redux.");
-            dispatch(updateItem(item));
+            dispatch(updateItem(adaptedItem));
             handleError(error, 'Erreur lors de la suppression', {
                 source: 'item_edit_form_delete_item_db',
-                message: `Échec de la suppression de l'article ${item.id}.`,
+                message: `Échec de la suppression de l'article ${adaptedItem.id}.`,
                 showAlert: true
             });
         } finally {
             setConfirmDialog({ visible: false, itemId: null });
         }
-    }, [confirmDialog.itemId, dispatch, item, queryClient, onCancel, deletePhoto]);
+    }, [confirmDialog.itemId, dispatch, adaptedItem, deletePhoto]);
 
     const handleCancelDelete = useCallback(() => {
         console.log("[ItemEditForm] handleCancelDelete - Suppression annulée.");
@@ -561,7 +646,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
     const handlePhotoDelete = useCallback(async () => {
         console.log("[ItemEditForm] handlePhotoDelete - Suppression de la photo demandée via UI");
-        if (!item.photo_storage_url) {
+        if (!adaptedItem.photo_storage_url) {
             console.log("[ItemEditForm] handlePhotoDelete - Aucune photo existante à supprimer.");
             setLocalImageUri(null);
             setLocalImageNeedsUpload(false);
@@ -570,28 +655,26 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handlePhotoDelete - Suppression de l'image R2: ${item.photo_storage_url}`);
-            await deletePhoto(item.photo_storage_url);
+            console.log(`[ItemEditForm] handlePhotoDelete - Suppression de l'image R2: ${adaptedItem.photo_storage_url}`);
+            await deletePhoto(adaptedItem.photo_storage_url);
 
             console.log("[ItemEditForm] handlePhotoDelete - Image R2 supprimée avec succès.");
 
-            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${item.id} dans la base de données (photo_storage_url = null).`);
+            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${adaptedItem.id} dans la base de données (photo_storage_url = null).`);
             const itemToUpdateInDB: any = { photo_storage_url: null };
-            await database.updateItem(item.id, itemToUpdateInDB);
+            await database.updateItem(adaptedItem.id, itemToUpdateInDB);
 
             console.log("[ItemEditForm] handlePhotoDelete - Article DB mis à jour.");
 
             console.log("[ItemEditForm] handlePhotoDelete - Mise à jour optimiste Redux & Invalidation caches.");
             const updatedItem: Item = {
-                ...item,
+                ...adaptedItem,
                 photo_storage_url: undefined,
                 updatedAt: new Date().toISOString()
             };
             dispatch(updateItem(updatedItem));
 
-            queryClient.invalidateQueries({ queryKey: ['items'] });
-            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-            queryClient.invalidateQueries({ queryKey: ['photo', item.photo_storage_url] });
+            await dispatch(fetchItems({ page: 0, limit: 1000 }));
 
             setLocalImageUri(null);
             setLocalImageNeedsUpload(false);
@@ -607,51 +690,17 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 showAlert: true
             });
         }
-    }, [item, deletePhoto, database, dispatch, queryClient, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem, updateItem]);
+    }, [adaptedItem, deletePhoto, database, dispatch, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem, updateItem]);
 
     const navigateToAddContainer = useCallback(() => {
         console.log("[ItemEditForm] navigateToAddContainer - Saving state and navigating.");
-        queryClient.setQueryData(['temp_edit_form_state', item.id], editedItem);
         router.push('/containers');
-    }, [router, queryClient, item.id, editedItem]);
+    }, [router]);
 
     const navigateToAddCategory = useCallback(() => {
         console.log("[ItemEditForm] navigateToAddCategory - Saving state and navigating.");
-        queryClient.setQueryData(['temp_edit_form_state', item.id], editedItem);
         router.push('/add-category');
-    }, [router, queryClient, item.id, editedItem]);
-
-    useEffect(() => {
-        const savedState = queryClient.getQueryData<EditedItemForm>(['temp_edit_form_state', item.id]);
-        const fetchedContainers = queryClient.getQueryData<Container[]>(['containers']);
-
-        if (savedState && savedState.containerId === null && fetchedContainers && fetchedContainers.length > 0) {
-            console.log("[ItemEditForm] useEffect - Restoring container selection after navigation.");
-            const sortedContainers = [...fetchedContainers].sort((a, b) =>
-                new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-            );
-            setEditedItem(prev => ({ ...prev, containerId: sortedContainers[0].id }));
-        }
-
-        const fetchedCategories = queryClient.getQueryData<Category[]>(['categories']);
-         if (savedState && savedState.categoryId === undefined && fetchedCategories && fetchedCategories.length > 0) {
-             console.log("[ItemEditForm] useEffect - Restoring category selection after navigation.");
-             const sortedCategories = [...fetchedCategories].sort((a, b) =>
-                 new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-             );
-              const uncategorized = sortedCategories.find(cat => cat.name === 'Sans catégorie');
-              const defaultCategoryId = uncategorized ? uncategorized.id : sortedCategories[0].id;
-
-              setEditedItem(prev => ({ ...prev, categoryId: defaultCategoryId }));
-         }
-
-        if (savedState) {
-            console.log("[ItemEditForm] useEffect - Restoring saved form state.");
-            setEditedItem(savedState);
-            queryClient.removeQueries({ queryKey: ['temp_edit_form_state', item.id] });
-        }
-
-    }, [queryClient, item.id]);
+    }, [router]);
 
     const displayImageUri = localImageUri || photoHookState.uri;
     const isPhotoProcessing = photoHookState.loading;
@@ -667,7 +716,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     placeholder="Nom de l'article"
                     value={editedItem.name}
                     onChangeText={(text) => setEditedItem(prev => ({ ...prev, name: text }))}
-                     placeholderTextColor="#999"
+                    placeholderTextColor={activeTheme.text.secondary}
                 />
 
                 <TextInput
@@ -677,7 +726,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     onChangeText={(text) => setEditedItem(prev => ({ ...prev, description: text }))}
                     multiline
                     numberOfLines={4}
-                     placeholderTextColor="#999"
+                    placeholderTextColor={activeTheme.text.secondary}
                 />
 
                 <View style={styles.priceContainer}>
@@ -691,7 +740,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             value={editedItem.purchasePrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('purchasePrice', text)}
-                             placeholderTextColor="#999"
+                            placeholderTextColor={activeTheme.text.secondary}
                         />
                     </View>
                     <View style={styles.priceInputWrapper}>
@@ -704,7 +753,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             value={editedItem.sellingPrice}
                             keyboardType="decimal-pad"
                             onChangeText={(text) => handlePriceChange('sellingPrice', text)}
-                             placeholderTextColor="#999"
+                            placeholderTextColor={activeTheme.text.secondary}
                         />
                     </View>
                 </View>
@@ -716,12 +765,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             <View style={styles.imageWrapper}>
                                 {isPhotoProcessing ? (
                                     <View style={[styles.image, styles.imagePlaceholder]}>
-                                        <ActivityIndicator size="small" color="#007AFF" />
+                                        <ActivityIndicator size="small" color={activeTheme.primary} />
                                         <Text style={styles.loadingText}>Chargement...</Text>
                                     </View>
                                 ) : photoError ? (
                                     <View style={[styles.image, styles.errorImagePlaceholder]}>
-                                        <Icon name="error_outline" size={24} color="#e53935" />
+                                        <Icon name="error_outline" size={24} color={activeTheme.danger.main} />
                                         <Text style={styles.errorText}>Erreur de chargement</Text>
                                     </View>
                                 ) : displayImageUri && (
@@ -741,15 +790,15 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                         onPress={handleImagePreview}
                                         disabled={isPhotoProcessing}
                                     >
-                                        <Icon name="edit" size={24} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
+                                        <Icon name="edit" size={24} color={isPhotoProcessing ? activeTheme.text.disabled : activeTheme.primary} />
                                     </TouchableOpacity>
-                                    {(item.photo_storage_url !== null && item.photo_storage_url !== undefined) || localImageUri ? (
+                                    {(adaptedItem.photo_storage_url !== null && adaptedItem.photo_storage_url !== undefined) || localImageUri ? (
                                          <TouchableOpacity
                                              style={styles.imageActionButton}
                                              onPress={handlePhotoDelete}
                                              disabled={isPhotoProcessing}
                                          >
-                                             <Icon name="delete" size={24} color={isPhotoProcessing ? "#cccccc" : "#FF3B30"} />
+                                             <Icon name="delete" size={24} color={isPhotoProcessing ? activeTheme.text.disabled : activeTheme.error} />
                                          </TouchableOpacity>
                                     ) : null}
                                 </View>
@@ -772,8 +821,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                 onPress={handleImagePreview}
                                 disabled={isPhotoProcessing}
                             >
-                                <Icon name="add_photo_alternate" size={48} color={isPhotoProcessing ? "#cccccc" : "#007AFF"} />
-                                <Text style={[styles.imagePickerText, isPhotoProcessing && {color: "#cccccc"}]}>
+                                <Icon name="add_photo_alternate" size={48} color={isPhotoProcessing ? activeTheme.text.disabled : activeTheme.primary} />
+                                <Text style={[styles.imagePickerText, isPhotoProcessing && {color: activeTheme.text.disabled}]}>
                                     {isPhotoProcessing ? "Opération en cours..." : "Sélectionner une image"}
                                 </Text>
                             </TouchableOpacity>
@@ -788,6 +837,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         selectedId={editedItem.containerId}
                         onSelect={(id) => setEditedItem(prev => ({ ...prev, containerId: id }))}
                         onAddNew={navigateToAddContainer}
+                        theme={activeTheme}
                     />
                 </View>
 
@@ -798,6 +848,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         selectedId={editedItem.categoryId}
                         onSelect={(id) => setEditedItem(prev => ({ ...prev, categoryId: id }))}
                         onAddNew={navigateToAddCategory}
+                        theme={activeTheme}
                     />
                 </View>
 
@@ -810,15 +861,15 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         <Text style={styles.buttonText}>Générer Étiquette</Text>
                     </TouchableOpacity>
 
-                    {showLabelGenerator && item && (
+                    {showLabelGenerator && adaptedItem && (
                         <View style={styles.labelGeneratorContainer}>
                             <LabelGenerator
                                 items={[{
-                                    id: item.id,
-                                    name: item.name,
-                                    qrCode: item.qrCode || `ITEM-${item.id}`,
-                                    sellingPrice: item.sellingPrice,
-                                    description: item.description,
+                                    id: adaptedItem.id,
+                                    name: adaptedItem.name,
+                                    qrCode: adaptedItem.qrCode || `ITEM-${adaptedItem.id}`,
+                                    sellingPrice: adaptedItem.sellingPrice,
+                                    description: adaptedItem.description,
                                 }]}
                                 onComplete={() => {
                                     Alert.alert('Succès', 'Étiquette PDF générée.');
@@ -894,7 +945,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             />
             {photoError && (
                 <View style={styles.globalErrorContainer}>
-                    <Icon name="error_outline" size={24} color="#e53935" />
+                    <Icon name="error_outline" size={24} color={activeTheme.danger.main} />
                     <Text style={styles.globalErrorText}>{photoError.message}</Text>
                 </View>
             )}
@@ -902,23 +953,23 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     );
 }, arePropsEqual);
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: theme.background,
     },
     contentContainer: {
         padding: 16,
     },
     input: {
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.surface,
         borderRadius: 8,
         padding: 12,
         marginBottom: 12,
         fontSize: 16,
-        color: '#000',
+        color: theme.text.primary,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
         elevation: 0,
     },
     textArea: {
@@ -929,10 +980,23 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         gap: 16,
         marginBottom: 16,
-        backgroundColor: '#fff',
+        backgroundColor: theme.surface,
         borderRadius: 12,
         padding: 16,
-        boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
+            },
+        }),
     },
     priceInputWrapper: {
         flexDirection: 'column',
@@ -944,19 +1008,19 @@ const styles = StyleSheet.create({
     priceLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: theme.text.secondary,
     },
     priceInput: {
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.surface,
         borderRadius: 8,
         padding: 12,
         textAlign: 'right',
         fontSize: 18,
-        color: '#007AFF',
+        color: theme.primary,
         fontWeight: '600',
         marginBottom: 0,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
         minHeight: 48,
     },
     imageContainer: {
@@ -966,9 +1030,9 @@ const styles = StyleSheet.create({
         aspectRatio: 4/3,
         borderRadius: 8,
         overflow: 'hidden',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.surface,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
         position: 'relative',
     },
     image: {
@@ -978,16 +1042,29 @@ const styles = StyleSheet.create({
     },
     sectionContainer: {
         marginBottom: 16,
-        backgroundColor: '#fff',
+        backgroundColor: theme.surface,
         borderRadius: 12,
         padding: 16,
-        boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 3,
+            },
+            android: {
+                elevation: 2,
+            },
+            web: {
+                boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
+            },
+        }),
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
         marginBottom: 12,
-        color: '#333',
+        color: theme.text.primary,
     },
     optionsScrollView: {
         marginBottom: 0,
@@ -1003,20 +1080,20 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 8,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.background,
         borderWidth: 1,
-        borderColor: '#e5e5e5',
+        borderColor: theme.border,
     },
     optionSelected: {
-        backgroundColor: '#007AFF',
-        borderColor: '#007AFF',
+        backgroundColor: theme.primary,
+        borderColor: theme.primary,
     },
     optionText: {
         fontSize: 14,
-        color: '#333',
+        color: theme.text.primary,
     },
     optionTextSelected: {
-        color: '#fff',
+        color: theme.text.onPrimary,
         fontWeight: '500',
     },
     categoryIcon: {
@@ -1049,9 +1126,21 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     saveButton: {
-        backgroundColor: theme.colors.primary,
-        boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.2)',
-        elevation: 3,
+        backgroundColor: theme.primary,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 3,
+            },
+            android: {
+                elevation: 3,
+            },
+            web: {
+                boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.2)',
+            },
+        }),
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1068,15 +1157,15 @@ const styles = StyleSheet.create({
         marginRight: 4,
     },
     uploadButton: {
-        backgroundColor: '#4CD964',
+        backgroundColor: theme.success,
     },
     disabledButton: {
-        backgroundColor: '#CCCCCC',
+        backgroundColor: theme.text.disabled,
         opacity: 0.7,
     },
     cancelButton: {
         flex: 1,
-        backgroundColor: '#8E8E93',
+        backgroundColor: theme.text.secondary,
         paddingVertical: 14,
         paddingHorizontal: 16,
         borderRadius: 12,
@@ -1086,7 +1175,7 @@ const styles = StyleSheet.create({
     },
     deleteButton: {
         flex: 1,
-        backgroundColor: '#FF3B30',
+        backgroundColor: theme.error,
         paddingVertical: 14,
         paddingHorizontal: 16,
         borderRadius: 12,
@@ -1102,7 +1191,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     noDataText: {
-        color: '#666',
+        color: theme.text.secondary,
         fontStyle: 'italic',
         padding: 8,
     },
@@ -1130,7 +1219,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        backgroundColor: '#007AFF',
+        backgroundColor: theme.primary,
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderTopLeftRadius: 8,
@@ -1147,16 +1236,16 @@ const styles = StyleSheet.create({
     imagePicker: {
         aspectRatio: 4/3,
         borderRadius: 8,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.surface,
         borderWidth: 1,
         borderStyle: 'dashed',
-        borderColor: '#007AFF',
+        borderColor: theme.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
     imagePickerText: {
         marginTop: 8,
-        color: '#007AFF',
+        color: theme.primary,
         fontSize: 16,
         fontWeight: '500',
     },
@@ -1184,14 +1273,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 8,
-        backgroundColor: '#e6f2ff',
+        backgroundColor: theme.primaryLight,
         borderWidth: 1,
         borderStyle: 'dashed',
-        borderColor: '#007AFF',
+        borderColor: theme.primary,
     },
     addNewText: {
         fontSize: 14,
-        color: '#007AFF',
+        color: theme.primary,
         fontWeight: '500',
     },
     addIcon: {
@@ -1202,20 +1291,32 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 10, // Padding fixe mais plus petit
+        padding: 10,
     },
     modalContent: {
-        backgroundColor: '#fff',
+        backgroundColor: theme.surface,
         borderRadius: 12,
         padding: 10,
         width: '100%',
-        boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.25)',
-        elevation: 5,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 3,
+            },
+            android: {
+                elevation: 5,
+            },
+            web: {
+                boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.25)',
+            },
+        }),
     },
     modalTitle: {
         fontSize: 20,
         fontWeight: '600',
-        color: '#000',
+        color: theme.text.primary,
         marginBottom: 16,
     },
     modalButtonsContainer: {
@@ -1233,10 +1334,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     modalButtonSave: {
-        backgroundColor: '#007AFF',
+        backgroundColor: theme.primary,
     },
     modalButtonCancel: {
-        backgroundColor: '#8E8E93',
+        backgroundColor: theme.text.secondary,
     },
     modalButtonText: {
         color: '#fff',
@@ -1248,7 +1349,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         fontSize: 16,
         fontWeight: '500',
-        color: '#333',
+        color: theme.text.primary,
     },
     iconSelector: {
         maxHeight: 150,
@@ -1266,29 +1367,29 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         margin: 4,
         borderRadius: 22,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: theme.background,
     },
     iconOptionSelected: {
-        backgroundColor: '#007AFF',
+        backgroundColor: theme.primary,
     },
     imagePlaceholder: {
-        backgroundColor: '#f8f9fa',
+        backgroundColor: theme.surface,
         justifyContent: 'center',
         alignItems: 'center',
     },
     loadingText: {
-        color: '#007AFF',
+        color: theme.primary,
         fontSize: 14,
         marginTop: 4,
         textAlign: 'center',
     },
     errorImagePlaceholder: {
-        backgroundColor: '#ffeeee',
+        backgroundColor: theme.danger.light,
         justifyContent: 'center',
         alignItems: 'center',
     },
     errorText: {
-        color: '#e53935',
+        color: theme.danger.main,
         fontSize: 14,
         marginTop: 4,
         textAlign: 'center',
@@ -1296,17 +1397,17 @@ const styles = StyleSheet.create({
     globalErrorContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#ffebee',
+        backgroundColor: theme.danger.light,
         padding: 12,
         borderRadius: 8,
         marginHorizontal: 16,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#e53935',
+        borderColor: theme.danger.main,
     },
     globalErrorText: {
         marginLeft: 8,
-        color: '#e53935',
+        color: theme.danger.main,
         fontSize: 14,
         flexShrink: 1,
     },
@@ -1314,9 +1415,9 @@ const styles = StyleSheet.create({
         marginTop: 10,
         marginBottom: 0,
         padding: 10,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.surface,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: theme.colors.border,
+        borderColor: theme.border,
     },
 });

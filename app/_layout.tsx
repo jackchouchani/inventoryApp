@@ -5,8 +5,6 @@ import { Provider } from "react-redux";
 import { store } from "../src/store/store";
 import { AuthProvider, useAuth } from "../src/contexts/AuthContext";
 import Toast, { BaseToast, ErrorToast, BaseToastProps } from 'react-native-toast-message';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from '../src/config/queryClient';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { DataLoader } from '../src/components/DataLoader';
 import UpdateNotification from '../src/components/UpdateNotification';
@@ -55,35 +53,32 @@ export default function RootLayout() {
   return (
     <ErrorBoundary
       onReset={() => {
-        queryClient.clear();
         store.dispatch({ type: 'RESET_STATE' });
       }}
     >
-      <QueryClientProvider client={queryClient}>
-        <Provider store={store}>
-          <AuthProvider>
-            <ThemeProvider>
-              {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
-              <Toast config={toastConfig} />
-              {Platform.OS === 'web' && (
-                <>
-                  <div id="datepicker-portal"></div>
-                  <UpdateNotification 
-                    onUpdateAvailable={(version) => {
-                      console.log('🔄 Nouvelle version PWA disponible:', version);
-                      Sentry.addBreadcrumb({
-                        message: `Mise à jour PWA disponible: ${version}`,
-                        level: 'info',
-                        category: 'pwa'
-                      });
-                    }}
-                  />
-                </>
-              )}
-            </ThemeProvider>
-          </AuthProvider>
-        </Provider>
-      </QueryClientProvider>
+      <Provider store={store}>
+        <AuthProvider>
+          <ThemeProvider>
+            {appIsReady ? <RootLayoutContent /> : <InitialLoadingScreen />}
+            <Toast config={toastConfig} />
+            {Platform.OS === 'web' && (
+              <>
+                <div id="datepicker-portal"></div>
+                <UpdateNotification 
+                  onUpdateAvailable={(version) => {
+                    console.log('🔄 Nouvelle version PWA disponible:', version);
+                    Sentry.addBreadcrumb({
+                      message: `Mise à jour PWA disponible: ${version}`,
+                      level: 'info',
+                      category: 'pwa'
+                    });
+                  }}
+                />
+              </>
+            )}
+          </ThemeProvider>
+        </AuthProvider>
+      </Provider>
     </ErrorBoundary>
   );
 }

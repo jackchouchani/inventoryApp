@@ -3,10 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, TextInput, A
 import { Icon } from '../../src/components';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
-import type { Category } from '../../src/types/category';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { database } from '../../src/database/database';
+import { useCategories } from '../../src/hooks/useCategories';
+import { useContainers } from '../../src/hooks/useContainers';
 import * as Sentry from '@sentry/react-native';
 import DatePicker, { registerLocale, setDefaultLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -18,99 +17,6 @@ import Select, { ActionMeta, SingleValue, GroupBase } from 'react-select';
 import { searchItems, SearchFilters } from '../../src/services/searchService';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
 
-// Define theme colors locally
-// const themeColorsLight = {
-//   colors: {
-//     primary: '#007bff',
-//     secondary: '#6c757d',
-//     text: '#212529',
-//     background: '#ffffff',
-//     placeholder: '#6c757d',
-//     icon: '#495057',
-//     activeText: '#ffffff',
-//     inactiveText: '#007bff',
-//     itemRowBackground: '#ffffff',
-//     itemRowBorder: '#f0f0f0',
-//     itemSelectedBackground: '#e6f7ff',
-//     itemName: '#212529',
-//     itemContainerText: '#666',
-//     footerBackground: '#ffffff',
-//     footerBorder: '#e0e0e0',
-//     buttonText: '#ffffff',
-//     noResultsBackground: '#f8f9fa',
-//     noResultsText: '#6c757d',
-//     loadingText: '#666',
-//     errorText: 'red',
-//     errorDetails: '#e74c3c',
-//     danger: '#dc3545', // Added danger color
-//     primaryText: { color: '#212529' },
-//     secondaryText: { color: '#6c757d' },
-//     inputBackground: { backgroundColor: '#f1f3f5' },
-//     inputText: { color: '#333' },
-//     segmentControl: { tintColor: '#007bff', backgroundColor: '#e9ecef', activeTextColor: '#007bff', inactiveTextColor: '#495057' },
-//     chipBackground: '#e9ecef',
-//     chipText: '#495057',
-//     chipActiveBackground: '#007bff',
-//     chipActiveText: '#ffffff',
-//     priceInputBorder: '#ced4da',
-//     priceInputBackground: '#ffffff',
-//     dateButtonBackground: '#e9ecef',
-//     dateButtonTextColor: '#495057',
-//     filterTitleText: '#495057',
-//     segmentButtonActiveBackground: '#ffffff',
-//     segmentButtonIconColor: '#666',
-//     selectionHeaderBackground: '#ffffff',
-//     selectionHeaderText: '#495057',
-//     selectionButtonTextColor: '#007bff',
-//   }
-// };
-
-// const themeColorsDark = {
-//   colors: {
-//     primary: '#007bff',
-//     secondary: '#adb5bd',
-//     text: '#f8f9fa',
-//     background: '#121212',
-//     placeholder: '#adb5bd',
-//     icon: '#ced4da',
-//     activeText: '#121212',
-//     inactiveText: '#007bff',
-//     itemRowBackground: '#1e1e1e',
-//     itemRowBorder: '#333333',
-//     itemSelectedBackground: '#003f6b',
-//     itemName: '#f8f9fa',
-//     itemContainerText: '#adb5bd',
-//     footerBackground: '#1e1e1e',
-//     footerBorder: '#333333',
-//     buttonText: '#ffffff',
-//     noResultsBackground: '#121212',
-//     noResultsText: '#adb5bd',
-//     loadingText: '#adb5bd',
-//     errorText: '#ff4d4d',
-//     errorDetails: '#ff6b6b',
-//     danger: '#f8d7da', // Added danger color (light red for dark theme)
-//     primaryText: { color: '#f8f9fa' },
-//     secondaryText: { color: '#adb5bd' },
-//     inputBackground: { backgroundColor: '#2a2a2a' },
-//     inputText: { color: '#e0e0e0' },
-//     segmentControl: { tintColor: '#007bff', backgroundColor: '#333333', activeTextColor: '#007bff', inactiveTextColor: '#adb5bd' },
-//     chipBackground: '#333333',
-//     chipText: '#adb5bd',
-//     chipActiveBackground: '#007bff',
-//     chipActiveText: '#ffffff',
-//     priceInputBorder: '#555555',
-//     priceInputBackground: '#2a2a2a',
-//     dateButtonBackground: '#333333',
-//     dateButtonTextColor: '#adb5bd',
-//     filterTitleText: '#adb5bd',
-//     segmentButtonActiveBackground: '#1e1e1e',
-//     segmentButtonIconColor: '#adb5bd',
-//     selectionHeaderBackground: '#1e1e1e',
-//     selectionHeaderText: '#adb5bd',
-//     selectionButtonTextColor: '#007bff',
-//   }
-// };
-
 interface Filters {
   categoryId: number | null;
   containerId: number | null | 'none';
@@ -120,21 +26,6 @@ interface Filters {
   endDate: Date | null;
   status: 'all' | 'available' | 'sold';
 }
-
-interface StaticFilterData {
-  categories: Category[];
-  containers: Container[];
-}
-
-const QUERY_KEYS = {
-  staticFilterData: 'staticFilterData'
-} as const;
-
-const CACHE_CONFIG = {
-  staleTime: 5 * 60 * 1000,
-  gcTime: 30 * 60 * 1000,
-  retry: 3,
-} as const;
 
 type SelectOption<TValue = number | 'none' | null> = {
   value: TValue;
@@ -176,31 +67,15 @@ const LabelScreenContent = () => {
   const [searchResults, setSearchResults] = useState<Item[]>([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
 
-  const { 
-    data: staticData,
-    isLoading: isLoadingStaticData,
-    error: staticDataError,
-  } = useQuery<StaticFilterData, Error>({
-    queryKey: [QUERY_KEYS.staticFilterData],
-    queryFn: async () => {
-      try {
-        const [categoriesData, containersDataFromDB] = await Promise.all([
-          database.getCategories(),
-          database.getContainers()
-        ]);
-        return {
-          categories: categoriesData || [],
-          containers: containersDataFromDB || []
-        };
-      } catch (error) {
-        if (error instanceof Error) {
-          Sentry.captureException(error, { tags: { type: 'labels_static_data_fetch_error' } });
-        }
-        throw error;
-      }
-    },
-    ...CACHE_CONFIG
-  });
+  const { categories, isLoading: isLoadingCategories } = useCategories();
+  const { data: containers, isLoading: isLoadingContainers } = useContainers();
+  
+  const staticData = useMemo(() => ({
+    categories: categories || [],
+    containers: containers || []
+  }), [categories, containers]);
+  
+  const isLoadingStaticData = isLoadingCategories || isLoadingContainers;
 
   const performSearch = useCallback(async (currentSearchQuery: string, currentFilters: Filters) => {
     setIsLoadingSearch(true);
@@ -577,58 +452,12 @@ const LabelScreenContent = () => {
     </TouchableOpacity>
   ));
 
-  if (isLoadingStaticData && !staticData) {
+  if (isLoadingStaticData) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.topBarContainer}> 
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
-          >
-            <Icon 
-              name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
-              size={24} 
-              color={activeTheme.primary} 
-              style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
-            />
-            <Text style={styles.backButtonText}>Retour</Text>
-          </TouchableOpacity>
-          <Text style={styles.topBarTitle}>Générer Étiquettes</Text>
-          <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
-        </View>
-        <View style={styles.centeredLoading}>
-          <ActivityIndicator size="large" color={activeTheme.primary} />
-          <Text style={styles.loadingText}>Chargement des filtres...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (staticDataError) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.topBarContainer}> 
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
-          >
-            <Icon 
-              name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
-              size={24} 
-              color={activeTheme.primary} 
-              style={Platform.OS === 'ios' ? { marginRight: 5 } : {}}
-            />
-            <Text style={styles.backButtonText}>Retour</Text>
-          </TouchableOpacity>
-          <Text style={styles.topBarTitle}>Erreur</Text>
-          <View style={{ width: Platform.OS === 'ios' ? 80 : 50 }} /> 
-        </View>
-        <View style={styles.centeredLoading}>
-          <Icon name="error_outline" size={48} color={activeTheme.danger.main} />
-          <Text style={styles.errorText}>Erreur de chargement des données.</Text>
-          <Text style={styles.errorDetails}>{staticDataError.message}</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Chargement des données...</Text>
+      </View>
     );
   }
 
@@ -636,7 +465,7 @@ const LabelScreenContent = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topBarContainer}> 
         <TouchableOpacity 
-          style={styles.backButton}
+          style={styles.backButton} 
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(stack)/settings')}
         >
           <Icon 
@@ -1270,7 +1099,14 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme.text.secondary,
     textAlign: 'center',
-  }
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: theme.background,
+  },
 });
 
 const customReactSelectStyles = (theme: any) => ({

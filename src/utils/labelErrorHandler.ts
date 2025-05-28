@@ -1,4 +1,4 @@
-import { handleError, ErrorType } from './errorHandler';
+import { handleError } from './errorHandler';
 
 // Types d'erreurs spécifiques aux étiquettes
 export enum LabelErrorType {
@@ -37,34 +37,30 @@ export const handleLabelError = (
 ) => {
   const errorMessage = labelErrorMessages[labelErrorType];
 
-  return handleError(error, ErrorType.UNKNOWN, {
-    context,
+  return handleError(error, errorMessage.fr, {
     additionalData: {
       ...additionalData,
-      labelErrorType
-    },
-    customMessage: errorMessage
+      labelErrorType,
+      context
+    }
   });
 };
 
 // Fonctions utilitaires spécifiques
 export const handleLabelGenerationError = (error: Error, context: string) => {
-  return handleError(error, ErrorType.UNKNOWN, {
-    context,
-    customMessage: labelErrorMessages[LabelErrorType.PDF_GENERATION]
+  return handleError(error, labelErrorMessages[LabelErrorType.PDF_GENERATION].fr, {
+    additionalData: { context }
   });
 };
 
 export const handleLabelPrintingError = (error: Error, context: string) => {
-  return handleError(error, ErrorType.UNKNOWN, {
-    context,
-    customMessage: labelErrorMessages[LabelErrorType.PRINTING]
+  return handleError(error, labelErrorMessages[LabelErrorType.PRINTING].fr, {
+    additionalData: { context }
   });
 };
 
 export const handleQRCodeError = (error: Error, context: string) => {
-  return handleError(error, ErrorType.UNKNOWN, {
-    context,
-    customMessage: labelErrorMessages[LabelErrorType.QR_CODE_GENERATION]
+  return handleError(error, labelErrorMessages[LabelErrorType.QR_CODE_GENERATION].fr, {
+    additionalData: { context }
   });
 }; 

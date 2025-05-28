@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Container } from '../types/container';
-import { theme } from '../utils/theme';
+import { useAppTheme } from '../contexts/ThemeContext';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { generateId } from '../utils/identifierManager';
 import { useValidation } from '../hooks/useValidation';
@@ -30,6 +30,7 @@ const CONTAINER_VALIDATION_RULES = {
 };
 
 const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onSubmit, onCancel }) => {
+  const { activeTheme } = useAppTheme();
   const [formData, setFormData] = useState({
     number: initialData?.number?.toString() || '',
     name: initialData?.name || '',
@@ -39,6 +40,8 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
 
   const { errors, validateField, validateForm, clearErrors } = useValidation(CONTAINER_VALIDATION_RULES);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
 
   useEffect(() => {
     clearErrors();
@@ -149,7 +152,7 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
           testID="container-submit-button"
         >
           {isSubmitting ? (
-            <ActivityIndicator color={theme.colors.text.inverse} />
+            <ActivityIndicator color={activeTheme.text.onPrimary} />
           ) : (
             <Text style={styles.submitButtonText}>
               {initialData ? 'Mettre à jour' : 'Créer'}
@@ -163,10 +166,10 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
 
 export const ContainerForm = React.memo(ContainerFormComponent);
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: any) => StyleSheet.create({
   container: {
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.surface,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -181,21 +184,21 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.xs,
   },
   cancelButton: {
-    backgroundColor: theme.colors.error,
+    backgroundColor: theme.error,
   },
   submitButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
   },
   submitButtonDisabled: {
     opacity: 0.7,
   },
   buttonText: {
-    color: theme.colors.text.inverse,
+    color: theme.text.onPrimary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: 'bold',
   },
   submitButtonText: {
-    color: theme.colors.text.inverse,
+    color: theme.text.onPrimary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: 'bold',
   },
@@ -204,23 +207,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: theme.spacing.xs,
     marginTop: theme.spacing.sm,
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
   },
   input: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.border,
     borderRadius: theme.borderRadius.sm,
     padding: theme.spacing.sm,
     marginBottom: theme.spacing.md,
-    color: theme.colors.text.primary,
-    backgroundColor: theme.colors.background,
+    color: theme.text.primary,
+    backgroundColor: theme.background,
   },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
   },
   errorText: {
-    color: theme.colors.error,
+    color: theme.error,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
@@ -228,8 +231,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: theme.spacing.md,
     padding: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.surface,
     borderRadius: theme.borderRadius.md,
-    boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)', elevation: 2,
+    boxShadow: '0px 1px 1px rgba(0, 0, 0, 0.20)', 
+    elevation: 2,
   },
 });
