@@ -91,7 +91,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) =>
   return (
     <View style={styles.container}>
       <TextInput
-        style={[styles.filterButton, { flex: 1, marginRight: 0 }]}
+        style={[styles.filterButton, { flex: 1, marginRight: 0, color: activeTheme.text.primary }]}
         value={searchQuery}
         onChangeText={setSearchQuery}
         placeholder="Rechercher des articles..."

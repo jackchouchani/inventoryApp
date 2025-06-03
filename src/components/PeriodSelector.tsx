@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, View, StyleSheet } from 'react-native';
+import { useAppTheme } from '../contexts/ThemeContext';
 
 interface PeriodSelectorProps {
   selectedPeriod: 'week' | 'month' | 'year';
@@ -10,6 +11,9 @@ const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   selectedPeriod,
   onSelectPeriod,
 }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = getThemedStyles(activeTheme);
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -64,32 +68,34 @@ const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getThemedStyles = (theme: any) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     marginBottom: 16,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.surface,
     borderRadius: 8,
     padding: 4,
-    width: '100%', // Take up full width
+    width: '100%',
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   periodButton: {
     flex: 1,
-    paddingVertical: 10, // Slightly taller buttons
+    paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 6,
-    justifyContent: 'center', // Center content vertically
+    justifyContent: 'center',
   },
   periodButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: theme.primary,
   },
   periodButtonText: {
-    fontSize: 15, // Larger text
-    color: '#666',
+    fontSize: 15,
+    color: theme.text.secondary,
     fontWeight: '500',
   },
   periodButtonTextActive: {
-    color: '#fff',
+    color: theme.text.onPrimary,
     fontWeight: '600',
   },
 });

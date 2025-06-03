@@ -31,9 +31,9 @@ const ContainerContentScreen = () => {
   const { handleMoveItem: moveItemAction } = useStockActions();
 
   const handleItemPress = useCallback((item: Item) => {
-    // Navigation vers les détails de l'item
-    router.push(`/item/${item.id}/info`);
-  }, [router]);
+    // Navigation vers les détails de l'item avec paramètre de retour
+    router.push(`/item/${item.id}/info?returnTo=/container/${container?.id}/content`);
+  }, [router, container?.id]);
 
   const handleMoveItem = useCallback(async (itemId: number, newContainerId: number | null) => {
     console.log(`Moving item ${itemId} to container ${newContainerId}`);

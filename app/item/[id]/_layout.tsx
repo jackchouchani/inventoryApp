@@ -6,7 +6,7 @@ import { useAppTheme } from '../../../src/contexts/ThemeContext';
 export default function ItemLayout() {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
-  const { id } = useLocalSearchParams();
+  const { id, returnTo } = useLocalSearchParams();
   const segments = useSegments();
 
   const handleGoBack = () => {
@@ -14,12 +14,14 @@ export default function ItemLayout() {
     
     if (currentPage === 'edit') {
       // Depuis la page edit, retourner vers la page info de l'article
-      router.replace(`/item/${id}/info`);
-    } else if (currentPage === 'info') {
-      // Depuis la page info, retourner vers le stock
-      router.replace('/stock');
+      router.replace(`/item/${id}/info${returnTo ? `?returnTo=${returnTo}` : ''}`);
+    } else if (currentPage === 'info' && returnTo) {
+      // Si on a un paramètre returnTo, l'utiliser pour la navigation retour
+      router.replace(returnTo as string);
     } else {
-      // Cas par défaut
+      // Pour tous les autres cas, utiliser la navigation naturelle
+      // Cela permet de retourner à la page précédente dans l'historique
+      // (stock, container, catégorie, recherche, etc.)
       router.back();
     }
   };
