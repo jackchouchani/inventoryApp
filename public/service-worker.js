@@ -1,4 +1,4 @@
-const APP_VERSION = '1.4.0'; // Synchronisé avec app.json
+const APP_VERSION = '1.4.2'; // Synchronisé avec app.json
 const CACHE_NAME = `inventory-app-cache-v${APP_VERSION}`;
 const STATIC_ASSETS = [
   '/',
