@@ -1,10 +1,8 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Platform,
   Alert,
   TextInput,
   ScrollView,
@@ -12,16 +10,24 @@ import {
   FlatList,
   Image
 } from 'react-native';
-import { Icon } from '../../src/components';
 import { useRouter } from 'expo-router';
-import { searchItems, SearchFilters } from '../../src/services/searchService';
-import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
-import { getImageUrl } from '../../src/utils/r2Client';
-import { formatCurrency } from '../../src/utils/format';
-import { supabase } from '../../src/config/supabase';
-import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 
-// Types
+// ✅ STYLEFACTORY selon stylefactory-optimization.mdc
+import StyleFactory from '../../src/styles/StyleFactory';
+
+// Composants
+import { Icon } from '../../src/components';
+import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
+import CommonHeader from '../../src/components/CommonHeader';
+
+// Services et utilitaires
+import { searchItems, SearchFilters } from '../../src/services/searchService';
+import { getImageUrl } from '../../src/utils/r2Client';
+import { formatCurrency } from '../../src/utils/formatters';
+import { supabase } from '../../src/config/supabase';
+
+// Contextes et types
+import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
 import type { Item } from '../../src/types/item';
 
 // Define type for items with added properties for receipt generation
@@ -32,7 +38,8 @@ interface ReceiptItem extends Item {
 
 // Component for searching and selecting items
 const SearchBox = ({ query, setQuery, theme }: { query: string; setQuery: (q: string) => void; theme: AppThemeType }) => {
-  const styles = useMemo(() => getThemedStyles(theme), [theme]);
+  // ✅ STYLEFACTORY - Récupération des styles mis en cache
+  const styles = StyleFactory.getThemedStyles(theme, 'MultiReceipt');
   
   return (
     <View style={styles.searchBoxContainer}>
@@ -70,7 +77,8 @@ const MultiReceiptScreen = () => {
   const [showMarkAsSoldConfirmation, setShowMarkAsSoldConfirmation] = useState(false);
   const [isUpdatingItems, setIsUpdatingItems] = useState(false);
   
-  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  // ✅ STYLEFACTORY - Récupération des styles mis en cache
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'MultiReceipt');
   
   // Function to search for items using Supabase
   const searchItemsCallback = useCallback(async (query: string) => {
@@ -384,14 +392,11 @@ const MultiReceiptScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top Bar */}
-      <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Icon name="arrow_back" size={24} color={activeTheme.primary} />
-          <Text style={styles.backButtonText}>Retour</Text>
-        </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Facture Multiple</Text>
-      </View>
+      {/* ✅ COMMONHEADER - Header standardisé */}
+      <CommonHeader 
+        title="Facture Multiple"
+        onBackPress={() => router.back()}
+      />
 
       {showMarkAsSoldConfirmation && renderMarkAsSoldConfirmation()}
 
@@ -501,7 +506,7 @@ const MultiReceiptScreen = () => {
               ) : (
                 searchQuery.trim() ? (
                   <View style={styles.emptyResultsContainer}>
-                    <Icon name="search-off" size={40} color={activeTheme.text.disabled} />
+                    <Icon name="search_off" size={40} color={activeTheme.text.disabled} />
                     <Text style={styles.emptyResultsText}>Aucun résultat trouvé</Text>
                   </View>
                 ) : (
@@ -521,407 +526,4 @@ const MultiReceiptScreen = () => {
   );
 };
 
-const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.surface,
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 4,
-    color: theme.primary,
-  },
-  topBarTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginRight: 40, // To balance the back button
-    color: theme.text.primary,
-  },
-  searchArea: {
-    padding: 12,
-    backgroundColor: theme.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  searchBoxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.background,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 44,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchBoxInput: {
-    flex: 1,
-    height: '100%',
-    fontSize: 16,
-    color: theme.text.primary,
-  },
-  clearButton: {
-    padding: 6,
-  },
-  selectedItemsContainer: {
-    backgroundColor: theme.surface,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  selectedItemsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  selectedItemsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text.primary,
-  },
-  clearSelectionButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  clearSelectionText: {
-    fontSize: 14,
-    color: theme.primary,
-  },
-  selectedItemsScrollView: {
-    paddingLeft: 12,
-  },
-  selectedItemCard: {
-    width: 140,
-    backgroundColor: theme.background,
-    marginRight: 8,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  selectedItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  selectedItemName: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-    marginRight: 4,
-    color: theme.text.primary,
-  },
-  selectedItemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.success,
-    marginBottom: 8,
-  },
-  priceControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.surface,
-    borderRadius: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    marginVertical: 6,
-  },
-  priceLabel: {
-    fontSize: 13,
-    marginRight: 8,
-    color: theme.text.secondary,
-  },
-  priceInput: {
-    width: 55, // Largeur fixe pour le champ de prix
-    backgroundColor: theme.surface,
-    borderRadius: 4,
-    paddingHorizontal: 3,
-    paddingVertical: 4,
-    fontSize: 13,
-    textAlign: 'left',
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: theme.border,
-    color: theme.text.primary,
-  },
-  priceUnit: {
-    marginLeft: 0,
-    fontSize: 13,
-    color: theme.text.secondary,
-  },
-  itemDiscountContainer: {
-    backgroundColor: theme.danger.light,
-    borderRadius: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    marginTop: 2,
-  },
-  itemDiscountText: {
-    fontSize: 11,
-    color: theme.danger.main,
-    textAlign: 'center',
-  },
-  discountControlContainer: {
-    backgroundColor: theme.background,
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
-    marginHorizontal: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  discountControlLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-    color: theme.text.primary,
-  },
-  discountInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  discountInput: {
-    flex: 1,
-    backgroundColor: theme.surface,
-    borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginRight: 8,
-    color: theme.text.primary,
-  },
-  applyDiscountButton: {
-    backgroundColor: theme.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  applyDiscountText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  totalDiscountText: {
-    fontSize: 13,
-    color: theme.danger.main,
-    marginTop: 8,
-    textAlign: 'right',
-  },
-  generateReceiptButton: {
-    flexDirection: 'row',
-    backgroundColor: theme.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    marginHorizontal: 16,
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  generateReceiptText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  confirmationOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  confirmationDialog: {
-    backgroundColor: theme.surface,
-    borderRadius: 12,
-    padding: 20,
-    width: '85%',
-    maxWidth: 400,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  confirmationTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: theme.text.primary,
-  },
-  confirmationText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: theme.text.secondary,
-    lineHeight: 22,
-  },
-  confirmationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  confirmationButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 8,
-  },
-  confirmButton: {
-    backgroundColor: theme.primary,
-  },
-  cancelButton: {
-    backgroundColor: theme.text.disabled,
-  },
-  confirmationButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  searchResultsContainer: {
-    flex: 1,
-    backgroundColor: theme.surface,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  searchResultsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text.primary,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  searchResultsList: {
-    flex: 1,
-  },
-  searchResultsContent: {
-    paddingBottom: 16,
-  },
-  searchResultItem: {
-    flexDirection: 'row',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    backgroundColor: theme.surface,
-  },
-  selectedItem: {
-    backgroundColor: theme.successLight,
-  },
-  itemImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: theme.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  itemImage: {
-    width: '100%',
-    height: '100%',
-  },
-  noImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.background,
-  },
-  itemDetails: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: theme.text.primary,
-    marginBottom: 4,
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: theme.text.secondary,
-    marginBottom: 4,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.success,
-  },
-  selectionIndicator: {
-    justifyContent: 'center',
-    paddingLeft: 12,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: theme.text.secondary,
-  },
-  emptyResultsContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  emptyResultsText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: theme.text.secondary,
-    textAlign: 'center',
-  },
-  startSearchContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  startSearchText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: theme.text.secondary,
-    textAlign: 'center',
-    maxWidth: 240,
-  },
-});
-
-export default MultiReceiptScreen;
+export default MultiReceiptScreen; 

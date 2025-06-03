@@ -616,13 +616,19 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
     // Remplacer les fonctions de gestion modale par la navigation
     const navigateToAddContainer = useCallback(() => {
-        // Naviguer vers la page d'ajout de container
-        router.push('/containers');
+        // Naviguer vers la page d'ajout de container avec un paramètre de retour
+        router.push({
+            pathname: '/container/add',
+            params: { returnTo: '/add' } // Page d'ajout d'article
+        });
     }, [router]);
 
     const navigateToAddCategory = useCallback(() => {
-        // Naviguer vers la page d'ajout de catégorie
-        router.push('/add-category');
+        // Naviguer vers la page d'ajout de catégorie avec un paramètre de retour
+        router.push({
+            pathname: '/category/add',
+            params: { returnTo: '/add' } // Page d'ajout d'article
+        });
     }, [router]);
 
     // Ajouter un effet pour sélectionner la catégorie par défaut

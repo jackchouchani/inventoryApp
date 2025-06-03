@@ -14,6 +14,7 @@ interface UseInventoryFilters {
   minPrice?: number;
   maxPrice?: number;
   forceRefresh?: boolean;
+  loadAll?: boolean;
 }
 
 interface InventoryData {
@@ -23,7 +24,8 @@ interface InventoryData {
 }
 
 export function useInventoryData(filters: UseInventoryFilters) {
-  const { data: items, isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useItems();
+  const { loadAll = false } = filters;
+  const { data: items, isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useItems({ loadAll });
   const { categories, isLoading: categoriesLoading, error: categoriesError, loadCategories } = useCategories();
   const { data: containers, isLoading: containersLoading, error: containersError, refetch: refetchContainers } = useContainers();
 

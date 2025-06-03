@@ -1,0 +1,201 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Hooks Redux Optimisés - Règles d'Utilisation
+
+## Sélecteurs Mémoïsés Obligatoires
+
+### Utilisation des Hooks Optimisés
+
+**TOUJOURS utiliser les hooks optimisés** au lieu des hooks Redux basiques :
+
+```typescript
+// ✅ CORRECT - Utiliser les hooks optimisés
+import { 
+  useStockPageData, 
+  useFilteredItems,
+  useItemStats,
+  useAllCategories,
+  useAllContainers,
+  useContainerPageData  // ⭐ IMPORTANT pour charger TOUS les items
+} from '../../src/hooks/useOptimizedSelectors';
+
+// ❌ INTERDIT - Hooks Redux basiques
+import { useItems } from '../../src/hooks/useItems';
+import { useCategories } from '../../src/hooks/useCategories';
+import { useContainers } from '../../src/hooks/useContainers';
+```
+
+### ⚠️ **ATTENTION : Chargement Complet des Items**
+
+**PROBLÈME CRITIQUE** : `useItems()` ne charge que les 50 premiers items par défaut !
+
+#### Pour les Statistiques et Calculs Globaux
+```typescript
+// ✅ CORRECT - Charge TOUS les items (useContainerPageData force le chargement complet)
+const { items, categories, containers } = useContainerPageData();
+const stats = calculateGlobalStats(items); // Calcul sur TOUS les items
+
+// ❌ INTERDIT - Ne charge que 50 items maximum
+const { data: items } = useItems();
+const stats = calculateGlobalStats(items); // ❌ Statistiques incomplètes !
+```
+
+#### Quand Utiliser Chaque Hook
+
+| Hook | Usage | Limite Items | Cas d'Usage |
+|------|-------|--------------|-------------|
+| `useStockPageData()` | Liste paginée | 50 items | Pages de stock avec pagination |
+| `useFilteredItems()` | Filtrage simple | 50 items | Filtres sur vue paginée |
+| `useContainerPageData()` | **Chargement complet** | **TOUS les items** | **Statistiques, calculs globaux** |
+| `useGlobalSearch()` | Recherche globale | TOUS les items | Recherche dans tout l'inventaire |
+
+### Référence d'Implémentation
+- [src/hooks/useOptimizedSelectors.ts](mdc:src/hooks/useOptimizedSelectors.ts)
+- [src/store/selectors.ts](mdc:src/store/selectors.ts)
+
+### Hooks Disponibles par Cas d'Usage
+
+#### Page Stock - Hook Combiné
+```typescript
+// Pour la page stock complète avec filtres
+const { items, categories, containers, isLoading, error, pagination } = useStockPageData(filters);
+```
+
+#### Filtrage Simple
+```typescript
+// Pour filtrer les items uniquement
+const items = useFilteredItems({ status: 'available', searchQuery: 'test' });
+```
+
+#### Statistiques et Dashboards
+```typescript
+// Pour les statistiques
+const stats = useItemStats();
+const { stats, itemsByCategory, itemsByContainer, isLoading } = useDashboardData();
+```
+
+#### Relations Entités
+```typescript
+// Pour les données avec relations populées
+const itemsWithRelations = useItemsWithRelations(filters);
+```
+
+## Interface ItemFilters
+
+### Structure Obligatoire
+```typescript
+interface ItemFilters {
+  status?: 'all' | 'available' | 'sold';
+  categoryId?: number;
+  containerId?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  searchQuery?: string;
+}
+```
+
+### Conversion des Filtres
+```typescript
+// Conversion des filtres UI vers ItemFilters
+const reduxFilters: ItemFilters = useMemo(() => ({
+  status: filters.status,
+  searchQuery: searchQuery.trim(),
+  categoryId: selectedCategoryId,
+  containerId: selectedContainerId,
+}), [filters, searchQuery, selectedCategoryId, selectedContainerId]);
+```
+
+## Patterns d'Optimisation
+
+### Mémoïsation des Filtres
+```typescript
+// ✅ CORRECT - Mémoïser les filtres complexes
+const filters = useMemo(() => ({
+  status: selectedStatus,
+  searchQuery: searchQuery.trim(),
+  categoryId: selectedCategory?.id,
+}), [selectedStatus, searchQuery, selectedCategory]);
+
+const items = useFilteredItems(filters);
+```
+
+### Éviter les Re-renders
+```typescript
+// ✅ CORRECT - Hook combiné pour éviter multiples useSelector
+const { items, categories, containers, isLoading } = useStockPageData(filters);
+
+// ❌ ÉVITER - Multiples hooks séparés (cause re-renders)
+const items = useFilteredItems(filters);
+const categories = useAllCategories();
+const containers = useAllContainers();
+const isLoading = useItemsLoading();
+```
+
+## Exemples d'Implémentation
+
+### Page Stock Optimisée
+Référence : [app/(tabs)/stock.tsx](mdc:app/(tabs)/stock.tsx)
+
+### Page Statistiques
+```typescript
+const StatsScreen = () => {
+  const { stats, itemsByCategory, isLoading } = useDashboardData();
+  
+  if (isLoading) return <LoadingSkeleton />;
+  
+  return (
+    <View>
+      <StatCard value={stats.total} label="Total Articles" />
+      <StatCard value={stats.available} label="Disponibles" />
+      <CategoryChart data={itemsByCategory} />
+    </View>
+  );
+};
+```
+
+### Recherche avec Filtres
+```typescript
+const SearchScreen = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<number>();
+  
+  const filteredItems = useSearchFilters(searchQuery, { 
+    categoryId: selectedCategory,
+    status: 'available' 
+  });
+  
+  return <VirtualizedItemList items={filteredItems} />;
+};
+```
+
+## Performance Guidelines
+
+### Do's ✅
+- Utiliser `useStockPageData` pour les pages complètes
+- Mémoïser les objets de filtres avec `useMemo`
+- Préférer les hooks combinés aux hooks individuels
+- Utiliser `useSearchFilters` pour la recherche avec debouncing
+
+### Don'ts ❌
+- Ne pas mélanger hooks optimisés et hooks basiques
+- Ne pas créer de nouveaux filtres objets à chaque render
+- Ne pas utiliser `useSelector` directement pour les entités principales
+- Ne pas dupliquer la logique de filtrage dans les composants
+
+## Migration depuis les Hooks Basiques
+
+### Pattern de Remplacement
+```typescript
+// Avant
+const { data: items, isLoading } = useItems();
+const { categories } = useCategories();
+const { data: containers } = useContainers();
+
+// Après
+const { items, categories, containers, isLoading } = useStockPageData(filters);
+```
+
+Cette approche garantit des performances optimales et une synchronisation cohérente des données dans toute l'application.

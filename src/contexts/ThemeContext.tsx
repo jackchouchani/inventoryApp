@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useMemo } from '
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme as baseTheme, Theme as BaseThemeType } from '../utils/theme'; // Import base theme and its type
+import StyleFactory from '../styles/StyleFactory';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -132,6 +133,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const subscription = Appearance.addChangeListener(() => {
       if (themeMode === 'system') {
+        // Invalider le cache StyleFactory lors du changement de thème système
+        StyleFactory.invalidateCache();
         // If mode is system, we just trigger a re-render by setting the same mode,
         // which will cause activeTheme to re-evaluate based on the new Appearance.getColorScheme()
         setThemeMode('system'); 
@@ -150,6 +153,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const contextValue = useMemo(() => ({
     themeMode,
     setThemeMode: (mode: ThemeMode) => {
+      // Invalider le cache StyleFactory lors du changement manuel de thème
+      StyleFactory.invalidateCache();
       setThemeMode(mode);
       AsyncStorage.setItem('themeMode', mode);
     },

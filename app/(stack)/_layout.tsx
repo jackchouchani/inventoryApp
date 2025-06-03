@@ -30,38 +30,6 @@ export default function StackLayout() {
         }}
       />
       <Stack.Screen 
-        name="labels" 
-        options={{
-          animation: 'slide_from_bottom'
-        }}
-      />
-      <Stack.Screen 
-        name="containers" 
-        options={{
-          animation: 'slide_from_right'
-        }}
-      />
-      <Stack.Screen 
-        name="categories" 
-        options={{
-          animation: 'slide_from_right'
-        }}
-      />
-      <Stack.Screen 
-        name="add-category" 
-        options={{
-          presentation: 'modal',
-          animation: 'slide_from_bottom'
-        }}
-      />
-      <Stack.Screen 
-        name="edit-category" 
-        options={{
-          presentation: 'modal',
-          animation: 'slide_from_bottom'
-        }}
-      />
-      <Stack.Screen 
         name="scanner-info" 
         options={{
           presentation: 'modal',

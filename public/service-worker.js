@@ -16,8 +16,10 @@ const iOS_CONFIG = {
   overscrollPreventionEnabled: true
 };
 
-// Variable pour tracker si une mise à jour est disponible
+// Variables pour tracker l'état de l'application
 let updateAvailable = false;
+let lastActiveTime = Date.now();
+let isAppSuspended = false;
 
 // Précache lors de l'installation
 self.addEventListener('install', (event) => {
@@ -66,11 +68,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Stratégie de cache : Network First avec détection de mise à jour
+// Stratégie de cache : Network First avec détection de mise à jour et gestion suspension
 self.addEventListener('fetch', (event) => {
   // Ignorer les requêtes non GET
   if (event.request.method !== 'GET') {
     return;
+  }
+
+  // Mettre à jour le timestamp d'activité
+  lastActiveTime = Date.now();
+  
+  // Vérifier si l'app était suspendue
+  if (isAppSuspended) {
+    console.log('[SW] App réactivée après suspension, notification aux clients');
+    isAppSuspended = false;
+    notifyClientsOfReactivation();
   }
 
   // Gestion spéciale pour les requêtes de navigation
@@ -114,6 +126,22 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Fonction pour notifier les clients de la réactivation
+async function notifyClientsOfReactivation() {
+  try {
+    const clients = await self.clients.matchAll();
+    clients.forEach((client) => {
+      client.postMessage({
+        type: 'APP_REACTIVATED',
+        lastActiveTime: lastActiveTime,
+        timestamp: Date.now()
+      });
+    });
+  } catch (error) {
+    console.error('[SW] Erreur lors de la notification de réactivation:', error);
+  }
+}
+
 // Fonction pour vérifier les mises à jour
 async function checkForUpdates(manifestResponse) {
   try {
@@ -152,6 +180,16 @@ self.addEventListener('message', (event) => {
       .then(response => checkForUpdates(response))
       .catch(error => console.error('[SW] Erreur lors de la vérification manuelle:', error));
   }
+  
+  if (event.data && event.data.type === 'APP_SUSPENDED') {
+    console.log('[SW] App marquée comme suspendue');
+    isAppSuspended = true;
+  }
+  
+  if (event.data && event.data.type === 'HEARTBEAT') {
+    // Heartbeat des clients pour détecter la suspension
+    lastActiveTime = Date.now();
+  }
 });
 
 // Synchronisation en arrière-plan
@@ -165,6 +203,10 @@ self.addEventListener('sync', (event) => {
       fetch('/manifest.json')
         .then(response => checkForUpdates(response))
     );
+  }
+  
+  if (event.tag === 'app-reactivation') {
+    event.waitUntil(handleAppReactivation());
   }
 });
 
@@ -188,3 +230,32 @@ async function syncData() {
   console.log('[SW] Synchronisation des données en arrière-plan');
   // Implémenter la logique de synchronisation ici
 }
+
+// Fonction pour gérer la réactivation de l'app
+async function handleAppReactivation() {
+  console.log('[SW] Gestion de la réactivation de l\'application');
+  
+  try {
+    // Vérifier les mises à jour
+    const manifestResponse = await fetch('/manifest.json');
+    await checkForUpdates(manifestResponse);
+    
+    // Notifier les clients de la réactivation
+    await notifyClientsOfReactivation();
+    
+  } catch (error) {
+    console.error('[SW] Erreur lors de la gestion de réactivation:', error);
+  }
+}
+
+// Timer pour détecter l'inactivité prolongée
+setInterval(() => {
+  const now = Date.now();
+  const timeSinceLastActive = now - lastActiveTime;
+  
+  // Si plus de 5 minutes d'inactivité, marquer comme suspendu
+  if (timeSinceLastActive > 300000 && !isAppSuspended) {
+    console.log('[SW] Inactivité prolongée détectée, marquage comme suspendu');
+    isAppSuspended = true;
+  }
+}, 60000); // Vérifier toutes les minutes

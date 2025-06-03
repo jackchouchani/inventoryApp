@@ -28,6 +28,7 @@ export interface CategoryFormData {
 interface CategoryFormProps {
   initialData?: CategoryFormData;
   onSubmit: (data: CategoryFormData) => Promise<void>;
+  onCancel?: () => void;
   submitButtonText: string;
   title: string;
   loading?: boolean;
@@ -36,6 +37,7 @@ interface CategoryFormProps {
 export const CategoryForm: React.FC<CategoryFormProps> = ({
   initialData,
   onSubmit,
+  onCancel,
   submitButtonText,
   title,
   loading = false
@@ -56,6 +58,14 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
     }, 300),
     [setValue]
   );
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      router.back();
+    }
+  };
 
   if (loading) {
     return (
@@ -80,7 +90,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
           <View style={styles.header}>
             <TouchableOpacity 
               style={styles.backButton}
-              onPress={() => router.back()}
+              onPress={handleCancel}
             >
               <Icon name="arrow_back_ios" size={24} color={theme.colors.primary} />
               <Text style={styles.backButtonText}>Retour</Text>

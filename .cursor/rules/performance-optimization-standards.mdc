@@ -1,0 +1,311 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Standards d'Optimisation Performance - Guide Unifié
+
+## Architecture d'Optimisation Complète
+
+Cette règle unifie toutes les optimisations de performance de l'application inventaire.
+
+### Composants Optimisés Obligatoires
+
+#### 1. Sélecteurs Redux Mémoïsés
+**Référence** : [.cursor/rules/optimizations-hooks.mdc](mdc:.cursor/rules/optimizations-hooks.mdc)
+
+```typescript
+// ✅ TOUJOURS utiliser les hooks optimisés
+import { useStockPageData, useFilteredItems } from '../../src/hooks/useOptimizedSelectors';
+
+const Component = () => {
+  const { items, categories, containers, isLoading } = useStockPageData(filters);
+  return <VirtualizedItemList items={items} />;
+};
+```
+
+#### 2. StyleFactory pour les Styles
+**Référence** : [.cursor/rules/stylefactory-optimization.mdc](mdc:.cursor/rules/stylefactory-optimization.mdc)
+
+```typescript
+// ✅ TOUJOURS utiliser StyleFactory
+import StyleFactory from '../styles/StyleFactory';
+
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+  return <View style={styles.container} />;
+};
+```
+
+#### 3. Listes Virtualisées
+**Référence** : [.cursor/rules/virtualized-lists.mdc](mdc:.cursor/rules/virtualized-lists.mdc)
+
+```typescript
+// ✅ TOUJOURS utiliser VirtualizedItemList pour > 50 items
+import VirtualizedItemList from '../../src/components/VirtualizedItemList';
+
+const Component = () => {
+  return (
+    <VirtualizedItemList
+      items={items}
+      categories={categories}
+      containers={containers}
+      estimatedItemSize={120}
+    />
+  );
+};
+```
+
+## Checklist d'Optimisation par Page
+
+### Pages de Liste (Stock, Recherche, Filtres)
+
+#### Obligatoire ✅
+1. **Hook optimisé** : `useStockPageData()` ou `useFilteredItems()`
+2. **Liste virtualisée** : `VirtualizedItemList` au lieu de `FlatList`
+3. **StyleFactory** : Styles mis en cache
+4. **Callbacks mémoïsés** : `useCallback` pour tous les handlers
+5. **Filtres mémoïsés** : `useMemo` pour les objets de filtres
+
+#### Exemple Type - Page Stock
+```typescript
+const StockScreen = () => {
+  // 1. Filtres mémoïsés
+  const filters = useMemo(() => ({
+    status: selectedStatus,
+    searchQuery: searchQuery.trim(),
+  }), [selectedStatus, searchQuery]);
+
+  // 2. Hook optimisé
+  const { items, categories, containers, isLoading } = useStockPageData(filters);
+
+  // 3. Styles mis en cache
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemList');
+
+  // 4. Callbacks mémoïsés
+  const handleItemPress = useCallback((item: Item) => {
+    router.push(`/item/${item.id}/info`);
+  }, [router]);
+
+  const handleMarkAsSold = useCallback((item: Item) => {
+    dispatch(updateItemStatus({ itemId: item.id, status: 'sold' }));
+  }, [dispatch]);
+
+  // 5. Liste virtualisée
+  return (
+    <View style={styles.container}>
+      <VirtualizedItemList
+        items={items}
+        categories={categories}
+        containers={containers}
+        onItemPress={handleItemPress}
+        onMarkAsSold={handleMarkAsSold}
+        estimatedItemSize={120}
+      />
+    </View>
+  );
+};
+```
+
+### Pages de Formulaire (Add, Edit)
+
+#### Obligatoire ✅
+1. **StyleFactory** pour formulaires : `'ItemForm'`
+2. **Validation mémoïsée** : `useMemo` pour les règles
+3. **Callbacks stables** : `useCallback` pour submit/cancel
+4. **État local optimisé** : `useRef` pour valeurs stables
+
+#### Exemple Type - Formulaire
+```typescript
+const ItemForm = () => {
+  // 1. Styles mis en cache
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemForm');
+
+  // 2. Validation mémoïsée
+  const validationRules = useMemo(() => ({
+    name: { required: true, minLength: 2 },
+    price: { required: true, type: 'number' }
+  }), []);
+
+  // 3. Callbacks stables
+  const handleSubmit = useCallback(async (data: ItemFormData) => {
+    await dispatch(createItem(data));
+    router.back();
+  }, [dispatch, router]);
+
+  const handleCancel = useCallback(() => {
+    router.back();
+  }, [router]);
+
+  return (
+    <ScrollView style={styles.container}>
+      <FormFields styles={styles} validation={validationRules} />
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={handleCancel}>
+          <Text style={styles.buttonTextSecondary}>Annuler</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleSubmit}>
+          <Text style={styles.buttonText}>Sauvegarder</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+};
+```
+
+### Pages de Statistiques (Dashboard, Analytics)
+
+#### Obligatoire ✅
+1. **Hook statistiques** : `useDashboardData()`
+2. **StyleFactory** : `'Stats'` pour graphiques
+3. **Mémoïsation données** : `useMemo` pour calculs
+4. **Composants charts mémoïsés** : `React.memo`
+
+#### Exemple Type - Dashboard
+```typescript
+const StatsScreen = () => {
+  // 1. Hook optimisé pour stats
+  const { stats, itemsByCategory, itemsByContainer, isLoading } = useDashboardData();
+
+  // 2. Styles mis en cache
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
+
+  // 3. Calculs mémoïsés
+  const chartData = useMemo(() => ({
+    categories: itemsByCategory.map(cat => ({
+      name: cat.category.name,
+      value: cat.count,
+      color: generateColor(cat.category.id)
+    }))
+  }), [itemsByCategory]);
+
+  if (isLoading) return <LoadingSkeleton />;
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.statCard}>
+        <Text style={styles.statValue}>{stats.total}</Text>
+        <Text style={styles.statLabel}>Total Articles</Text>
+      </View>
+      <MemoizedChart data={chartData} />
+    </ScrollView>
+  );
+};
+
+// 4. Composant chart mémoïsé
+const MemoizedChart = React.memo(ChartComponent);
+```
+
+## Patterns Anti-Performance à Éviter
+
+### ❌ Violations Critiques
+
+#### 1. Hooks Redux Basiques (INTERDIT)
+```typescript
+// ❌ INTERDIT - Performance dégradée
+const { data: items } = useItems();
+const { categories } = useCategories();
+const { data: containers } = useContainers();
+
+// ✅ CORRECT - Hook optimisé
+const { items, categories, containers } = useStockPageData(filters);
+```
+
+#### 2. StyleSheet Direct (INTERDIT)
+```typescript
+// ❌ INTERDIT - Pas de cache
+const Component = () => {
+  const styles = StyleSheet.create({
+    container: { backgroundColor: theme.background }
+  });
+  // Recréé à chaque render !
+};
+
+// ✅ CORRECT - StyleFactory avec cache
+const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+```
+
+#### 3. FlatList pour Grandes Listes (INTERDIT)
+```typescript
+// ❌ INTERDIT - Performance dégradée pour > 50 items
+<FlatList data={largeList} renderItem={renderItem} />
+
+// ✅ CORRECT - Virtualisation
+<VirtualizedItemList items={largeList} />
+```
+
+#### 4. Callbacks Non-Mémoïsés (CRITIQUE)
+```typescript
+// ❌ CRITIQUE - Cause re-renders en cascade
+<VirtualizedItemList
+  onItemPress={(item) => handlePress(item)}  // Nouvelle fonction à chaque render
+/>
+
+// ✅ CORRECT - Callback stable
+const handleItemPress = useCallback((item) => handlePress(item), []);
+<VirtualizedItemList onItemPress={handleItemPress} />
+```
+
+## Migration Guidelines
+
+### Étapes de Migration d'une Page
+
+#### 1. Audit Performance
+```typescript
+// Vérifier ces éléments dans l'ordre :
+// 1. Hooks Redux → useStockPageData()
+// 2. Styles → StyleFactory
+// 3. Listes → VirtualizedItemList
+// 4. Callbacks → useCallback
+// 5. Mémoïsation → useMemo
+```
+
+#### 2. Remplacements Prioritaires
+```typescript
+// Ordre de priorité pour maximiser l'impact performance :
+// 1. Listes longues → VirtualizedItemList (gain immédiat)
+// 2. Hooks Redux → Sélecteurs optimisés (évite re-renders)
+// 3. Styles → StyleFactory (cache, responsive)
+// 4. Callbacks → Mémoïsation (stabilité)
+```
+
+#### 3. Validation Post-Migration
+```typescript
+// Vérifier ces métriques après migration :
+// 1. Temps de rendu initial < 500ms
+// 2. Scroll fluide sans frame drops
+// 3. Mémoire stable (pas de fuites)
+// 4. Re-renders minimaux (React DevTools)
+```
+
+## Références d'Implémentation
+
+### Pages Modèles Optimisées
+- **Stock** : [app/(tabs)/stock.tsx](mdc:app/(tabs)/stock.tsx) - Hooks + StyleFactory + VirtualizedList
+- **Sélecteurs** : [src/store/selectors.ts](mdc:src/store/selectors.ts) - Mémoïsation Redux
+- **Hooks** : [src/hooks/useOptimizedSelectors.ts](mdc:src/hooks/useOptimizedSelectors.ts) - Combinaison optimisée
+- **Styles** : [src/styles/StyleFactory.ts](mdc:src/styles/StyleFactory.ts) - Cache intelligent
+- **Listes** : [src/components/VirtualizedItemList.tsx](mdc:src/components/VirtualizedItemList.tsx) - Virtualisation
+
+### Métriques de Performance Cibles
+
+#### Objectifs Quantifiés
+- **Temps de chargement initial** : < 1 seconde
+- **Scroll fluide** : 60 FPS constant
+- **Mémoire** : < 100MB pour 1000+ items
+- **Re-renders** : < 5 par interaction utilisateur
+- **Bundle size** : Impact < 50KB par optimisation
+
+#### Outils de Mesure
+```typescript
+// React DevTools Profiler
+// Flipper React Native Performance
+// Metro Bundle Analyzer
+// Hermes Memory Profiler (mobile)
+```
+
+Cette architecture d'optimisation garantit des performances excellentes et une expérience utilisateur fluide sur toutes les plateformes.

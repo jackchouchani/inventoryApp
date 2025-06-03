@@ -1,0 +1,279 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# StyleFactory Optimisé - Règles d'Utilisation
+
+## Cache Intelligent des Styles
+
+### Utilisation Obligatoire du StyleFactory
+
+**TOUJOURS utiliser StyleFactory** au lieu de StyleSheet direct :
+
+```typescript
+// ✅ CORRECT - Utiliser StyleFactory
+import StyleFactory from '../styles/StyleFactory';
+import { useAppTheme } from '../contexts/ThemeContext';
+
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+  
+  return <View style={styles.container} />;
+};
+
+// ❌ INTERDIT - StyleSheet direct dans les composants
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: theme.background, // Pas de cache, recréé à chaque render
+  }
+});
+```
+
+### Référence d'Implémentation
+- [src/styles/StyleFactory.ts](mdc:src/styles/StyleFactory.ts)
+
+## Composants Supportés
+
+### Noms de Composants Disponibles
+```typescript
+type ComponentName = 
+  | 'ItemCard'      // Cartes d'articles
+  | 'ItemList'      // Listes d'articles  
+  | 'ItemForm'      // Formulaires d'articles
+  | 'CategoryCard'  // Cartes de catégories
+  | 'ContainerCard' // Cartes de containers
+  | 'Scanner'       // Interface scanner
+  | 'Stats'         // Statistiques et graphiques
+  | 'FilterBar'     // Barres de filtres
+  | 'Common';       // Styles communs réutilisables
+```
+
+### Pattern d'Utilisation Standard
+```typescript
+const Component: React.FC = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+  
+  // Utiliser styles.container, styles.title, etc.
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Titre</Text>
+    </View>
+  );
+};
+```
+
+## Variantes de Styles
+
+### Support des Variants
+```typescript
+// Style normal
+const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+
+// Style compact
+const compactStyles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard', 'compact');
+```
+
+### Styles Communs Réutilisables
+```typescript
+// Pour accéder aux styles communs
+const commonStyles = StyleFactory.getThemedStyles(activeTheme, 'Common');
+
+// Utilisation dans un composant custom
+const customStyles = StyleSheet.create({
+  customContainer: {
+    ...commonStyles.container,
+    padding: 20, // Override ou ajout
+  },
+  customButton: {
+    ...commonStyles.button,
+    backgroundColor: activeTheme.secondary,
+  }
+});
+```
+
+## Gestion du Cache
+
+### Invalidation Automatique
+Le cache est automatiquement invalidé lors des changements de thème via le ThemeContext.
+
+Référence : [src/contexts/ThemeContext.tsx](mdc:src/contexts/ThemeContext.tsx)
+
+### Invalidation Manuelle (Cas Exceptionnel)
+```typescript
+// Seulement si nécessaire (très rare)
+StyleFactory.invalidateCache();
+```
+
+## Styles Platform-Specific
+
+### Web vs Mobile Optimization
+```typescript
+// Le StyleFactory gère automatiquement les différences platform
+const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+// styles.shadow contiendra boxShadow pour web, elevation pour mobile
+```
+
+### Structure des Styles Générés
+```typescript
+// Exemple de styles générés pour ItemCard
+interface ItemCardStyles {
+  container: ViewStyle;
+  imageContainer: ViewStyle;
+  image: ImageStyle;
+  contentContainer: ViewStyle;
+  titleRow: ViewStyle;
+  name: TextStyle;
+  price: TextStyle;
+  description: TextStyle;
+  statusContainer: ViewStyle;
+  statusBadge: ViewStyle;
+  statusText: TextStyle;
+  actionButton: ViewStyle;
+}
+```
+
+## Bonnes Pratiques
+
+### Do's ✅
+
+#### Utilisation Cohérente
+```typescript
+// ✅ CORRECT - Une seule récupération de styles par composant
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemForm');
+  
+  return (
+    <View style={styles.container}>
+      <Text style={styles.label}>Label</Text>
+      <TextInput style={styles.input} />
+      <TouchableOpacity style={styles.button}>
+        <Text style={styles.buttonText}>Action</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+```
+
+#### Extension de Styles
+```typescript
+// ✅ CORRECT - Étendre les styles du factory
+const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+return (
+  <View style={[styles.container, { marginTop: 10 }]}>
+    <Text style={[styles.title, { fontSize: 18 }]}>Titre Custom</Text>
+  </View>
+);
+```
+
+### Don'ts ❌
+
+#### Éviter StyleSheet Direct
+```typescript
+// ❌ ÉVITER - StyleSheet direct (pas de cache)
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleSheet.create({
+    container: { backgroundColor: activeTheme.background }
+  });
+  // Recréé à chaque render !
+};
+```
+
+#### Éviter la Recréation
+```typescript
+// ❌ ÉVITER - Recréation des styles
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  
+  return items.map(item => {
+    const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard'); // ❌ Dans une boucle
+    return <ItemCard key={item.id} styles={styles} />;
+  });
+};
+
+// ✅ CORRECT - Une seule récupération
+const Component = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+  
+  return items.map(item => (
+    <ItemCard key={item.id} styles={styles} />
+  ));
+};
+```
+
+## Exemples d'Implémentation
+
+### Page Stock avec StyleFactory
+Référence : [app/(tabs)/stock.tsx](mdc:app/(tabs)/stock.tsx)
+
+### Composant ItemCard Optimisé
+```typescript
+const ItemCard: React.FC<ItemCardProps> = ({ item }) => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemCard');
+  
+  return (
+    <View style={styles.container}>
+      <View style={styles.imageContainer}>
+        <Image source={{ uri: item.photo }} style={styles.image} />
+      </View>
+      <View style={styles.contentContainer}>
+        <View style={styles.titleRow}>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={styles.price}>{item.price}€</Text>
+        </View>
+        <Text style={styles.description}>{item.description}</Text>
+      </View>
+    </View>
+  );
+};
+```
+
+### Formulaire avec StyleFactory
+```typescript
+const ItemForm: React.FC = () => {
+  const { activeTheme } = useAppTheme();
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemForm');
+  
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Informations</Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Nom</Text>
+          <TextInput style={styles.input} />
+        </View>
+      </View>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.buttonSecondary}>
+          <Text style={styles.buttonTextSecondary}>Annuler</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.button}>
+          <Text style={styles.buttonText}>Sauvegarder</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+};
+```
+
+## Performance Impact
+
+### Gains Attendus
+- **Cache automatique** : -50% de temps de génération des styles
+- **Réutilisation** : Styles identiques partagés entre composants
+- **Optimisation plateforme** : Styles adaptés automatiquement (web/mobile)
+- **Memory efficiency** : Évite la duplication des styles similaires
+
+### Monitoring des Performances
+```typescript
+// Pour débugger la performance du cache (dev uniquement)
+console.log('Cache size:', StyleFactory.cache.size);
+```
+
+Cette approche garantit des styles optimisés, mis en cache et cohérents dans toute l'application.

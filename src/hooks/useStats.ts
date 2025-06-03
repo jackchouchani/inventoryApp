@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useItems } from './useItems';
+import { useContainerPageData } from './useOptimizedSelectors';
 import { useCategories } from './useCategories';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
@@ -58,10 +58,14 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
       const totalSellingValue = items.reduce((sum, item) => sum + item.sellingPrice, 0);
       const totalProfit = totalSellingValue - totalPurchaseValue;
 
+      // Calcul du profit réel sur les articles vendus uniquement
+      const soldItemsProfit = soldItems.reduce((sum, item) => 
+        sum + (item.sellingPrice - item.purchasePrice), 0);
+
       const itemsWithMargins = soldItems.map(item => ({
         ...item,
         profit: item.sellingPrice - item.purchasePrice,
-        margin: ((item.sellingPrice - item.purchasePrice) / item.purchasePrice) * 100
+        margin: item.sellingPrice > 0 ? ((item.sellingPrice - item.purchasePrice) / item.sellingPrice) * 100 : 0
       }));
 
       const bestSellingItem = itemsWithMargins.length > 0
@@ -88,7 +92,7 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
           categoryName: category.name,
           itemCount: categoryItems.length,
           totalProfit: categoryProfit,
-          averageMargin: categoryItems.length > 0 
+          averageMargin: categoryRevenue > 0 
             ? (categoryProfit / categoryRevenue) * 100 
             : 0
         };
@@ -101,7 +105,7 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
         totalPurchaseValue,
         totalSellingValue,
         totalProfit,
-        averageProfit: soldItems.length > 0 ? totalProfit / soldItems.length : 0,
+        averageProfit: soldItems.length > 0 ? soldItemsProfit / soldItems.length : 0,
         averageMarginPercentage: soldItems.length > 0 
           ? (itemsWithMargins.reduce((sum, item) => sum + item.margin, 0) / soldItems.length)
           : 0,
@@ -223,7 +227,7 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
     }
   }, [selectedPeriod]);
 
-  const { data: items = [], error: itemsError } = useItems();
+  const { items = [], error: itemsError } = useContainerPageData();
   const { categories = [], error: categoriesError } = useCategories();
 
   const stats = useMemo(() => {

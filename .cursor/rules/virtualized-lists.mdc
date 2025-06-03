@@ -1,0 +1,340 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Listes Virtualisées - Règles d'Utilisation FlashList
+
+## Virtualisation Obligatoire pour les Grandes Listes
+
+### Utilisation de VirtualizedItemList
+
+**TOUJOURS utiliser VirtualizedItemList** pour les listes d'articles :
+
+```typescript
+// ✅ CORRECT - Utiliser VirtualizedItemList
+import VirtualizedItemList from '../../src/components/VirtualizedItemList';
+
+const Component = () => {
+  return (
+    <VirtualizedItemList
+      items={items}
+      categories={categories}
+      containers={containers}
+      onItemPress={handleItemPress}
+      onMarkAsSold={handleMarkAsSold}
+      onMarkAsAvailable={handleMarkAsAvailable}
+      estimatedItemSize={120}
+    />
+  );
+};
+
+// ❌ INTERDIT - FlatList ou ItemList basique pour > 50 items
+import { FlatList } from 'react-native';
+import ItemList from '../../src/components/ItemList';
+```
+
+### Référence d'Implémentation
+- [src/components/VirtualizedItemList.tsx](mdc:src/components/VirtualizedItemList.tsx)
+
+## Props et Configuration
+
+### Props Obligatoires
+```typescript
+interface VirtualizedItemListProps {
+  items: Item[];                    // Liste des articles
+  categories: Category[];           // Catégories pour les relations
+  containers: Container[];          // Containers pour les relations
+  onItemPress?: (item: Item) => void;
+  onMarkAsSold?: (item: Item) => void;
+  onMarkAsAvailable?: (item: Item) => void;
+}
+```
+
+### Props d'Optimisation
+```typescript
+interface OptimizationProps {
+  estimatedItemSize?: number;       // Défaut: 120px
+  isLoading?: boolean;             // État de chargement
+  onEndReached?: () => void;       // Pagination
+  isLoadingMore?: boolean;         // Chargement pagination
+  refreshing?: boolean;            // Pull-to-refresh
+  onRefresh?: () => void;          // Callback refresh
+}
+```
+
+### Configuration Recommandée
+```typescript
+<VirtualizedItemList
+  items={items}
+  categories={categories}
+  containers={containers}
+  estimatedItemSize={120}          // Hauteur estimée d'un item
+  onEndReached={handleLoadMore}    // Pagination
+  onRefresh={handleRefresh}        // Pull-to-refresh
+  refreshing={isRefreshing}
+  isLoadingMore={isLoadingMore}
+  // Event handlers
+  onItemPress={handleItemPress}
+  onMarkAsSold={handleMarkAsSold}
+  onMarkAsAvailable={handleMarkAsAvailable}
+/>
+```
+
+## Optimisations de Performance
+
+### Mémoïsation des Callbacks
+```typescript
+// ✅ CORRECT - Callbacks mémoïsés
+const Component = () => {
+  const handleItemPress = useCallback((item: Item) => {
+    router.push(`/item/${item.id}/info`);
+  }, [router]);
+
+  const handleMarkAsSold = useCallback((item: Item) => {
+    dispatch(updateItemStatus({ itemId: item.id, status: 'sold' }));
+  }, [dispatch]);
+
+  const handleMarkAsAvailable = useCallback((item: Item) => {
+    dispatch(updateItemStatus({ itemId: item.id, status: 'available' }));
+  }, [dispatch]);
+
+  return (
+    <VirtualizedItemList
+      items={items}
+      onItemPress={handleItemPress}
+      onMarkAsSold={handleMarkAsSold}
+      onMarkAsAvailable={handleMarkAsAvailable}
+    />
+  );
+};
+```
+
+### Key Extractor Optimisé
+La liste utilise automatiquement un key extractor optimisé :
+```typescript
+// Généré automatiquement dans VirtualizedItemList
+const keyExtractor = (item: Item, index: number) => {
+  return `${item.id}-${item.updatedAt}-${index}`;
+};
+```
+
+### Comparaison Intelligente
+Le composant utilise `React.memo` avec comparaison optimisée :
+```typescript
+// Implémenté dans VirtualizedItemComponent
+const areEqual = (prevProps, nextProps) => {
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.updatedAt === nextProps.item.updatedAt &&
+    prevProps.item.status === nextProps.item.status &&
+    prevProps.item.photo_storage_url === nextProps.item.photo_storage_url
+  );
+};
+```
+
+## Gestion des États
+
+### Loading States
+```typescript
+const Component = () => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await dispatch(fetchItems({ page: 0, limit: 50 }));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [dispatch]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    
+    setIsLoadingMore(true);
+    try {
+      await dispatch(fetchItems({ page: currentPage + 1, limit: 50 }));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [dispatch, isLoadingMore, hasMore, currentPage]);
+
+  return (
+    <VirtualizedItemList
+      items={items}
+      refreshing={isRefreshing}
+      onRefresh={handleRefresh}
+      onEndReached={handleLoadMore}
+      isLoadingMore={isLoadingMore}
+    />
+  );
+};
+```
+
+### Error Handling
+```typescript
+// La liste inclut automatiquement un ErrorBoundary
+<VirtualizedItemList
+  items={items}
+  // En cas d'erreur, affiche automatiquement un fallback
+/>
+```
+
+## Cas d'Usage Spécifiques
+
+### Page Stock Principal
+Référence : [app/(tabs)/stock.tsx](mdc:app/(tabs)/stock.tsx)
+
+### Liste avec Filtres
+```typescript
+const FilteredList = () => {
+  const [filters, setFilters] = useState<ItemFilters>({ status: 'available' });
+  const filteredItems = useFilteredItems(filters);
+
+  return (
+    <>
+      <FilterBar filters={filters} onFiltersChange={setFilters} />
+      <VirtualizedItemList
+        items={filteredItems}
+        categories={categories}
+        containers={containers}
+        estimatedItemSize={120}
+      />
+    </>
+  );
+};
+```
+
+### Liste avec Recherche
+```typescript
+const SearchableList = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchResults = useSearchFilters(searchQuery);
+
+  return (
+    <>
+      <SearchBox query={searchQuery} onQueryChange={setSearchQuery} />
+      <VirtualizedItemList
+        items={searchResults}
+        categories={categories}
+        containers={containers}
+        estimatedItemSize={120}
+      />
+    </>
+  );
+};
+```
+
+## Performance Guidelines
+
+### Do's ✅
+
+#### Estimation de Taille Précise
+```typescript
+// ✅ CORRECT - Estimer la hauteur réelle des items
+<VirtualizedItemList 
+  estimatedItemSize={120}  // Hauteur mesurée d'un ItemCard
+/>
+```
+
+#### Données Stables
+```typescript
+// ✅ CORRECT - Mémoïser les données de liste
+const memoizedItems = useMemo(() => items, [items]);
+
+<VirtualizedItemList items={memoizedItems} />
+```
+
+#### Pull-to-Refresh
+```typescript
+// ✅ CORRECT - Implémenter le refresh
+<VirtualizedItemList
+  items={items}
+  refreshing={isRefreshing}
+  onRefresh={handleRefresh}
+/>
+```
+
+### Don'ts ❌
+
+#### Éviter FlatList pour Grandes Listes
+```typescript
+// ❌ ÉVITER - FlatList pour > 50 items
+<FlatList 
+  data={largeItemsList}  // Performance dégradée
+  renderItem={renderItem}
+/>
+
+// ✅ UTILISER - VirtualizedItemList
+<VirtualizedItemList items={largeItemsList} />
+```
+
+#### Éviter les Callbacks Non-Mémoïsés
+```typescript
+// ❌ ÉVITER - Callbacks recréés à chaque render
+<VirtualizedItemList
+  onItemPress={(item) => handlePress(item)}  // Nouvelle fonction à chaque render
+/>
+
+// ✅ CORRECT - Callback mémoïsé
+const handleItemPress = useCallback((item) => handlePress(item), []);
+<VirtualizedItemList onItemPress={handleItemPress} />
+```
+
+#### Éviter la Mutation de Props
+```typescript
+// ❌ ÉVITER - Modifier les props directement
+const modifiedItems = items.map(item => ({ ...item, modified: true }));
+
+// ✅ CORRECT - Utiliser les sélecteurs mémoïsés
+const processedItems = useFilteredItems(filters);
+```
+
+## Migration depuis FlatList
+
+### Pattern de Remplacement
+```typescript
+// Avant - FlatList
+<FlatList
+  data={items}
+  renderItem={({ item }) => <ItemCard item={item} />}
+  keyExtractor={(item) => item.id.toString()}
+  onEndReached={handleLoadMore}
+  refreshing={refreshing}
+  onRefresh={handleRefresh}
+/>
+
+// Après - VirtualizedItemList
+<VirtualizedItemList
+  items={items}
+  categories={categories}
+  containers={containers}
+  onEndReached={handleLoadMore}
+  refreshing={refreshing}
+  onRefresh={handleRefresh}
+  estimatedItemSize={120}
+/>
+```
+
+## Performance Metrics
+
+### Gains Attendus
+- **Mémoire** : -80% pour listes > 100 items
+- **Temps de rendu** : -60% pour le scroll rapide
+- **JS Thread** : -50% de blocking pendant le scroll
+- **Frame drops** : Quasi éliminés sur les listes longues
+
+### Monitoring
+```typescript
+// Pour mesurer les performances (dev uniquement)
+import { performance } from 'react-native-performance';
+
+const startTime = performance.now();
+// Render de la liste
+const endTime = performance.now();
+console.log(`Render time: ${endTime - startTime}ms`);
+```
+
+Cette virtualisation garantit des performances optimales même avec des milliers d'articles.

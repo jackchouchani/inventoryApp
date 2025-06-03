@@ -693,14 +693,20 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     }, [adaptedItem, deletePhoto, database, dispatch, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem, updateItem]);
 
     const navigateToAddContainer = useCallback(() => {
-        console.log("[ItemEditForm] navigateToAddContainer - Saving state and navigating.");
-        router.push('/containers');
-    }, [router]);
+        // Naviguer vers la page d'ajout de container avec un paramètre de retour
+        router.push({
+            pathname: '/container/add',
+            params: { returnTo: `/item/${adaptedItem.id}/edit` }
+        });
+    }, [router, adaptedItem.id]);
 
     const navigateToAddCategory = useCallback(() => {
-        console.log("[ItemEditForm] navigateToAddCategory - Saving state and navigating.");
-        router.push('/add-category');
-    }, [router]);
+        // Naviguer vers la page d'ajout de catégorie avec un paramètre de retour
+        router.push({
+            pathname: '/category/add',
+            params: { returnTo: `/item/${adaptedItem.id}/edit` }
+        });
+    }, [router, adaptedItem.id]);
 
     const displayImageUri = localImageUri || photoHookState.uri;
     const isPhotoProcessing = photoHookState.loading;

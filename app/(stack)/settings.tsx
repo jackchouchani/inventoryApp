@@ -1,9 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert, ActivityIndicator, Platform, useColorScheme } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, ActivityIndicator, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon } from '../../src/components';
 import { useSelector } from 'react-redux';
+
+// ✅ STYLEFACTORY selon stylefactory-optimization.mdc
+import StyleFactory from '../../src/styles/StyleFactory';
+
+import { Icon, CommonHeader } from '../../src/components';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { selectAllCategories } from '../../src/store/categorySlice';
 import { useAppTheme, ThemeMode } from '../../src/contexts/ThemeContext';
@@ -14,10 +17,12 @@ const SettingsScreen = () => {
   const { activeTheme, themeMode, setThemeMode } = useAppTheme();
   const systemScheme = useColorScheme();
   const isSystemDark = systemScheme === 'dark';
-  const insets = useSafeAreaInsets();
   const categories = useSelector(selectAllCategories);
   const { signOut } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // ✅ STYLEFACTORY - Récupération des styles mis en cache
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'Settings');
 
   useEffect(() => {
     if (!isLoggingOut) return;
@@ -55,9 +60,9 @@ const SettingsScreen = () => {
 
   if (!categories) {
     return (
-      <View style={[styles.container, styles.loadingContainer, { backgroundColor: activeTheme.background }]}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={activeTheme.primary} />
-        <Text style={[styles.loadingText, { color: activeTheme.text.secondary }]}>Chargement...</Text>
+        <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
   }
@@ -74,38 +79,22 @@ const SettingsScreen = () => {
       currentThemeDisplay = 'Clair';
       break;
     default:
-      // This case should ideally not be reached if themeMode is correctly typed
-      // as 'system' | 'dark' | 'light'.
-      // The following line helps ensure exhaustiveness if ThemeMode type changes.
-      currentThemeDisplay = 'Clair'; // Fallback, or consider throwing an error
+      currentThemeDisplay = 'Clair'; // Fallback
       break;
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: activeTheme.background }]}>
-      <View style={[styles.topBar, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.push('/(tabs)/stock')}
-        >
-          <Icon 
-            name={Platform.OS === 'ios' ? 'arrow_back_ios' : 'arrow_back'} 
-            size={24} 
-            color={activeTheme.primary} 
-            style={Platform.OS === 'ios' ? { marginRight: -2 } : {}}
-          />
-          {Platform.OS === 'ios' && (
-            <Text style={[styles.backButtonText, { color: activeTheme.primary }]}>Retour</Text>
-          )}
-        </TouchableOpacity>
-        <Text style={[styles.topBarTitle, { color: activeTheme.text.primary }]}>Paramètres</Text>
-        <View style={{ width: Platform.OS === 'ios' ? 70 : 50 }} /> {/* Spacer to help center title */}
-      </View>
+    <View style={styles.container}>
+      {/* ✅ COMMONHEADER - Header standardisé */}
+      <CommonHeader 
+        title="Paramètres"
+        onBackPress={() => router.back()}
+      />
 
       {/* Theme Selection Section */}
       <View style={styles.sectionContainer}>
-        <Text style={[styles.sectionTitle, { color: activeTheme.text.secondary }]}>Thème (Actuel: {currentThemeDisplay})</Text>
-        <View style={[styles.themeButtonsContainer, { borderColor: activeTheme.border }]}>
+        <Text style={styles.sectionTitle}>Thème (Actuel: {currentThemeDisplay})</Text>
+        <View style={styles.themeButtonsContainer}>
           {(['light', 'dark', 'system'] as ThemeMode[]).map((modeOption) => (
             <TouchableOpacity
               key={modeOption}
@@ -114,7 +103,7 @@ const SettingsScreen = () => {
                 { backgroundColor: themeMode === modeOption ? activeTheme.primary : activeTheme.surface },
                 modeOption === 'light' ? styles.themeButtonLeft : {},
                 modeOption === 'system' ? styles.themeButtonRight : {},
-                modeOption !== 'system' ? { borderRightWidth: 1 } : {}
+                modeOption !== 'system' ? { borderRightWidth: 1, borderRightColor: activeTheme.border } : {}
               ]}
               onPress={() => setThemeMode(modeOption)}
             >
@@ -130,163 +119,51 @@ const SettingsScreen = () => {
       </View>
 
       <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, borderTopColor: activeTheme.border}] }
-        onPress={() => router.push('/(stack)/containers')}
+        style={[styles.menuItem, { borderTopColor: activeTheme.border, borderTopWidth: 1 }]}
+        onPress={() => router.push('/container')}
       >
         <Icon name="inbox" size={24} color={activeTheme.primary} />
-        <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Gérer les containers</Text>
+        <Text style={styles.menuText}>Gérer les containers</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
-        onPress={() => router.push('/(stack)/categories')}
+        style={styles.menuItem}
+        onPress={() => router.push('/category')}
       >
         <Icon name="category" size={24} color={activeTheme.primary} />
-        <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Gérer les catégories</Text>
+        <Text style={styles.menuText}>Gérer les catégories</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
-        onPress={() => router.push('/(stack)/labels')}
+        style={styles.menuItem}
+        onPress={() => router.push('/labels')}
       >
         <Icon name="label" size={24} color={activeTheme.primary} />
-        <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Générer des étiquettes</Text>
+        <Text style={styles.menuText}>Générer des étiquettes</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border}] }
-        onPress={() => router.push('/(stack)/multi-receipt')}
+        style={styles.menuItem}
+        onPress={() => router.push('/multi-receipt')}
       >
         <Icon name="receipt" size={24} color={activeTheme.primary} />
-        <Text style={[styles.menuText, { color: activeTheme.text.primary }]}>Facture multi-articles</Text>
+        <Text style={styles.menuText}>Facture multi-articles</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.menuItem, { backgroundColor: activeTheme.surface, borderBottomColor: activeTheme.border, borderTopColor: activeTheme.border, marginTop: 20 }]} 
+        style={[styles.menuItem, styles.dangerItem]}
         onPress={handleLogout}
       >
         <Icon name="logout" size={24} color={activeTheme.danger.main} />
-        <Text style={[styles.menuText, { color: activeTheme.danger.main }]}>Se déconnecter</Text>
+        <Text style={[styles.menuText, styles.dangerText]}>Se déconnecter</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    // backgroundColor will be set by activeTheme
-  },
-  topBar: {
-    height: Platform.OS === 'ios' ? 44 : 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    // backgroundColor and borderBottomColor will be set by activeTheme
-    borderBottomWidth: 1,
-    // marginTop sera défini dynamiquement avec useSafeAreaInsets
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 0,
-    minWidth: Platform.OS === 'ios' ? 70 : 50,
-    justifyContent: 'flex-start',
-  },
-  backButtonText: {
-    fontSize: 17,
-    // color will be set by activeTheme
-    marginLeft: Platform.OS === 'ios' ? 6 : 0,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    // backgroundColor and borderBottomColor will be set by activeTheme
-  },
-  menuText: {
-    flex: 1,
-    marginLeft: 16,
-    fontSize: 16,
-    // color will be set by activeTheme
-  },
-  dangerItem: {
-    marginTop: 24,
-    borderTopWidth: 1,
-    // borderTopColor: theme.colors.border,
-    // backgroundColor: theme.colors.danger.background,
-  },
-  dangerText: {
-    // color: theme.colors.danger.text,
-    fontWeight: '500',
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 16,
-    // color will be set by activeTheme
-  },
-  topBarTitle: {
-    fontSize: 17,
-    fontWeight: Platform.OS === 'ios' ? '600' : '500',
-    // color will be set by activeTheme
-    textAlign: 'center',
-    flex: 1,
-    marginHorizontal: 10,
-  },
-  sectionContainer: {
-    marginTop: 20,
-    marginBottom: 10,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12,
-    // color will be set by activeTheme
-  },
-  themeButtonsContainer: {
-    flexDirection: 'row',
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-    // borderColor will be set by activeTheme
-  },
-  themeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // backgroundColor will be set by activeTheme and selection state
-    borderRightWidth: 1,
-    // borderRightColor will be set by activeTheme.colors.border
-  },
-  themeButtonLeft: {
-    borderTopLeftRadius: 7,
-    borderBottomLeftRadius: 7,
-  },
-  themeButtonRight: {
-    borderTopRightRadius: 7,
-    borderBottomRightRadius: 7,
-    borderRightWidth: 0,
-  },
-  themeButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    // color will be set by activeTheme and selection state
-  },
-});
 
 export default SettingsScreen;

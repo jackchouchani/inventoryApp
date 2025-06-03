@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useDispatch } from 'react-redux';
 import { database } from '../../src/database/database';
 import { addNewCategory } from '../../src/store/categorySlice';
@@ -10,6 +10,7 @@ import * as Sentry from '@sentry/react-native';
 
 export default function AddCategoryScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams();
   const dispatch = useDispatch();
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +42,13 @@ export default function AddCategoryScreen() {
         text1: 'Succès',
         text2: 'Catégorie créée avec succès'
       });
-      router.back();
+      
+      // Navigation modernisée avec Expo Router
+      if (returnTo && typeof returnTo === 'string') {
+        router.replace(returnTo);
+      } else {
+        router.back();
+      }
     } catch (error) {
       Sentry.captureException(error, {
         extra: {
@@ -59,9 +66,18 @@ export default function AddCategoryScreen() {
     }
   };
 
+  const handleCancel = () => {
+    if (returnTo && typeof returnTo === 'string') {
+      router.replace(returnTo);
+    } else {
+      router.back();
+    }
+  };
+
   return (
     <CategoryForm
       onSubmit={handleSubmit}
+      onCancel={handleCancel}
       submitButtonText="Ajouter"
       title="Nouvelle catégorie"
       loading={loading}

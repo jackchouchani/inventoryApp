@@ -20,15 +20,15 @@ export default function ItemEditScreen() {
   const { item, isLoading: isLoadingItem, error: errorItem } = useItem(id ? Number(id) : null);
 
   const handleSuccess = () => {
-    console.log('[ItemEditScreen] Succès de la modification, retour vers stock');
-    // Après succès, retourner vers l'écran stock
-    router.replace('/stock');
+    console.log('[ItemEditScreen] Succès de la modification, retour vers la page info');
+    // Après succès, retourner vers la page info de l'article
+    router.replace(`/item/${id}/info`);
   };
 
   const handleCancel = () => {
-    console.log('[ItemEditScreen] Annulation, retour à la page précédente');
-    // Retourner à la page précédente
-    router.back();
+    console.log('[ItemEditScreen] Annulation, retour vers la page info');
+    // Retourner vers la page info de l'article
+    router.replace(`/item/${id}/info`);
   };
 
   // Loading state - attendre que toutes les données soient chargées

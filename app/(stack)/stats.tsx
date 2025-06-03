@@ -1,33 +1,43 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
-import { Icon } from '../../src/components';
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStats } from '../../src/hooks/useStats';
-import { StatsChart } from '../../src/components/StatsChart';
-import { formatCurrency } from '../../src/utils/formatters';
-import { ErrorBoundary } from '../../src/components/ErrorBoundary';
+import { Stack } from 'expo-router';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useAppTheme } from '../../src/contexts/ThemeContext';
 
-import { Stack } from 'expo-router';
+// ✅ STYLEFACTORY selon stylefactory-optimization.mdc
+import StyleFactory from '../../src/styles/StyleFactory';
+
+import { CommonHeader } from '../../src/components';
+import { useStats } from '../../src/hooks/useStats';
+import { useDashboardData } from '../../src/hooks/useOptimizedSelectors';
+import { StatsChart } from '../../src/components/StatsChart';
+import CategoryPieChart from '../../src/components/CategoryPieChart';
+import ContainerBarChart from '../../src/components/ContainerBarChart';
+import { formatCurrency } from '../../src/utils/formatters';
+import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import PeriodSelector from '../../src/components/PeriodSelector';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
 
 const StatsScreen = () => {
   const { activeTheme } = useAppTheme();
+  const router = useRouter();
+  
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
     y: 0,
     visible: false,
-    // Stocker l'index du point cliqué
     dataPointIndex: null as number | null
   });
   
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+  // ✅ STYLEFACTORY - Récupération des styles mis en cache
+  const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
+  
   const { stats, monthlyStats, isLoading, error } = useStats(selectedPeriod);
+
+  // Hook pour les données de containers
+  const { itemsByContainer } = useDashboardData();
 
   // Reset tooltip function
   const resetTooltip = useCallback(() => {
@@ -51,9 +61,6 @@ const StatsScreen = () => {
       dataPointIndex: index,
     });
   }, []);
-
-  // Créer les styles dynamiques basés sur le thème
-  const styles = createStyles(activeTheme);
 
   if (isLoading) {
     return (
@@ -101,15 +108,10 @@ const StatsScreen = () => {
       <View style={styles.container}>
         <Stack.Screen options={{ title: 'Statistiques' }} />
 
-        <View style={[styles.topBar, { marginTop: Platform.OS === 'ios' ? insets.top : 0 }]}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.push('/(tabs)/stock')}
-          >
-            <Icon name="arrow_back_ios" size={18} color={activeTheme.primary} />
-            <Text style={styles.backButtonText}>Retour</Text>
-          </TouchableOpacity>
-        </View>
+        <CommonHeader 
+          title="Statistiques"
+          onBackPress={() => router.back()}
+        />
 
         <ScrollView style={styles.content}>
           <View style={styles.section}>
@@ -134,19 +136,19 @@ const StatsScreen = () => {
             <Text style={styles.sectionTitle}>Résumé Financier Global</Text>
             <View style={styles.financialStats}>
               <View style={styles.financialRow}>
-                <Text style={styles.financialLabel}>Valeur d'Achat Totale:</Text>
+                <Text style={styles.financialLabel}>Valeur d'Achat Totale (tous articles):</Text>
                 <Text style={styles.financialValue}>
                   {formatCurrency(stats?.totalPurchaseValue || 0)}
                 </Text>
               </View>
               <View style={styles.financialRow}>
-                <Text style={styles.financialLabel}>Valeur de Vente Totale:</Text>
+                <Text style={styles.financialLabel}>Valeur de Vente Totale (tous articles):</Text>
                 <Text style={styles.financialValue}>
                   {formatCurrency(stats?.totalSellingValue || 0)}
                 </Text>
               </View>
               <View style={styles.financialRow}>
-                <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Bénéfice Total:</Text>
+                <Text style={[styles.financialLabel, styles.totalProfitLabel]}>Bénéfice Potentiel Total:</Text>
                 <Text style={[styles.financialValue, styles.totalProfitValue]}>
                   {formatCurrency(stats?.totalProfit || 0)}
                 </Text>
@@ -198,275 +200,110 @@ const StatsScreen = () => {
               ) : (
                 monthlyStats.revenue.length > 0 ? (
                   <>
-                    <Text style={styles.totalText}>Total CA Période: {formatCurrency(totalCA_periode)}</Text>
-                    <Text style={styles.totalText}>Total Marge Période: {formatCurrency(totalMarge_periode)}</Text>
+                    <Text style={styles.totalText}>CA: {formatCurrency(totalCA_periode)}</Text>
+                    <Text style={styles.totalText}>Bénéfice: {formatCurrency(totalMarge_periode)}</Text>
                   </>
                 ) : (
-                  <Text style={styles.noDataText}>Aucune donnée de vente pour cette période.</Text>
+                  <Text style={styles.noDataText}>Aucune donnée pour cette période</Text>
                 )
               )}
             </View>
           </View>
 
+          {/* Section Statistiques par Catégories */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Performance par Catégorie</Text>
-            {stats?.categoryStats.map((catStat: typeof stats.categoryStats[0], _index: number) => (
-              <View key={catStat.categoryId} style={styles.categoryRow}>
-                <View style={styles.categoryNameContainer}>
-                  <Text style={styles.categoryName}>{catStat.categoryName}</Text>
-                  <Text style={styles.itemCount}>{catStat.itemCount} articles</Text>
+            <Text style={styles.sectionTitle}>Statistiques par Catégories</Text>
+            {stats?.categoryStats && stats.categoryStats.length > 0 ? (
+              <CategoryPieChart data={stats.categoryStats} height={220} />
+            ) : (
+              <Text style={styles.noDataText}>Aucune donnée de catégorie disponible</Text>
+            )}
+          </View>
+
+          {/* Section Statistiques par Containers */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Statistiques par Containers</Text>
+            {itemsByContainer && itemsByContainer.length > 0 ? (
+              <ContainerBarChart data={itemsByContainer} height={280} />
+            ) : (
+              <Text style={styles.noDataText}>Aucune donnée de container disponible</Text>
+            )}
+          </View>
+
+          {/* Section Articles Top/Flop */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Articles Performance</Text>
+            
+            {/* Meilleur article */}
+            {stats?.bestSellingItem && (
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Text style={styles.performanceTitle}>🏆 Article le plus rentable</Text>
                 </View>
-                <View style={styles.categoryStats}>
-                  <View style={styles.categoryStatItem}>
-                    <Text style={styles.categoryStatLabel}>Chiffre d'affaires</Text>
-                    <Text style={styles.categoryValue}>
-                      {formatCurrency(catStat.totalProfit)}
+                <View style={styles.performanceContent}>
+                  <Text style={styles.performanceName}>{stats.bestSellingItem.name}</Text>
+                  <View style={styles.performanceStats}>
+                    <Text style={styles.performanceProfit}>
+                      Bénéfice: {formatCurrency(stats.bestSellingItem.profit)}
                     </Text>
-                  </View>
-                  <View style={styles.categoryStatItem}>
-                    <Text style={styles.categoryStatLabel}>Marge</Text>
-                    <Text style={styles.categoryMargin}>
-                      {catStat.averageMargin.toFixed(1)}%
+                    <Text style={styles.performanceMargin}>
+                      Marge: {stats.bestSellingItem.margin.toFixed(1)}%
                     </Text>
                   </View>
                 </View>
               </View>
-            ))}
+            )}
+
+            {/* Pire article */}
+            {stats?.worstSellingItem && (
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Text style={styles.performanceTitle}>📉 Article le moins rentable</Text>
+                </View>
+                <View style={styles.performanceContent}>
+                  <Text style={styles.performanceName}>{stats.worstSellingItem.name}</Text>
+                  <View style={styles.performanceStats}>
+                    <Text style={styles.performanceProfit}>
+                      Bénéfice: {formatCurrency(stats.worstSellingItem.profit)}
+                    </Text>
+                    <Text style={styles.performanceMargin}>
+                      Marge: {stats.worstSellingItem.margin.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Moyennes globales */}
+            {stats && (
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Text style={styles.performanceTitle}>📊 Moyennes Globales</Text>
+                </View>
+                <View style={styles.performanceContent}>
+                  <View style={styles.averageRow}>
+                    <Text style={styles.averageLabel}>Bénéfice moyen par article:</Text>
+                    <Text style={styles.averageValue}>{formatCurrency(stats.averageProfit)}</Text>
+                  </View>
+                  <View style={styles.averageRow}>
+                    <Text style={styles.averageLabel}>Marge moyenne:</Text>
+                    <Text style={styles.averageValue}>{stats.averageMarginPercentage.toFixed(1)}%</Text>
+                  </View>
+                  <View style={styles.averageRow}>
+                    <Text style={styles.averageLabel}>Taux de vente:</Text>
+                    <Text style={styles.averageValue}>
+                      {stats.totalItems > 0 ? ((stats.soldItems / stats.totalItems) * 100).toFixed(1) : 0}%
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
+
         </ScrollView>
       </View>
     </ErrorBoundary>
   );
 };
-
-const createStyles = (theme: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  topBar: {
-    height: Platform.OS === 'ios' ? 44 : 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: theme.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    marginLeft: -8,
-  },
-  backButtonText: {
-    fontSize: 17,
-    color: theme.primary,
-    marginLeft: -4,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.background,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: theme.background,
-  },
-  errorText: {
-    color: theme.error,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  content: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  section: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    backgroundColor: theme.background,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    color: theme.text.primary,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.primary,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: theme.text.secondary,
-    marginTop: 4,
-  },
-  financialStats: {
-    gap: 12,
-    marginBottom: 16,
-  },
-  financialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  financialLabel: {
-    fontSize: 14,
-    color: theme.text.secondary,
-  },
-  financialValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text.primary,
-  },
-  totalProfitLabel: {
-    color: theme.text.primary,
-    fontWeight: '600',
-  },
-  totalProfitValue: {
-    color: theme.success,
-    fontSize: 18,
-  },
-  periodWrapper: {
-    paddingHorizontal: 16,
-    paddingBottom: 0,
-    paddingTop: 16,
-    width: '100%',
-  },
-  tooltip: {
-    position: 'absolute',
-    backgroundColor: theme.backdrop,
-    padding: 8,
-    borderRadius: 6,
-  },
-  tooltipText: {
-    color: theme.text.inverse,
-    fontSize: 12,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  categoryNameContainer: {
-    flex: 1,
-  },
-  categoryName: {
-    fontSize: 16,
-    color: theme.text.primary,
-    fontWeight: '600',
-  },
-  itemCount: {
-    fontSize: 12,
-    color: theme.text.secondary,
-    marginTop: 4,
-  },
-  categoryStats: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
-  },
-  categoryStatItem: {
-    alignItems: 'flex-end',
-  },
-  categoryStatLabel: {
-    fontSize: 12,
-    color: theme.text.secondary,
-    marginBottom: 4,
-  },
-  categoryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.primary,
-  },
-  categoryMargin: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.success,
-  },
-  tooltipTextDate: {
-    color: theme.text.inverse,
-    fontSize: 10,
-    marginBottom: 4,
-  },
-  tooltipContainer: {
-    backgroundColor: theme.surface,
-    borderRadius: 8,
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-    ...(Platform.OS === 'web' ? {
-      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-    } : {
-      elevation: 3,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-    }),
-  },
-  tooltipTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: theme.text.primary,
-    textAlign: 'center',
-  },
-  tooltipRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: 4,
-  },
-  tooltipLabel: {
-    fontSize: 14,
-    color: theme.text.secondary,
-  },
-  tooltipValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.primary,
-  },
-  totalsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-  },
-  totalText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.text.primary,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: theme.text.secondary,
-  },
-  noDataText: {
-    fontSize: 16,
-    color: theme.text.secondary,
-  },
-});
 
 export default StatsScreen;

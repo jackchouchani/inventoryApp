@@ -1,16 +1,27 @@
 import React from 'react';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
-import { Icon } from '../../../src/components';
+import { Stack, useLocalSearchParams, useRouter, useSegments } from 'expo-router';
+import { CommonHeader } from '../../../src/components';
 import { useAppTheme } from '../../../src/contexts/ThemeContext';
 
 export default function ItemLayout() {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
-  useLocalSearchParams();
+  const { id } = useLocalSearchParams();
+  const segments = useSegments();
 
   const handleGoBack = () => {
-    router.back();
+    const currentPage = segments[segments.length - 1]; // Dernière partie de l'URL
+    
+    if (currentPage === 'edit') {
+      // Depuis la page edit, retourner vers la page info de l'article
+      router.replace(`/item/${id}/info`);
+    } else if (currentPage === 'info') {
+      // Depuis la page info, retourner vers le stock
+      router.replace('/stock');
+    } else {
+      // Cas par défaut
+      router.back();
+    }
   };
 
   return (
@@ -25,10 +36,11 @@ export default function ItemLayout() {
           fontWeight: '600',
           color: activeTheme.text.primary,
         },
-        headerLeft: () => (
-          <TouchableOpacity onPress={handleGoBack} style={{ marginLeft: 8 }}>
-            <Icon name="arrow_back" size={24} color={activeTheme.primary} />
-          </TouchableOpacity>
+        header: ({ options }) => (
+          <CommonHeader 
+            title={options.title}
+            onBackPress={handleGoBack}
+          />
         ),
         animation: 'slide_from_right',
         presentation: 'card',

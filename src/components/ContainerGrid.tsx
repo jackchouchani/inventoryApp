@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, Dimensions } from 'react-native';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import { GridErrorBoundary } from './GridErrorBoundary';
@@ -12,28 +12,77 @@ interface ContainerGridProps {
   onRetry?: () => void;
 }
 
+const { width } = Dimensions.get('window');
+
+// Layout responsive selon la taille d'écran
+const getResponsiveLayout = () => {
+  let numColumns = 2; // Mobile par défaut
+  let cardPadding = 12;
+  let gridPadding = 16;
+  
+  if (width >= 1200) {
+    // Desktop large
+    numColumns = 5;
+    cardPadding = 16;
+    gridPadding = 24;
+  } else if (width >= 900) {
+    // Desktop/Tablet large
+    numColumns = 4;
+    cardPadding = 14;
+    gridPadding = 20;
+  } else if (width >= 600) {
+    // Tablet
+    numColumns = 3;
+    cardPadding = 12;
+    gridPadding = 16;
+  }
+  
+  const cardMargin = 8;
+  const availableWidth = width - (gridPadding * 2) - (cardMargin * (numColumns - 1));
+  const cardWidth = availableWidth / numColumns;
+  
+  return {
+    numColumns,
+    cardWidth,
+    cardPadding,
+    gridPadding,
+    cardMargin
+  };
+};
+
 const ContainerCard = React.memo(({ 
   container, 
   itemCount, 
   onPress,
-  activeTheme
+  activeTheme,
+  layout
 }: { 
   container: Container; 
   itemCount: number; 
   onPress: () => void;
   activeTheme: any;
+  layout: any;
 }) => {
-  const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
+  const styles = useMemo(() => getCardStyles(activeTheme, layout), [activeTheme, layout]);
   
   return (
     <TouchableOpacity
       style={styles.containerCard}
       onPress={onPress}
     >
-      <Text style={styles.containerName} numberOfLines={2}>
-        {container.name}
-      </Text>
-      <Text style={styles.containerNumber}>#{container.number}</Text>
+      <View style={styles.cardHeader}>
+        <Text style={styles.containerName} numberOfLines={2}>
+          {container.name}
+        </Text>
+        <Text style={styles.containerNumber}>#{container.number}</Text>
+      </View>
+      
+      {container.description && (
+        <Text style={styles.containerDescription} numberOfLines={2}>
+          {container.description}
+        </Text>
+      )}
+      
       <View style={styles.statsContainer}>
         <Text style={styles.itemCount}>
           {itemCount} article{itemCount > 1 ? 's' : ''}
@@ -52,6 +101,22 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
   const { activeTheme } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
+  const [layout, setLayout] = useState(getResponsiveLayout);
+
+  // Recalculer le layout lors du changement de taille
+  useEffect(() => {
+    const handleResize = () => {
+      setLayout(getResponsiveLayout());
+    };
+    
+    // Écouter les changements de dimensions (Web)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
+  const styles = useMemo(() => getGridStyles(activeTheme, layout), [activeTheme, layout]);
 
   useEffect(() => {
     setForceUpdate(prev => prev + 1);
@@ -90,9 +155,10 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
         itemCount={itemCount}
         onPress={() => container.id && onContainerPress(container.id)}
         activeTheme={activeTheme}
+        layout={layout}
       />
     );
-  }, [getItemCount, onContainerPress, activeTheme]);
+  }, [getItemCount, onContainerPress, activeTheme, layout]);
 
   const keyExtractor = useCallback((item: Container) => 
     `container-${item.id}`, []);
@@ -102,14 +168,15 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
       data={containers}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      numColumns={2}
-      contentContainerStyle={getThemedStyles(activeTheme).grid}
-      columnWrapperStyle={getThemedStyles(activeTheme).row}
-      initialNumToRender={8}
-      maxToRenderPerBatch={4}
+      numColumns={layout.numColumns}
+      key={`${layout.numColumns}-${forceUpdate}`} // Force re-render quand numColumns change
+      contentContainerStyle={styles.grid}
+      columnWrapperStyle={layout.numColumns > 1 ? styles.gridRow : null}
+      initialNumToRender={12}
+      maxToRenderPerBatch={8}
       windowSize={5}
       removeClippedSubviews={true}
-      extraData={[containers.length, forceUpdate]}
+      extraData={[containers.length, forceUpdate, layout.numColumns]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -131,42 +198,54 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
   );
 };
 
-const { width } = Dimensions.get('window');
-const CARD_MARGIN = 8;
-const CARD_WIDTH = (width - (CARD_MARGIN * 6)) / 2;
-
-const getThemedStyles = (theme: any) => StyleSheet.create({
+const getGridStyles = (theme: any, layout: any) => StyleSheet.create({
   grid: {
-    padding: CARD_MARGIN,
+    padding: layout.gridPadding,
     flexGrow: 1,
   },
-  row: {
+  gridRow: {
     justifyContent: 'space-between',
-    marginBottom: CARD_MARGIN,
+    marginBottom: layout.cardMargin,
   },
+});
+
+const getCardStyles = (theme: any, layout: any) => StyleSheet.create({
   containerCard: {
-    width: CARD_WIDTH,
+    width: layout.cardWidth,
+    minHeight: 140,
     backgroundColor: theme.surface,
     borderRadius: 12,
-    padding: 16,
-    margin: CARD_MARGIN,
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
-    minHeight: 120,
-    justifyContent: 'space-between',
-    borderColor: theme.border,
+    padding: layout.cardPadding,
+    marginVertical: 4,
     borderWidth: 1,
+    borderColor: theme.border,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    marginBottom: 8,
   },
   containerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: layout.numColumns >= 4 ? 14 : 16,
+    fontWeight: '700',
+    marginBottom: 4,
     color: theme.text.primary,
+    textAlign: 'left',
   },
   containerNumber: {
-    fontSize: 14,
+    fontSize: layout.numColumns >= 4 ? 12 : 14,
+    color: theme.text.secondary,
+    fontWeight: '500',
+  },
+  containerDescription: {
+    fontSize: layout.numColumns >= 4 ? 11 : 12,
     color: theme.text.secondary,
     marginBottom: 8,
+    lineHeight: 16,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -175,7 +254,7 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     marginTop: 'auto',
   },
   itemCount: {
-    fontSize: 14,
+    fontSize: layout.numColumns >= 4 ? 12 : 14,
     color: theme.primary,
     fontWeight: '600',
   },

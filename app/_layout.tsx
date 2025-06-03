@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { View, ActivityIndicator, Platform } from "react-native";
+import { View, ActivityIndicator, Platform, Text } from "react-native";
 import { Slot, SplashScreen, router, useSegments } from "expo-router";
 import { Provider } from "react-redux";
 import { store } from "../src/store/store";
@@ -10,6 +10,7 @@ import { DataLoader } from '../src/components/DataLoader';
 import UpdateNotification from '../src/components/UpdateNotification';
 import * as Sentry from '@sentry/react-native';
 import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
+import { usePWAServiceWorker } from '../src/hooks/usePWAServiceWorker';
 
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
@@ -35,6 +36,112 @@ const toastConfig = {
     />
   )
 };
+
+// Hook pour gérer le cycle de vie PWA
+function usePWALifecycle() {
+  const [appWasHidden, setAppWasHidden] = useState(false);
+  const [reactivationCount, setReactivationCount] = useState(0);
+  const lastActiveTime = useRef(Date.now());
+  const { isServiceWorkerReady, sendMessage, lastReactivation } = usePWAServiceWorker();
+  
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const handleVisibilityChange = () => {
+      const now = Date.now();
+      const timeSinceLastActive = now - lastActiveTime.current;
+      
+      if (document.hidden) {
+        // App devient invisible
+        console.log('🔒 App devient invisible');
+        lastActiveTime.current = now;
+      } else {
+        // App redevient visible
+        console.log('👁️ App redevient visible, inactivité:', timeSinceLastActive / 1000, 's');
+        
+        // Si l'app était cachée plus de 30 secondes, marquer pour rafraîchissement
+        if (timeSinceLastActive > 30000) {
+          console.log('⚠️ Longue inactivité détectée, marquage pour rafraîchissement');
+          setAppWasHidden(true);
+          setReactivationCount(prev => prev + 1);
+          
+          // Déclencher un rafraîchissement des données critiques
+          setTimeout(() => {
+            console.log('🔄 Rafraîchissement automatique après inactivité');
+            // Dispatch d'actions Redux pour recharger les données
+            try {
+              store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
+              store.dispatch({ type: 'categories/fetchCategories' });
+              store.dispatch({ type: 'containers/fetchContainers' });
+            } catch (error) {
+              console.error('Erreur lors du rafraîchissement automatique:', error);
+            }
+            setAppWasHidden(false);
+          }, 1000);
+        }
+        lastActiveTime.current = now;
+      }
+    };
+
+    const handleFocus = () => {
+      console.log('🎯 Focus window détecté');
+      lastActiveTime.current = Date.now();
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      console.log('📄 Page show détecté, persisted:', event.persisted);
+      if (event.persisted) {
+        // Page restaurée depuis le cache bfcache
+        console.log('🔄 Page restaurée depuis bfcache, rafraîchissement forcé');
+        setAppWasHidden(true);
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
+      }
+    };
+
+    const handlePWAReactivation = (event: CustomEvent) => {
+      console.log('🔄 Réactivation PWA détectée via Service Worker');
+      setReactivationCount(prev => prev + 1);
+      setAppWasHidden(true);
+      
+      // Rafraîchir les données après réactivation
+      setTimeout(() => {
+        try {
+          store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
+          store.dispatch({ type: 'categories/fetchCategories' });
+          store.dispatch({ type: 'containers/fetchContainers' });
+        } catch (error) {
+          console.error('Erreur lors du rafraîchissement post-réactivation:', error);
+        }
+        setAppWasHidden(false);
+      }, 1500);
+    };
+
+    // Écouter les événements de cycle de vie
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('pwa-reactivated', handlePWAReactivation as EventListener);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('pwa-reactivated', handlePWAReactivation as EventListener);
+    };
+  }, [isServiceWorkerReady]);
+
+  // Réagir aux réactivations détectées par le service worker
+  useEffect(() => {
+    if (lastReactivation) {
+      console.log('🔄 Réactivation détectée par SW à:', lastReactivation);
+      setReactivationCount(prev => prev + 1);
+    }
+  }, [lastReactivation]);
+
+  return { appWasHidden, reactivationCount };
+}
 
 // Root Layout avec providers essentiels
 export default function RootLayout() {
@@ -109,6 +216,11 @@ function RootLayoutContent() {
   const [isReady, setIsReady] = useState(false);
   const segments = useSegments();
   const { activeTheme } = useAppTheme();
+  const { appWasHidden, reactivationCount } = usePWALifecycle();
+  
+  // Timeout de sécurité pour éviter les blocages infinis
+  const loadingTimeoutRef = useRef<NodeJS.Timeout>();
+  const [forceReady, setForceReady] = useState(false);
   
   // Utilisation d'une référence pour stocker l'état précédent et éviter les redirections en boucle
   const prevStateRef = useRef<PrevStateRefType>({ 
@@ -125,8 +237,39 @@ function RootLayoutContent() {
     
     return () => {
       prevStateRef.current.mounted = false;
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
     };
   }, []);
+
+  // Timeout de sécurité pour éviter les blocages de chargement
+  useEffect(() => {
+    if (isLoading && !forceReady) {
+      // Timeout de 10 secondes pour forcer la sortie du loading
+      loadingTimeoutRef.current = setTimeout(() => {
+        console.warn('⚠️ Timeout de chargement atteint, forçage de l\'état ready');
+        setForceReady(true);
+        
+        // Essayer de recharger la page en dernier recours
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          console.log('🔄 Rechargement forcé de la page après timeout');
+          window.location.reload();
+        }
+      }, 10000);
+    } else {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = undefined;
+      }
+    }
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, [isLoading, forceReady]);
 
   // Fonction de redirection sécurisée
   const safeNavigate = useCallback((route: string) => {
@@ -164,12 +307,12 @@ function RootLayoutContent() {
       setTimeout(() => {
         prevStateRef.current.isRedirecting = false;
       }, 500);
-    }, 150); // Légère augmentation du délai
+    }, 150);
   }, [segments]);
 
   // Masquer le splash screen une fois prêt
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading || forceReady) {
       // Masquer le splash screen immédiatement
       const hideSplash = async () => {
         try {
@@ -187,12 +330,12 @@ function RootLayoutContent() {
       
       hideSplash();
     }
-  }, [isLoading]);
+  }, [isLoading, forceReady]);
 
   // Gérer les redirections uniquement quand tout est prêt
   useEffect(() => {
     // Ne rien faire si pas prêt
-    if (isLoading || !isReady || !prevStateRef.current.mounted) {
+    if ((isLoading && !forceReady) || !isReady || !prevStateRef.current.mounted) {
       return;
     }
     
@@ -251,16 +394,28 @@ function RootLayoutContent() {
           safeNavigate('/(tabs)/stock');
         }
       }
-    }, 300); // Attendre 300ms pour être sûr que tout est bien monté
+    }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [user, segments, isLoading, isReady, safeNavigate]);
+  }, [user, segments, isLoading, isReady, forceReady, safeNavigate]);
 
   // Afficher un loader pendant le chargement initial
-  if (isLoading || !isReady) {
+  if ((isLoading && !forceReady) || !isReady) {
     return (
       <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={activeTheme.primary} />
+        {appWasHidden && (
+          <View style={{ marginTop: 20, alignItems: 'center' }}>
+            <Text style={{ color: activeTheme.text.secondary, fontSize: 14 }}>
+              Synchronisation en cours...
+            </Text>
+            {reactivationCount > 0 && (
+              <Text style={{ color: activeTheme.text.secondary, fontSize: 12, marginTop: 4 }}>
+                Réactivation #{reactivationCount}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     );
   }
