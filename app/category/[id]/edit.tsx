@@ -7,7 +7,8 @@ import { CategoryForm, type CategoryFormData } from '../../../src/components/Cat
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
 import type { MaterialIconName } from '../../../src/types/icons';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../src/contexts/ThemeContext';
 import { Icon } from '../../../src/components';
 import StyleFactory from '../../../src/styles/StyleFactory';
@@ -75,20 +76,26 @@ export default function EditCategoryScreen() {
   // Gestion du cas où la catégorie n'existe pas
   if (!categoryId || isNaN(categoryId)) {
     return (
-      <View style={styles.errorContainer}>
+      <SafeAreaView style={[
+        styles.errorContainer, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
         <Icon name="error" size={48} color={activeTheme.danger.main} />
         <Text style={styles.errorTitle}>ID de catégorie invalide</Text>
         <Text style={styles.errorText}>L'ID fourni n'est pas valide</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!category) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={[
+        styles.loadingContainer, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
         <ActivityIndicator size="large" color={activeTheme.primary} />
         <Text style={styles.loadingText}>Chargement de la catégorie...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 

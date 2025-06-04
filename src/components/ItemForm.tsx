@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { database, Category, Container } from '../database/database';
-import { useRefreshStore } from '../store/refreshStore';
 import { generateId } from '../utils/identifierManager';
-import { addItem } from '../store/itemsActions';
 import { AppDispatch } from '../store/store';
-import { fetchItems } from '../store/itemsThunks';
+import { createItem } from '../store/itemsThunks';
+import type { Category } from '../types/category';
+import type { Container } from '../types/container';
 import { Icon } from '../../src/components';
 import type { MaterialIconName } from '../types/icons';
 import AdaptiveImage from './AdaptiveImage';
 import { handleError } from '../utils/errorHandler';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { FallbackProps } from 'react-error-boundary';
-import type { Item, ItemInput } from '../types/item';
+import type { Item } from '../types/item';
 import { usePhoto } from '../hooks/usePhoto';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { checkPhotoPermissions } from '../utils/permissions';
@@ -311,7 +310,6 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
     const dispatch = useDispatch<AppDispatch>();
-    const triggerRefresh = useRefreshStore(state => state.triggerRefresh);
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
     const { uploadPhoto } = usePhoto();
     const router = useRouter();
@@ -387,60 +385,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
         return errors;
     }, [item]);
 
-    /**
-     * Fonction pour l'ajout d'un item avec Redux
-     */
-    const addItemToDatabase = useCallback(async (formData: ItemFormState) => {
-        try {
-            const qrCode = generateId('ITEM');
-            const uploadedUrl = formData.photo_storage_url;
-            
-            // Assurer que categoryId n'est pas null (mais peut être undefined)
-            const categoryId = formData.categoryId || undefined;
-            
-            const data: ItemInput = {
-                name: formData.name.trim(),
-                description: formData.description.trim(),
-                purchasePrice: parseFloat(formData.purchasePrice),
-                sellingPrice: parseFloat(formData.sellingPrice),
-                status: formData.status,
-                photo_storage_url: uploadedUrl,
-                containerId: formData.containerId || null,
-                categoryId, // Utilisez la version sans null
-                qrCode
-            };
-            
-            // Réelle insertion en base de données
-            const itemId = await database.addItem(data);
-            
-            // Créer un objet Item à partir de ItemInput pour le dispatch
-            const itemForRedux: Item = {
-                ...data,
-                id: itemId,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            
-            // Dispatch pour le store Redux
-            dispatch(addItem(itemForRedux));
-            
-            // Rafraîchir les données Redux
-            await dispatch(fetchItems({ page: 0, limit: 1000 }));
-            triggerRefresh();
-            
-            resetForm();
-            onSuccess?.();
-            
-            return itemId;
-        } catch (error) {
-            console.error('Error in addItemToDatabase:', error);
-            handleError(error, 'Erreur lors de l\'ajout de l\'article', {
-                source: 'addItemToDatabase',
-                showAlert: true
-            });
-            throw error;
-        }
-    }, [dispatch, triggerRefresh, resetForm, onSuccess]);
+
 
     // Ajouter une fonction pour la sélection d'image directement comme dans ItemEditForm
     const handleImagePreview = useCallback(async () => {
@@ -566,24 +511,22 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
             const sellingPrice = parseFloat(item.sellingPrice);
 
             // Assurer que categoryId n'est pas null (mais peut être undefined)
-            const categoryId = item.categoryId || undefined;
+            const categoryId = item.categoryId || 1; // Fallback vers une catégorie par défaut
 
-            const data: ItemInput = {
+            // ✅ UTILISER REDUX THUNK directement
+            await dispatch(createItem({
                 name: item.name.trim(),
                 description: item.description.trim(),
-                purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice, // Gérer les NaN
-                sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,   // Gérer les NaN
-                status: item.status,
-                photo_storage_url: photoStorageUrl, // Stocker le nom de fichier R2 (string | undefined)
+                purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
+                sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+                categoryId,
                 containerId: item.containerId || null,
-                categoryId, // Utilisez la version sans null
-                qrCode: generateId('ITEM') // Générer le QR Code ici
-            };
+                qrCode: generateId('ITEM'),
+                photo_storage_url: photoStorageUrl
+            })).unwrap();
 
-            console.log("[ItemForm] handleSubmit - Données à ajouter:", JSON.stringify(data, null, 2));
-
-            // Utilisation directe de addItemToDatabase
-            await addItemToDatabase(data as unknown as ItemFormState);
+            resetForm();
+            onSuccess?.();
 
         } catch (error) {
             console.error("[ItemForm] handleSubmit - Erreur générale lors de la sauvegarde:", error);

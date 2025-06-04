@@ -2,8 +2,9 @@ import React from 'react';
 import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ItemEditForm } from '../../../src/components/ItemEditForm';
-import { useCategories } from '../../../src/hooks/useCategories';
-import { useContainers } from '../../../src/hooks/useContainers';
+import { useAllCategories, useAllContainers } from '../../../src/hooks/useOptimizedSelectors';
+import { useCategoriesOptimized as useCategories } from '../../../src/hooks/useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from '../../../src/hooks/useContainersOptimized';
 import { useItem } from '../../../src/hooks/useItem';
 import { Icon } from '../../../src/components';
 import { TouchableOpacity } from 'react-native';
@@ -14,10 +15,17 @@ export default function ItemEditScreen() {
   const { id } = useLocalSearchParams();
   const { activeTheme } = useAppTheme();
   
-  // Utiliser les hooks Redux pour toutes les données
-  const { categories, isLoading: isLoadingCategories, error: errorCategories } = useCategories();
-  const { data: containers, isLoading: isLoadingContainers, error: errorContainers } = useContainers();
+  // Utiliser les hooks optimisés pour forcer le chargement des données
+  useCategories(); // Force le chargement des categories
+  useContainers(); // Force le chargement des containers
+  
+  // Puis récupérer les données depuis les sélecteurs
+  const categories = useAllCategories();
+  const containers = useAllContainers();
   const { item, isLoading: isLoadingItem, error: errorItem } = useItem(id ? Number(id) : null);
+
+  console.log('[ItemEditScreen] Categories loaded:', categories?.length);
+  console.log('[ItemEditScreen] Containers loaded:', containers?.length);
 
   const handleSuccess = () => {
     console.log('[ItemEditScreen] Succès de la modification, retour vers la page info');
@@ -31,8 +39,8 @@ export default function ItemEditScreen() {
     router.replace(`/item/${id}/info`);
   };
 
-  // Loading state - attendre que toutes les données soient chargées
-  const isLoading = isLoadingItem || isLoadingCategories || isLoadingContainers;
+  // Loading state - attendre que les données item soient chargées (categories et containers sont toujours disponibles)
+  const isLoading = isLoadingItem;
   
   const styles = getThemedStyles(activeTheme);
   
@@ -46,7 +54,7 @@ export default function ItemEditScreen() {
   }
 
   // Error state
-  const error = errorItem || errorCategories || errorContainers;
+  const error = errorItem;
   if (error || !item) {
     return (
       <View style={styles.centerContent}>

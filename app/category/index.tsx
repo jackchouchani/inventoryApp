@@ -11,7 +11,7 @@ import type { Category } from '../../src/types/category';
 import { Icon, CommonHeader } from '../../src/components';
 import { useRouter } from 'expo-router';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { useCategories } from '../../src/hooks/useCategories';
+import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import { validateCategory } from '../../src/utils/validation';
 import { checkNetworkConnection } from '../../src/utils/networkUtils';
@@ -113,7 +113,7 @@ const CategoryIndexScreen: FC = () => {
   const styles = StyleFactory.getThemedStyles(activeTheme, 'CategoryCard');
   const headerStyles = StyleFactory.getThemedStyles(activeTheme, 'CommonHeader');
 
-  const { categories, isLoading, error, handleDeleteCategory } = useCategories();
+  const { categories, isLoading, error, delete: deleteCategory } = useCategories();
   const [confirmDialog, setConfirmDialog] = useState<{
     visible: boolean;
     category: Category | null;
@@ -173,7 +173,7 @@ const CategoryIndexScreen: FC = () => {
     if (!confirmDialog.category?.id) return;
     
     try {
-      await handleDeleteCategory(confirmDialog.category.id);
+      await deleteCategory(confirmDialog.category.id);
       Toast.show({
         type: 'success',
         text1: 'Succès',
@@ -201,7 +201,7 @@ const CategoryIndexScreen: FC = () => {
         category: null
       });
     }
-  }, [confirmDialog.category, handleDeleteCategory]);
+  }, [confirmDialog.category, deleteCategory]);
 
   const handleCancelDelete = useCallback(() => {
     setConfirmDialog({

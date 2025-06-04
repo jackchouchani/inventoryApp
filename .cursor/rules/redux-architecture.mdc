@@ -249,3 +249,201 @@ npx tsc --noEmit --skipLibCheck | grep -i "react-query\|@tanstack"
 ```
 
 Cette architecture Redux pure garantit une synchronisation cohérente et **élimine définitivement** les conflits de cache entre React Query et Redux.
+
+# Architecture Redux - Accès aux Données
+
+## Principe Fondamental
+
+**JAMAIS d'accès direct à `database` dans les composants ou hooks.**
+
+Toutes les opérations de données DOIVENT passer par Redux thunks et hooks optimisés.
+
+## Hooks Obligatoires
+
+### Pour les Items
+```typescript
+// ✅ CORRECT - Utiliser les hooks optimisés
+import { useStockPageData, useFilteredItems } from '../../src/hooks/useOptimizedSelectors';
+
+const { items, categories, containers, isLoading } = useStockPageData(filters);
+```
+
+### Pour les Categories
+```typescript
+// ✅ CORRECT - Hook optimisé Redux
+import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
+
+const { categories, isLoading, error, create, update, delete } = useCategories();
+```
+
+### Pour les Containers
+```typescript
+// ✅ CORRECT - Hook optimisé Redux
+import { useContainersOptimized as useContainers } from '../../src/hooks/useContainersOptimized';
+
+const { containers, isLoading, error, create, update, delete } = useContainers();
+```
+
+## Thunks Redux Disponibles
+
+### Items - [src/store/itemsThunks.ts](mdc:src/store/itemsThunks.ts)
+```typescript
+import { createItem, updateItem, deleteItem, fetchItems, updateItemStatus } from '../store/itemsThunks';
+
+// Créer un item
+await dispatch(createItem({
+  name: 'Item Name',
+  description: 'Description',
+  purchasePrice: 100,
+  sellingPrice: 150,
+  categoryId: 1,
+  containerId: 2,
+  qrCode: 'ITEM123'
+})).unwrap();
+
+// Mettre à jour un item
+await dispatch(updateItem({
+  id: itemId,
+  updates: { name: 'Nouveau nom', sellingPrice: 200 }
+})).unwrap();
+
+// Supprimer un item
+await dispatch(deleteItem(itemId)).unwrap();
+```
+
+### Categories - [src/store/categoriesThunks.ts](mdc:src/store/categoriesThunks.ts)
+```typescript
+import { createCategory, updateCategory, deleteCategory, fetchCategories } from '../store/categoriesThunks';
+
+// Créer une catégorie
+await dispatch(createCategory({
+  name: 'Nouvelle Catégorie',
+  description: 'Description',
+  icon: 'folder'
+})).unwrap();
+```
+
+### Containers - [src/store/containersThunks.ts](mdc:src/store/containersThunks.ts)
+```typescript
+import { createContainer, updateContainer, deleteContainer, fetchContainers } from '../store/containersThunks';
+
+// Créer un container
+await dispatch(createContainer({
+  name: 'Container Name',
+  description: 'Description',
+  number: 1
+})).unwrap();
+```
+
+## Patterns Obligatoires
+
+### Pattern Dispatch TypeScript
+```typescript
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../store/store';
+
+const Component = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  
+  const handleSubmit = async () => {
+    try {
+      await dispatch(createItem(itemData)).unwrap();
+      // Succès
+    } catch (error) {
+      // Gestion d'erreur
+    }
+  };
+};
+```
+
+### Pattern Hook Optimisé
+```typescript
+// ✅ CORRECT - Une seule récupération de données
+const { items, categories, containers, isLoading } = useStockPageData(filters);
+
+// ❌ ÉVITER - Multiples hooks séparés
+const items = useItems();
+const categories = useCategories(); 
+const containers = useContainers();
+```
+
+## Interdictions Absolues
+
+### ❌ Import Database Direct
+```typescript
+// ❌ INTERDIT - Accès direct database
+import { database } from '../database/database';
+await database.addItem(itemData);
+
+// ✅ CORRECT - Redux thunk
+import { createItem } from '../store/itemsThunks';
+await dispatch(createItem(itemData)).unwrap();
+```
+
+### ❌ Hooks Dépréciés
+```typescript
+// ❌ ÉVITER - Hooks dépréciés
+import { useCategories } from './useCategories';
+import { useContainers } from './useContainers';
+
+// ✅ UTILISER - Hooks optimisés
+import { useCategoriesOptimized as useCategories } from './useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from './useContainersOptimized';
+```
+
+## Services Autorisés
+
+### Exception : Services Spécialisés
+Seuls les services suivants peuvent accéder directement à `database` :
+- [src/services/imageService.ts](mdc:src/services/imageService.ts) - Gestion images R2
+- [src/database/](mdc:src/database) - Couche d'abstraction base de données
+
+## Exemple Complet
+
+### Composant avec Architecture Correcte
+```typescript
+import React, { useCallback } from 'react';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../store/store';
+import { useStockPageData } from '../hooks/useOptimizedSelectors';
+import { updateItemStatus } from '../store/itemsThunks';
+
+const ItemList = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { items, isLoading } = useStockPageData({});
+
+  const handleMarkAsSold = useCallback(async (itemId: number) => {
+    try {
+      await dispatch(updateItemStatus({ 
+        itemId, 
+        status: 'sold',
+        soldDate: new Date().toISOString()
+      })).unwrap();
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  }, [dispatch]);
+
+  if (isLoading) return <Loading />;
+
+  return (
+    <div>
+      {items.map(item => (
+        <ItemCard 
+          key={item.id} 
+          item={item} 
+          onMarkAsSold={() => handleMarkAsSold(item.id)}
+        />
+      ))}
+    </div>
+  );
+};
+```
+
+## Résumé
+
+1. **Utiliser hooks optimisés** : `useStockPageData`, `useCategoriesOptimized`, `useContainersOptimized`
+2. **Utiliser Redux thunks** pour toutes les mutations
+3. **Typer dispatch** avec `AppDispatch`
+4. **Éviter database direct** dans composants/hooks
+5. **Suivre pattern .unwrap()** pour gestion d'erreurs

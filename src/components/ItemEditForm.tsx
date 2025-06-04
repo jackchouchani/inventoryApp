@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform, ActivityIndicator, Image } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { database, Category, Container } from '../database/database';
 import { Icon } from '../../src/components';
-import { deleteItem, updateItem } from '../store/itemsActions';
+import { updateItem, deleteItem } from '../store/itemsThunks';
 import { AppDispatch } from '../store/store';
-import { fetchItems } from '../store/itemsThunks';
+import type { Category } from '../types/category';
+import type { Container } from '../types/container';
 import type { MaterialIconName } from '../types/icons';
 import type { Item } from '../types/item';
 import { validateItemName } from '../utils/validation';
@@ -191,14 +191,6 @@ const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProp
 };
 
 export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
-    console.log('=== DEBUG ITEM EDIT FORM ===');
-    console.log('18. Props reçues dans ItemEditForm:');
-    console.log('  - item brut:', item);
-    console.log('  - item.purchasePrice:', item?.purchasePrice, 'type:', typeof item?.purchasePrice);
-    console.log('  - item.sellingPrice:', item?.sellingPrice, 'type:', typeof item?.sellingPrice);
-    console.log('  - item.containerId:', item?.containerId, 'type:', typeof item?.containerId);
-    console.log('  - item.categoryId:', item?.categoryId, 'type:', typeof item?.categoryId);
-    
     const { activeTheme } = useAppTheme();
     const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
     
@@ -212,27 +204,14 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             categoryId: item.categoryId ?? (item as any).category_id ?? null,
         };
         
-        console.log('18b. Item adapté dans ItemEditForm (useMemo):');
-        console.log('  - adaptedItem.purchasePrice:', adapted.purchasePrice, 'type:', typeof adapted.purchasePrice);
-        console.log('  - adaptedItem.sellingPrice:', adapted.sellingPrice, 'type:', typeof adapted.sellingPrice);
-        console.log('  - adaptedItem.containerId:', adapted.containerId, 'type:', typeof adapted.containerId);
-        console.log('  - adaptedItem.categoryId:', adapted.categoryId, 'type:', typeof adapted.categoryId);
-        
         return adapted;
     }, [item]);
     
-    console.log('  - propContainers:', propContainers?.length, propContainers);
-    console.log('  - propCategories:', propCategories?.length, propCategories);
-
     const containers = Array.isArray(propContainers) ? propContainers : [];
     // Trier les catégories par created_at (plus ancien en premier) pour que "Bags" soit en premier
     const categories = Array.isArray(propCategories) 
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
-
-    console.log('19. Après traitement des props:');
-    console.log('  - containers final:', containers.length, containers);
-    console.log('  - categories final:', categories.length, categories);
 
     const dispatch = useDispatch<AppDispatch>();
     const { uploadPhoto, deletePhoto, loadImage, state: photoHookState, validatePhoto } = usePhoto();
@@ -253,22 +232,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         categoryId: adaptedItem.categoryId
     });
 
-    console.log('20. État initial editedItem après useState:');
-    console.log('  - name:', editedItem.name);
-    console.log('  - description:', editedItem.description);
-    console.log('  - purchasePrice:', editedItem.purchasePrice, 'type:', typeof editedItem.purchasePrice);
-    console.log('  - sellingPrice:', editedItem.sellingPrice, 'type:', typeof editedItem.sellingPrice);
-    console.log('  - containerId:', editedItem.containerId, 'type:', typeof editedItem.containerId);
-    console.log('  - categoryId:', editedItem.categoryId, 'type:', typeof editedItem.categoryId);
-    console.log('  - editedItem complet:', editedItem);
-
     const initialItemState = useMemo(() => {
-        console.log('[ItemEditForm] Calculating initialItemState with adaptedItem:', adaptedItem);
-        console.log('[ItemEditForm] adaptedItem.purchasePrice:', typeof adaptedItem.purchasePrice, adaptedItem.purchasePrice);
-        console.log('[ItemEditForm] adaptedItem.sellingPrice:', typeof adaptedItem.sellingPrice, adaptedItem.sellingPrice);
-        console.log('[ItemEditForm] adaptedItem.containerId:', typeof adaptedItem.containerId, adaptedItem.containerId);
-        console.log('[ItemEditForm] adaptedItem.categoryId:', typeof adaptedItem.categoryId, adaptedItem.categoryId);
-        
         const result = {
             name: adaptedItem.name,
             description: adaptedItem.description || '',
@@ -280,16 +244,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             categoryId: adaptedItem.categoryId
         };
         
-        console.log('[ItemEditForm] Final initialItemState:', result);
         return result;
     }, [adaptedItem]);
-
-    console.log('21. initialItemState calculé:');
-    console.log('  - purchasePrice:', initialItemState.purchasePrice);
-    console.log('  - sellingPrice:', initialItemState.sellingPrice);
-    console.log('  - containerId:', initialItemState.containerId);
-    console.log('  - categoryId:', initialItemState.categoryId);
-    console.log('=== FIN DEBUG ITEM EDIT FORM ===');
 
     const [confirmDialog, setConfirmDialog] = useState<{
         visible: boolean;
@@ -302,7 +258,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const [showLabelGenerator, setShowLabelGenerator] = useState(false);
 
     useEffect(() => {
-        console.log("[ItemEditForm] useEffect - Initializing form with item:", adaptedItem.id);
         setEditedItem(initialItemState);
         setLocalImageUri(null);
         setLocalImageNeedsUpload(false);
@@ -436,24 +391,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     }
                 }
 
-                console.log("[ItemEditForm] Image sélectionnée:", selectedUri.substring(0, 50) + "...");
-
                 // Pas de validation bloquante - on laisse l'upload gérer la compression et validation
-                console.log("[ItemEditForm] handleImagePreview - Validation ignorée, passage direct à la mise à jour des états");
-
-                console.log("[ItemEditForm] handleImagePreview - Mise à jour des états...");
                 setLocalImageUri(selectedUri);
                 setLocalImageNeedsUpload(true);
                 setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
-                console.log("[ItemEditForm] handleImagePreview - États mis à jour avec succès");
-
             } else {
                 console.log("[ItemEditForm] handleImagePreview - Sélection d'image annulée ou aucun asset.");
-                if (result.canceled) {
-                    console.log("[ItemEditForm] handleImagePreview - Utilisateur a annulé la sélection");
-                } else {
-                    console.log("[ItemEditForm] handleImagePreview - Aucun asset dans le résultat:", result);
-                }
             }
         } catch (error) {
             console.error("handleImagePreview - Erreur:", error);
@@ -466,10 +409,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     }, [adaptedItem.id, validatePhoto]);
 
     const handleSubmit = useCallback(async () => {
-        console.log("[ItemEditForm] handleSubmit - Début de la sauvegarde");
-
         if (!hasFormChanged) {
-            console.log("[ItemEditForm] handleSubmit - Aucune modification détectée");
             Alert.alert('Information', 'Aucune modification à enregistrer.');
             return;
         }
@@ -546,27 +486,25 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${adaptedItem.id} dans la base de données`);
-            await database.updateItem(adaptedItem.id, itemToUpdateToSendToDB);
-
-            const updatedItem: Item = {
-                ...adaptedItem,
-                ...itemToUpdateToSendToDB,
-                updatedAt: new Date().toISOString()
-            };
-
-            dispatch(updateItem(updatedItem));
-            await dispatch(fetchItems({ page: 0, limit: 1000 }));
-            if (adaptedItem.photo_storage_url) {
-                await dispatch(fetchItems({ page: 0, limit: 1000 }));
-            }
-            if (finalPhotoStorageUrl && typeof finalPhotoStorageUrl === 'string') {
-                await dispatch(fetchItems({ page: 0, limit: 1000 }));
-            }
+            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${adaptedItem.id} via Redux thunk`);
+            
+            // ✅ UTILISER REDUX THUNK - Remplace database.updateItem + dispatch manuel
+            await dispatch(updateItem({
+                id: adaptedItem.id,
+                updates: {
+                    name: itemToUpdateToSendToDB.name,
+                    description: itemToUpdateToSendToDB.description,
+                    purchasePrice: itemToUpdateToSendToDB.purchasePrice,
+                    sellingPrice: itemToUpdateToSendToDB.sellingPrice,
+                    categoryId: itemToUpdateToSendToDB.categoryId,
+                    containerId: itemToUpdateToSendToDB.containerId,
+                    photo_storage_url: finalPhotoStorageUrl
+                }
+            })).unwrap();
 
             if (onSuccess) onSuccess();
         } catch (error) {
-            console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour finale de la base de données:", error);
+            console.error("[ItemEditForm] handleSubmit - Erreur lors de la mise à jour finale:", error);
             handleError(error, 'Erreur lors de la mise à jour', {
                 source: 'item_edit_form_update_db',
                 message: `Échec de la mise à jour de l'article ${adaptedItem.id}.`,
@@ -596,8 +534,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handleConfirmDelete - Suppression optimiste de l'article ${itemId} dans Redux.`);
-            dispatch(deleteItem(itemId));
+            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article ${itemId} via Redux thunk.`);
 
             if (adaptedItem.photo_storage_url) {
                 console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'image R2 associée: ${adaptedItem.photo_storage_url}`);
@@ -614,21 +551,14 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                  }
             }
 
-            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article ${itemId} de la base de données.`);
-            await database.deleteItem(itemId);
-            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article DB réussie.`);
+            // ✅ UTILISER REDUX THUNK - Remplace database.deleteItem + dispatch manuel
+            await dispatch(deleteItem(itemId)).unwrap();
 
-            console.log("[ItemEditForm] handleConfirmDelete - Invalidation des queries React Query.");
-            await dispatch(fetchItems({ page: 0, limit: 1000 }));
-
-            if (onCancel) {
-                console.log("[ItemEditForm] handleConfirmDelete - Appel du callback onCancel");
-                onCancel();
-            }
+            console.log("[ItemEditForm] handleConfirmDelete - Article supprimé avec succès, navigation vers la page stock");
+            // Après suppression réussie, naviguer vers la page stock au lieu d'appeler onCancel
+            router.replace('/stock');
         } catch (error) {
             console.error("[ItemEditForm] handleConfirmDelete - Erreur lors de la suppression finale de l'article:", error);
-            console.warn("[ItemEditForm] handleConfirmDelete - Rollback Redux.");
-            dispatch(updateItem(adaptedItem));
             handleError(error, 'Erreur lors de la suppression', {
                 source: 'item_edit_form_delete_item_db',
                 message: `Échec de la suppression de l'article ${adaptedItem.id}.`,
@@ -660,21 +590,13 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
             console.log("[ItemEditForm] handlePhotoDelete - Image R2 supprimée avec succès.");
 
-            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${adaptedItem.id} dans la base de données (photo_storage_url = null).`);
-            const itemToUpdateInDB: any = { photo_storage_url: null };
-            await database.updateItem(adaptedItem.id, itemToUpdateInDB);
-
-            console.log("[ItemEditForm] handlePhotoDelete - Article DB mis à jour.");
-
-            console.log("[ItemEditForm] handlePhotoDelete - Mise à jour optimiste Redux & Invalidation caches.");
-            const updatedItem: Item = {
-                ...adaptedItem,
-                photo_storage_url: undefined,
-                updatedAt: new Date().toISOString()
-            };
-            dispatch(updateItem(updatedItem));
-
-            await dispatch(fetchItems({ page: 0, limit: 1000 }));
+            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${adaptedItem.id} via Redux thunk (photo_storage_url = null).`);
+            
+            // ✅ UTILISER REDUX THUNK - Remplace database.updateItem + dispatch manuel
+            await dispatch(updateItem({
+                id: adaptedItem.id,
+                updates: { photo_storage_url: null }
+            })).unwrap();
 
             setLocalImageUri(null);
             setLocalImageNeedsUpload(false);
@@ -690,7 +612,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 showAlert: true
             });
         }
-    }, [adaptedItem, deletePhoto, database, dispatch, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem, updateItem]);
+    }, [adaptedItem, deletePhoto, dispatch, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem]);
 
     const navigateToAddContainer = useCallback(() => {
         // Naviguer vers la page d'ajout de container avec un paramètre de retour

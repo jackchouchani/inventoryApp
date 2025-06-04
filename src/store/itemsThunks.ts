@@ -380,4 +380,168 @@ export const bulkUpdateItems = createAsyncThunk<
   } catch (error) {
     return rejectWithValue(handleThunkError(error));
   }
+});
+
+/**
+ * Créer un nouvel item
+ */
+export const createItem = createAsyncThunk<
+  Item,
+  { name: string; description?: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId?: number | null; qrCode: string; photo_storage_url?: string },
+  { state: RootState; rejectValue: ThunkError }
+>('items/createItem', async (itemData, { rejectWithValue }) => {
+  try {
+    // Récupérer l'utilisateur actuel depuis Supabase Auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      throw new Error('Utilisateur non authentifié');
+    }
+
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        name: itemData.name,
+        description: itemData.description || '',
+        purchase_price: itemData.purchasePrice,
+        selling_price: itemData.sellingPrice,
+        status: 'available',
+        category_id: itemData.categoryId,
+        container_id: itemData.containerId || null,
+        qr_code: itemData.qrCode,
+        photo_storage_url: itemData.photo_storage_url || null,
+        user_id: user.id, // ✅ AJOUT du user_id requis
+        created_by: user.id, // ✅ AJOUT du created_by requis
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted: false
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Erreur lors de la création de l\'article');
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description || '',
+      purchasePrice: data.purchase_price,
+      sellingPrice: data.selling_price,
+      status: data.status,
+      photo_storage_url: data.photo_storage_url,
+      containerId: data.container_id,
+      categoryId: data.category_id,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      soldAt: data.sold_at
+    };
+  } catch (error) {
+    return rejectWithValue(handleThunkError(error));
+  }
+});
+
+/**
+ * Mettre à jour un item
+ */
+export const updateItem = createAsyncThunk<
+  Item,
+  { id: number; updates: Partial<{ name: string; description: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId: number | null; photo_storage_url: string | null }> },
+  { state: RootState; rejectValue: ThunkError }
+>('items/updateItem', async ({ id, updates }, { rejectWithValue }) => {
+  try {
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.purchasePrice !== undefined) updateData.purchase_price = updates.purchasePrice;
+    if (updates.sellingPrice !== undefined) updateData.selling_price = updates.sellingPrice;
+    if (updates.categoryId !== undefined) updateData.category_id = updates.categoryId;
+    if (updates.containerId !== undefined) updateData.container_id = updates.containerId;
+    if (updates.photo_storage_url !== undefined) updateData.photo_storage_url = updates.photo_storage_url;
+
+    const { data, error } = await supabase
+      .from('items')
+      .update(updateData)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Article non trouvé');
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description || '',
+      purchasePrice: data.purchase_price,
+      sellingPrice: data.selling_price,
+      status: data.status,
+      photo_storage_url: data.photo_storage_url,
+      containerId: data.container_id,
+      categoryId: data.category_id,
+      qrCode: data.qr_code,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      soldAt: data.sold_at
+    };
+  } catch (error) {
+    return rejectWithValue(handleThunkError(error));
+  }
+});
+
+/**
+ * Supprimer un item (soft delete)
+ */
+export const deleteItem = createAsyncThunk<
+  void,
+  number,
+  { state: RootState; rejectValue: ThunkError }
+>('items/deleteItem', async (itemId, { rejectWithValue }) => {
+  try {
+    const { error } = await supabase
+      .from('items')
+      .update({
+        deleted: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itemId);
+
+    if (error) throw error;
+  } catch (error) {
+    return rejectWithValue(handleThunkError(error));
+  }
+});
+
+/**
+ * Vider un container - retirer tous les items du container
+ */
+export const clearContainer = createAsyncThunk<
+  void,
+  { containerId: number },
+  { state: RootState; rejectValue: ThunkError }
+>('items/clearContainer', async ({ containerId }, { rejectWithValue }) => {
+  try {
+    console.log('[REDUX] Clearing container:', containerId);
+    
+    // Mettre à jour tous les items du container pour retirer le containerId
+    const { error } = await supabase
+      .from('items')
+      .update({ 
+        container_id: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('container_id', containerId)
+      .eq('deleted', false);
+
+    if (error) throw error;
+
+    console.log('[REDUX] Container cleared successfully');
+  } catch (error) {
+    console.error('[REDUX] Error clearing container:', error);
+    return rejectWithValue(handleThunkError(error));
+  }
 }); 

@@ -4,7 +4,7 @@ import { Icon } from '../../src/components';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import { useRouter } from 'expo-router';
-import { useCategories } from '../../src/hooks/useCategories';
+import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
 import { useAllContainers } from '../../src/hooks/useOptimizedSelectors';
 import * as Sentry from '@sentry/react-native';
 import DatePicker, { registerLocale, setDefaultLocale } from "react-datepicker";
@@ -380,7 +380,7 @@ const LabelScreenContent = () => {
           <View style={[styles.itemIcon, isSelected && styles.itemIconSelected]}>
             <Icon
               name={item.type === 'item' ? 'inventory' : 'inbox'}
-              size={24}
+              size={18}
               color={isSelected ? activeTheme.primary : activeTheme.text.secondary}
             />
           </View>
@@ -407,7 +407,7 @@ const LabelScreenContent = () => {
               {/* Conteneur pour les articles */}
               {item.type === 'item' && (
                 <View style={styles.itemMetaItem}>
-                  <Icon name="inbox" size={14} color={activeTheme.text.secondary} style={styles.itemMetaIcon} />
+                  <Icon name="inbox" size={11} color={activeTheme.text.secondary} style={styles.itemMetaIcon} />
                   <Text style={[styles.itemContainerName, isSelected && styles.itemContainerNameSelected]}>
                     {staticData?.containers?.find(c => c.id === (item as Item).containerId)?.name || 'Aucun conteneur'}
                   </Text>
@@ -417,7 +417,7 @@ const LabelScreenContent = () => {
               {/* Numéro pour les conteneurs */}
               {item.type === 'container' && (item as Container).number && (
                 <View style={styles.itemMetaItem}>
-                  <Icon name="tag" size={14} color={activeTheme.text.secondary} style={styles.itemMetaIcon} />
+                  <Icon name="tag" size={11} color={activeTheme.text.secondary} style={styles.itemMetaIcon} />
                   <Text style={[styles.itemContainerName, isSelected && styles.itemContainerNameSelected]}>
                     N° {(item as Container).number}
                   </Text>
@@ -427,7 +427,7 @@ const LabelScreenContent = () => {
               {/* Prix pour les articles */}
               {item.type === 'item' && typeof (item as Item).sellingPrice === 'number' && (
                 <View style={styles.itemMetaItem}>
-                  <Icon name="euro" size={14} color={activeTheme.success || '#4CAF50'} style={styles.itemMetaIcon} />
+                  <Icon name="euro" size={11} color={activeTheme.success || '#4CAF50'} style={styles.itemMetaIcon} />
                   <Text style={[styles.itemPrice, isSelected && styles.itemPriceSelected]}>
                     {(item as Item).sellingPrice?.toFixed(2)} €
                   </Text>
@@ -453,7 +453,7 @@ const LabelScreenContent = () => {
           <View style={[styles.checkboxContainer, isSelected && styles.checkboxContainerSelected]}>
             <Icon
               name={isSelected ? "check_circle" : "radio_button_unchecked"}
-              size={28}
+              size={22}
               color={isSelected ? activeTheme.primary : activeTheme.text.secondary}
             />
           </View>
@@ -525,15 +525,23 @@ const LabelScreenContent = () => {
 
   if (isLoadingStaticData) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Chargement des données...</Text>
-      </View>
+      <SafeAreaView style={[
+        styles.safeArea, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Chargement des données...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[
+      styles.safeArea, 
+      Platform.OS === 'web' ? { paddingTop: 0 } : {}
+    ]}>
       <View style={styles.container}>
         {/* ✅ COMMONHEADER - Header standardisé */}
         <CommonHeader 

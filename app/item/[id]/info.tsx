@@ -6,8 +6,8 @@ import { supabase } from '../../../src/config/supabase';
 import { formatCurrency } from '../../../src/utils/format';
 import { getImageUrl } from '../../../src/utils/r2Client';
 import { ReceiptGenerator } from '../../../src/components/ReceiptGenerator';
-import { useCategories } from '../../../src/hooks/useCategories';
-import { useContainers } from '../../../src/hooks/useContainers';
+import { useCategoriesOptimized as useCategories } from '../../../src/hooks/useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from '../../../src/hooks/useContainersOptimized';
 import { useItem } from '../../../src/hooks/useItem';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../../src/store/store';
@@ -216,7 +216,7 @@ export default function ItemInfoScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Container:</Text>
             <Text style={styles.infoValue}>
-              {container?.name || 'Non spécifié'}
+              {container ? `${container.name}#${container.number}` : 'Non spécifié'}
             </Text>
           </View>
           

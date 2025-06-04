@@ -113,7 +113,7 @@ npm run deploy:cloudflare:major     # major
   ```
 
 ### Cloudflare Pages
-- Dashboard: https://dash.cloudflare.com/[account]/pages
+- Dashboard: https://inventory.comptoirvintage.com
 - Commandes utiles:
   ```bash
   npx wrangler whoami

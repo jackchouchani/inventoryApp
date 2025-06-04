@@ -2,10 +2,11 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useDispatch } from 'react-redux';
 
-import { updateItem } from '../store/itemsActions';
-import { fetchItems } from '../store/itemsThunks';
+import { updateItem, fetchItems, clearContainer } from '../store/itemsThunks';
+import { fetchContainerByQRCode } from '../store/containersThunks';
 import { AppDispatch } from '../store/store';
-import { databaseInterface, Container, Item } from '../database/database';
+import type { Container } from '../types/container';
+import type { Item } from '../types/item';
 import { parseId } from '../utils/identifierManager';
 
 // Interface pour les résultats de scan
@@ -92,8 +93,8 @@ export const useScannerWorkflow = (
           console.log('Container non trouvé en mémoire, tentative de recherche en base de données...');
           
           try {
-            // Recherche directe en base de données
-            const foundContainer = await databaseInterface.getContainerByQRCode(scannedData);
+            // ✅ UTILISER REDUX THUNK - Remplace databaseInterface.getContainerByQRCode
+            const foundContainer = await dispatch(fetchContainerByQRCode(scannedData)).unwrap();
             
             if (foundContainer) {
               container = foundContainer;
@@ -171,14 +172,20 @@ export const useScannerWorkflow = (
    */
   const updateItemInDatabase = useCallback(async (item: Item): Promise<void> => {
     try {
-      // Mise à jour optimiste
-      dispatch(updateItem(item));
+      // ✅ UTILISER REDUX THUNK - Remplace mise à jour optimiste + databaseInterface
+      await dispatch(updateItem({
+        id: item.id,
+        updates: {
+          name: item.name,
+          description: item.description,
+          purchasePrice: item.purchasePrice,
+          sellingPrice: item.sellingPrice,
+          categoryId: item.categoryId,
+          containerId: item.containerId,
+          photo_storage_url: item.photo_storage_url
+        }
+      })).unwrap();
       
-      // Mise à jour dans la base de données
-      await databaseInterface.updateItem(item.id!, item);
-      
-      // ✅ INVALIDATION REDUX - Remplace queryClient.invalidateQueries()
-      await dispatch(fetchItems({ page: 0, limit: 1000 }));
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
       // Fallback vers refetch si fourni pour compatibilité
@@ -219,10 +226,34 @@ export const useScannerWorkflow = (
       throw error;
     }
   }, [updateItemInDatabase]);
-  
+
+  /**
+   * Compter les items dans un container
+   */
+  const getContainerItemCount = useCallback((containerId: number): number => {
+    return items.filter(item => item.containerId === containerId).length;
+  }, [items]);
+
+  /**
+   * Vider un container - retirer tous les items du container
+   */
+  const clearContainerItems = useCallback(async (containerId: number): Promise<void> => {
+    try {
+      await dispatch(clearContainer({ containerId })).unwrap();
+      
+      // ✅ INVALIDATION REDUX - Remplace queryClient.invalidateQueries()
+      await dispatch(fetchItems({ page: 0, limit: 1000 }));
+    } catch (error) {
+      console.error('Erreur lors du vidage du container:', error);
+      throw new Error('Impossible de vider le container');
+    }
+  }, [dispatch]);
+
   return {
     handleScan,
     updateItemInDatabase,
-    finalizeScan
+    finalizeScan,
+    getContainerItemCount,
+    clearContainerItems
   };
 }; 

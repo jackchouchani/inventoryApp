@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
-import { View, SafeAreaView, ActivityIndicator, TouchableOpacity, Text } from 'react-native';
+import { View, SafeAreaView, ActivityIndicator, TouchableOpacity, Text, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
 import StyleFactory from '../../../src/styles/StyleFactory';
@@ -20,6 +21,8 @@ const ContainerContentScreen = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeTheme } = useAppTheme();
+  
+  const insets = useSafeAreaInsets();
   
   const containers = useAllContainers();
   const container = containers.find(c => c.id === parseInt(id || '0', 10));
@@ -60,27 +63,30 @@ const ContainerContentScreen = () => {
   // État de chargement
   if (!container && containers.length === 0) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, { paddingBottom: insets.bottom }]}>
         <ActivityIndicator size="large" color={activeTheme.primary} />
-      </SafeAreaView>
+      </View>
     );
   }
 
   // Container introuvable
   if (!container) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
         <CommonHeader 
           title="Container Introuvable"
           onBackPress={() => router.back()}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[
+        styles.container, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
         {/* Header avec bouton Edit */}
         <CommonHeader 
           title={`${container.name} #${container.number}`}

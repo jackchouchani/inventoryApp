@@ -84,20 +84,21 @@ export default function TabLayout() {
           right: 0,
           zIndex: 9999,
           paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 0,
-          paddingTop: Platform.OS === 'ios' ? 12 : 8,
+          paddingTop: Platform.OS === 'ios' ? 12 : 0,
         },
         tabBarActiveTintColor: activeTheme.primary,
         tabBarInactiveTintColor: activeTheme.text.secondary,
         tabBarLabelStyle: {
           fontSize: 13,
-          paddingBottom: Platform.OS === 'ios' ? 8 : 0,
+          paddingBottom: Platform.OS === 'ios' ? 2 : 0,
           fontWeight: '500',
-          marginBottom: Platform.OS === 'ios' ? 4 : 0,
+          marginBottom: Platform.OS === 'ios' ? -2 : 0,
+          marginTop: Platform.OS === 'ios' ? -4 : 0,
         },
         tabBarItemStyle: {
           padding: 0,
           height: Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 8 : 0,
+          paddingBottom: Platform.OS === 'ios' ? 100 : 0,
         },
       }}
     >

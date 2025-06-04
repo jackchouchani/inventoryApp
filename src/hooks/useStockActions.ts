@@ -71,19 +71,15 @@ export function useStockActions() {
       return false;
     }
 
-    // Pour mettre à jour seulement le prix, on peut utiliser la fonction database directement
-    // car updateItemStatus ne gère que le status
-    console.log('[DEBUG useStockActions] Mise à jour prix via database pour item:', itemId, newSellingPrice);
+    console.log('[DEBUG useStockActions] Mise à jour prix via Redux thunk pour item:', itemId, newSellingPrice);
     
     try {
-      // Ici on pourrait créer un nouveau thunk updateItemSellingPrice
-      // Pour l'instant, on utilise la méthode directe database
-      const { database } = await import('../database/database');
-      await database.updateItem(itemId, { sellingPrice: newSellingPrice });
-      
-      // Puis on recharge les données Redux
-      const { fetchItemById } = await import('../store/itemsThunks');
-      await dispatch(fetchItemById(itemId));
+      // ✅ UTILISER REDUX THUNK - Remplace database.updateItem + fetchItemById
+      const { updateItem } = await import('../store/itemsThunks');
+      await dispatch(updateItem({
+        id: itemId,
+        updates: { sellingPrice: newSellingPrice }
+      })).unwrap();
       
       console.log('[DEBUG useStockActions] Mise à jour prix SUCCESS pour item:', itemId);
       return true;

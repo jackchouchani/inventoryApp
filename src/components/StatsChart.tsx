@@ -15,6 +15,8 @@ interface StatsChartProps {
   height?: number;
   onDataPointClick?: (index: number, x: number, y: number) => void;
   selectedPeriod: 'week' | 'month' | 'year';
+  totalRevenueForPeriod?: number;
+  totalProfitForPeriod?: number;
 }
 
 interface ChartDataPoint {
@@ -29,7 +31,9 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
   width = Dimensions.get('window').width - 40,
   height = 220,
   onDataPointClick,
-  selectedPeriod
+  selectedPeriod,
+  totalRevenueForPeriod,
+  totalProfitForPeriod
 }) => {
   // S'assurer que les valeurs numériques sont valides
   const safeWidth = useMemo(() => {
@@ -186,7 +190,7 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
     }
   }, [revenueData, onDataPointClick]);
 
-  // Calcul des statistiques pour l'affichage
+  // 🔧 CORRECTION : Utiliser les vrais totaux de période au lieu de calculer à partir de données cumulatives
   const stats = useMemo(() => {
     if (!hasValidData) {
       return {
@@ -198,19 +202,9 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
       };
     }
 
-    // Pour des données mensuelles, prendre la dernière valeur (cumul du mois)
-    // ou la somme selon le contexte
-    let totalRevenue, totalProfit;
-    
-    if (selectedPeriod === 'month') {
-      // Pour un mois, prendre la dernière valeur qui représente le cumul
-      totalRevenue = revenueData.length > 0 ? revenueData[revenueData.length - 1].value : 0;
-      totalProfit = profitData.length > 0 ? profitData[profitData.length - 1].value : 0;
-    } else {
-      // Pour semaine/année, sommer toutes les valeurs
-      totalRevenue = revenueData.reduce((sum, point) => sum + (point?.value || 0), 0);
-      totalProfit = profitData.reduce((sum, point) => sum + (point?.value || 0), 0);
-    }
+    // 🆕 Utiliser les totaux corrects transmis en props
+    const totalRevenue = totalRevenueForPeriod ?? 0;
+    const totalProfit = totalProfitForPeriod ?? 0;
     
     const avgRevenue = totalRevenue / Math.max(revenueData.length, 1);
     const avgProfit = totalProfit / Math.max(profitData.length, 1);
@@ -222,7 +216,7 @@ const StatsChart: React.FC<StatsChartProps> = memo(({
       avgProfit: avgProfit || 0,
       profitMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
     };
-  }, [revenueData, profitData, selectedPeriod, hasValidData]);
+  }, [revenueData, profitData, totalRevenueForPeriod, totalProfitForPeriod, hasValidData]);
 
   // Préparation des données avec labels formatés pour l'axe X
   const chartDataWithLabels = useMemo(() => {

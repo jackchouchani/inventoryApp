@@ -9,7 +9,11 @@ import {
   updateItemStatus,
   sellItem,
   moveItem,
-  bulkUpdateItems
+  bulkUpdateItems,
+  clearContainer,
+  createItem,
+  updateItem as updateItemThunk,
+  deleteItem
 } from './itemsThunks';
 import {
   setItems,
@@ -128,6 +132,30 @@ const itemsSlice = createSlice({
       })
       .addCase(bulkUpdateItems.fulfilled, (state, action) => {
         itemsAdapter.upsertMany(state, action.payload as ItemWithId[]);
+      })
+      .addCase(clearContainer.fulfilled, (state, action) => {
+        // Après vidage du container, rafraîchir tous les items
+        // Le thunk ne retourne rien, mais on peut marquer qu'une invalidation est nécessaire
+        state.status = 'idle'; // Forcer un refetch des items
+      })
+      // Gestion des CRUD operations
+      .addCase(createItem.fulfilled, (state, action) => {
+        itemsAdapter.addOne(state, action.payload as ItemWithId);
+      })
+      .addCase(updateItemThunk.fulfilled, (state, action) => {
+        itemsAdapter.upsertOne(state, action.payload as ItemWithId);
+        if (state.selectedItem?.id === action.payload.id) {
+          state.selectedItem = action.payload;
+        }
+      })
+      .addCase(deleteItem.fulfilled, (state, action) => {
+        // Pour un soft delete, on supprime juste l'item du cache Redux
+        // action.meta.arg contient l'itemId qui a été passé au thunk
+        const itemId = action.meta.arg;
+        itemsAdapter.removeOne(state, itemId);
+        if (state.selectedItem?.id === itemId) {
+          state.selectedItem = null;
+        }
       });
   }
 });

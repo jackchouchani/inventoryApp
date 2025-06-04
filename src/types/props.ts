@@ -1,6 +1,7 @@
-import { FilterStatus } from '../hooks/useFilterBar';
 import { Category } from './category';
 import { Container } from './container';
+
+export type FilterStatus = 'all' | 'available' | 'sold';
 
 export interface FilterBarProps {
   value: string;

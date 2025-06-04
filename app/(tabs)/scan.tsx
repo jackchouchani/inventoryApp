@@ -8,13 +8,13 @@ import { useAppTheme } from '../../src/contexts/ThemeContext';
 
 // Composants
 import { Icon } from '../../src/components';
-import { Scanner } from '../../src/components/Scanner';
+import { ScannerNew as Scanner } from '../../src/components/ScannerNew';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 
 // ✅ HOOKS OPTIMISÉS selon optimizations-hooks.mdc
-import { useAllContainers } from '../../src/hooks/useOptimizedSelectors';
-import { useItems } from '../../src/hooks/useItems';
-import { useScannerWorkflow } from '../../src/hooks/useScannerWorkflow';
+// ⚠️ CORRECTION CRITIQUE: Utiliser useContainerPageData() au lieu de useItems() + useAllContainers()
+// pour charger TOUS les items (pas seulement les 50 premiers) nécessaires au scanner
+import { useContainerPageData } from '../../src/hooks/useOptimizedSelectors';
 
 // États de l'écran
 type ScanScreenMode = 'scanner' | 'manual';
@@ -29,15 +29,11 @@ const ScanScreen: React.FC = () => {
   // État local
   const [mode, setMode] = useState<ScanScreenMode>('scanner');
   
-  // ✅ HOOKS OPTIMISÉS - Utiliser les sélecteurs mémoïsés
-  const { data: items = [], isLoading } = useItems();
-  const containers = useAllContainers();
+  // ✅ HOOKS OPTIMISÉS - Charger TOUS les items et containers pour le scanner
+  // useContainerPageData() force le chargement complet de tous les items (pas de limite à 50)
+  const { items, containers, isLoading } = useContainerPageData();
 
-  // Utilisation du hook de workflow de scan
-  const { handleScan, updateItemInDatabase, finalizeScan } = useScannerWorkflow(
-    items,
-    containers
-  );
+  // Le workflow de scan est maintenant géré dans le composant ScannerNew
   
   // Gestionnaire de changement de mode (scanner/manuel)
   const handleModeChange = useCallback(() => {
@@ -55,69 +51,14 @@ const ScanScreen: React.FC = () => {
 
   return (
     <ErrorBoundary>
+      {/* ✅ CORRECTION: Utiliser styles.container qui occupe tout l'espace (flex: 1) 
+          au lieu de styles.scannerContainer qui limite à 70% de l'écran */}
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={[styles.modeButton, { backgroundColor: activeTheme.primary }]}
-            onPress={handleModeChange}
-          >
-            <Icon 
-              name={mode === 'manual' ? "qr_code_scanner" : "edit"} 
-              size={24} 
-              color={activeTheme.text.onPrimary} 
-            />
-            <Text style={[styles.modeButtonText, { color: activeTheme.text.onPrimary }]}>
-              {mode === 'manual' ? 'Mode Scanner' : 'Mode Manuel'}
-            </Text>
-          </TouchableOpacity>
-          
-          <Text style={[styles.headerTitle, { color: activeTheme.text.primary }]}>
-            Scanner
-          </Text>
-          
-          <TouchableOpacity
-            style={styles.helpButton}
-            onPress={() => {
-              // Fonctionnalité d'aide à implémenter
-            }}
-          >
-            <Icon name="help_outline" size={24} color={activeTheme.primary} />
-          </TouchableOpacity>
-        </View>
-
-        {mode === 'manual' ? (
-          <View style={styles.manualContainer}>
-            <View style={[styles.manualContentWrapper, { backgroundColor: activeTheme.surface }]}>
-              <Icon name="construction" size={64} color={activeTheme.text.secondary} style={styles.comingSoonIcon} />
-              <Text style={[styles.comingSoonText, { color: activeTheme.text.primary }]}>
-                Le mode manuel sera disponible prochainement.
-              </Text>
-              <Text style={[styles.comingSoonSubtext, { color: activeTheme.text.secondary }]}>
-                Cette fonctionnalité vous permettra d'assigner manuellement des articles à des containers.
-              </Text>
-              <TouchableOpacity
-                style={[styles.switchToScannerButton, { backgroundColor: activeTheme.primary }]}
-                onPress={handleModeChange}
-              >
-                <Icon name="qr_code_scanner" size={24} color={activeTheme.text.onPrimary} />
-                <Text style={[styles.switchToScannerText, { color: activeTheme.text.onPrimary }]}>
-                  Utiliser le scanner
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.scannerContainer}>
-            <Scanner
-              onClose={() => router.back()}
-              onScan={handleScan}
-              items={items}
-              containers={containers}
-              onUpdateItem={updateItemInDatabase}
-              onFinishScan={finalizeScan}
-            />
-          </View>
-        )}
+        <Scanner
+          onClose={() => router.back()}
+          items={items}
+          containers={containers}
+        />
       </View>
     </ErrorBoundary>
   );

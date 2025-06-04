@@ -151,10 +151,10 @@ async function main() {
         
         console.log('\n🔗 Liens utiles:');
         if (deployMode === 'expo' || deployMode === 'both') {
-            console.log('📱 Expo: https://expo.dev/accounts/[username]/projects/inventoryapp');
+            console.log('📱 Expo: https://inventory-cv.expo.app');
         }
         if (deployMode === 'web' || deployMode === 'both') {
-            console.log('🌐 Cloudflare: https://dash.cloudflare.com/[account]/pages');
+            console.log('🌐 Cloudflare: https://inventory.comptoirvintage.com');
         }
         
     } catch (error) {

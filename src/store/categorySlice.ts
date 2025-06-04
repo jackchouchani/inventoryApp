@@ -1,6 +1,7 @@
 import { createSlice, createEntityAdapter, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { Category } from '../types/category';
 import { RootState } from './store';
+import { fetchCategories, createCategory, updateCategory, deleteCategory as deleteCategoryThunk } from './categoriesThunks';
 
 // Type étendu pour garantir un ID non-null
 export type CategoryWithId = Category;
@@ -44,6 +45,45 @@ const categorySlice = createSlice({
     resetCategories: (state) => {
       categoriesAdapter.removeAll(state);
     }
+  },
+  extraReducers: (builder) => {
+    builder
+      // fetchCategories
+      .addCase(fetchCategories.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchCategories.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        const categoriesWithId = action.payload.filter((category): category is CategoryWithId => category.id !== undefined);
+        categoriesAdapter.setAll(state, categoriesWithId);
+      })
+      .addCase(fetchCategories.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload?.message || 'Erreur lors du chargement des catégories';
+      })
+      // createCategory
+      .addCase(createCategory.fulfilled, (state, action) => {
+        if (action.payload.id) {
+          categoriesAdapter.addOne(state, action.payload as CategoryWithId);
+        }
+      })
+      // updateCategory
+      .addCase(updateCategory.fulfilled, (state, action) => {
+        if (action.payload.id) {
+          categoriesAdapter.updateOne(state, {
+            id: action.payload.id,
+            changes: action.payload
+          });
+        }
+      })
+      // deleteCategory
+      .addCase(deleteCategoryThunk.fulfilled, (state, action) => {
+        // La payload contient l'ID de la catégorie supprimée
+        // On peut récupérer l'ID depuis l'action.meta.arg
+        const categoryId = action.meta.arg;
+        categoriesAdapter.removeOne(state, categoryId);
+      });
   }
 });
 

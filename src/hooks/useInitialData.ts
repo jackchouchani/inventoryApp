@@ -1,5 +1,5 @@
-import { useCategories } from './useCategories';
-import { useContainers } from './useContainers';
+import { useCategoriesOptimized as useCategories } from './useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from './useContainersOptimized';
 import { useAuth } from '../contexts/AuthContext';
 import { useSegments } from 'expo-router';
 

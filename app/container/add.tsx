@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SafeAreaView, Alert, ScrollView } from 'react-native';
+import { SafeAreaView, Alert, ScrollView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
@@ -86,7 +86,10 @@ const AddContainerScreen = () => {
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[
+        styles.container, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
         {/* ✅ COMMONHEADER - Header standardisé */}
         <CommonHeader 
           title="Nouveau Container"

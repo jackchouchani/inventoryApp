@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useContainerPageData } from './useOptimizedSelectors';
-import { useCategories } from './useCategories';
+import { useCategoriesOptimized as useCategories } from './useCategoriesOptimized';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
 import { startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, eachDayOfInterval, eachMonthOfInterval, endOfDay } from 'date-fns';
@@ -16,6 +16,20 @@ export interface Stats {
   totalProfit: number;
   averageProfit: number;
   averageMarginPercentage: number;
+  // 🆕 NOUVELLES STATS - Articles en stock
+  availableItemsStats: {
+    count: number;
+    totalPurchaseValue: number;
+    totalSellingValue: number;
+    potentialProfit: number;
+  };
+  // 🆕 NOUVELLES STATS - Articles vendus
+  soldItemsStats: {
+    count: number;
+    totalPurchaseValue: number;
+    totalSellingValue: number;
+    actualProfit: number;
+  };
   bestSellingItem: {
     name: string;
     profit: number;
@@ -35,16 +49,20 @@ export interface Stats {
   }[];
 }
 
-export interface MonthlyStats {
-  month: string;
-  revenue: number;
-  profit: number;
-  itemCount: number;
-}
-
 export interface TimeSeriesDataPoint {
   x: Date;
   y: number;
+}
+
+export interface PeriodStats {
+  revenue: TimeSeriesDataPoint[];
+  profit: TimeSeriesDataPoint[];
+  // Totaux corrects pour la période
+  totalRevenueForPeriod: number;
+  totalProfitForPeriod: number;
+  // Données journalières/périodiques (non cumulatives)
+  dailyRevenue: TimeSeriesDataPoint[];
+  dailyProfit: TimeSeriesDataPoint[];
 }
 
 export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
@@ -57,6 +75,22 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
       const totalPurchaseValue = items.reduce((sum, item) => sum + item.purchasePrice, 0);
       const totalSellingValue = items.reduce((sum, item) => sum + item.sellingPrice, 0);
       const totalProfit = totalSellingValue - totalPurchaseValue;
+
+      // 🆕 CALCUL STATS ARTICLES DISPONIBLES
+      const availableItemsStats = {
+        count: availableItems.length,
+        totalPurchaseValue: availableItems.reduce((sum, item) => sum + item.purchasePrice, 0),
+        totalSellingValue: availableItems.reduce((sum, item) => sum + item.sellingPrice, 0),
+        potentialProfit: availableItems.reduce((sum, item) => sum + (item.sellingPrice - item.purchasePrice), 0),
+      };
+
+      // 🆕 CALCUL STATS ARTICLES VENDUS
+      const soldItemsStats = {
+        count: soldItems.length,
+        totalPurchaseValue: soldItems.reduce((sum, item) => sum + item.purchasePrice, 0),
+        totalSellingValue: soldItems.reduce((sum, item) => sum + item.sellingPrice, 0),
+        actualProfit: soldItems.reduce((sum, item) => sum + (item.sellingPrice - item.purchasePrice), 0),
+      };
 
       // Calcul du profit réel sur les articles vendus uniquement
       const soldItemsProfit = soldItems.reduce((sum, item) => 
@@ -105,6 +139,8 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
         totalPurchaseValue,
         totalSellingValue,
         totalProfit,
+        availableItemsStats, // 🆕
+        soldItemsStats, // 🆕
         averageProfit: soldItems.length > 0 ? soldItemsProfit / soldItems.length : 0,
         averageMarginPercentage: soldItems.length > 0 
           ? (itemsWithMargins.reduce((sum, item) => sum + item.margin, 0) / soldItems.length)
@@ -131,7 +167,7 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
     }
   }, []);
 
-  const calculateMonthlyStats = useCallback((items: Item[]) => {
+  const calculatePeriodStats = useCallback((items: Item[]): PeriodStats => {
     try {
       const now = new Date();
       let startDate: Date;
@@ -160,7 +196,8 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
           dateInterval = eachDayOfInterval({ start: startDate, end: now });
       }
 
-      const soldItems = items.filter(item => {
+      // Filtrer les articles vendus dans la période
+      const soldItemsInPeriod = items.filter(item => {
         if (item.status !== 'sold' || !item.soldAt) return false;
         try {
           const soldDate = new Date(item.soldAt);
@@ -169,58 +206,114 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
           console.error(`[useStats] Error parsing date for item ${item.name}: ${item.soldAt}`, error);
           Sentry.captureException(error, {
             tags: {
-              section: 'monthly_stats_date_parsing'
+              section: 'period_stats_date_parsing'
             }
           });
           return false;
         }
-      }).sort((a, b) => new Date(a.soldAt!).getTime() - new Date(b.soldAt!).getTime()); // Sort by date
+      }).sort((a, b) => new Date(a.soldAt!).getTime() - new Date(b.soldAt!).getTime());
 
+      // 🔧 CORRECTION MAJEURE : Calculer les totaux réels de la période (pas cumulatifs)
+      const totalRevenueForPeriod = soldItemsInPeriod.reduce((sum, item) => sum + (item.sellingPrice || 0), 0);
+      const totalProfitForPeriod = soldItemsInPeriod.reduce((sum, item) => 
+        sum + ((item.sellingPrice || 0) - (item.purchasePrice || 0)), 0);
 
-      const revenueData: TimeSeriesDataPoint[] = [];
-      const profitData: TimeSeriesDataPoint[] = [];
-      let currentRevenue = 0;
-      let currentProfit = 0;
+      console.log(`[useStats] Période ${selectedPeriod}:`, {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        soldItemsCount: soldItemsInPeriod.length,
+        totalRevenueForPeriod,
+        totalProfitForPeriod,
+        soldItems: soldItemsInPeriod.map(item => ({
+          name: item.name,
+          soldAt: item.soldAt,
+          sellingPrice: item.sellingPrice,
+          purchasePrice: item.purchasePrice
+        }))
+      });
+
+      // Données cumulatives pour le graphique de tendance
+      const cumulativeRevenueData: TimeSeriesDataPoint[] = [];
+      const cumulativeProfitData: TimeSeriesDataPoint[] = [];
+      
+      // Données journalières/périodiques (non cumulatives)
+      const dailyRevenueData: TimeSeriesDataPoint[] = [];
+      const dailyProfitData: TimeSeriesDataPoint[] = [];
+
+      let cumulativeRevenue = 0;
+      let cumulativeProfit = 0;
       let itemIndex = 0;
 
       dateInterval.forEach((datePoint, index) => {
-        // For year view, we want to show data up to the end of each month
-        // except for the current month where we show up to the current day
         const thresholdDate = selectedPeriod === 'year' && index === dateInterval.length - 1
-          ? now // For current month, use current date
-          : endOfDay(selectedPeriod === 'year' ? endOfMonth(datePoint) : datePoint); // For other months, use end of month
+          ? now 
+          : endOfDay(selectedPeriod === 'year' ? endOfMonth(datePoint) : datePoint);
 
-        while (
-          itemIndex < soldItems.length &&
-          new Date(soldItems[itemIndex].soldAt!) <= thresholdDate
-          ) {
-            const item = soldItems[itemIndex];
-            currentRevenue += item.sellingPrice || 0;
-            currentProfit += (item.sellingPrice || 0) - (item.purchasePrice || 0);
-            itemIndex++;
-        }
-
-        revenueData.push({
-          x: datePoint,
-          y: currentRevenue
+        // Calculer le CA/profit du jour/période actuel UNIQUEMENT
+        let periodRevenue = 0;
+        let periodProfit = 0;
+        
+        // Compter seulement les items vendus CE jour/période
+        const itemsThisPeriod = soldItemsInPeriod.filter(item => {
+          const itemSoldDate = new Date(item.soldAt!);
+          if (selectedPeriod === 'year') {
+            // Pour l'année, comparer les mois
+            return itemSoldDate.getFullYear() === datePoint.getFullYear() && 
+                   itemSoldDate.getMonth() === datePoint.getMonth();
+          } else {
+            // Pour semaine/mois, comparer les jours
+            return itemSoldDate.getFullYear() === datePoint.getFullYear() &&
+                   itemSoldDate.getMonth() === datePoint.getMonth() &&
+                   itemSoldDate.getDate() === datePoint.getDate();
+          }
         });
-        profitData.push({
+
+        itemsThisPeriod.forEach(item => {
+          const revenue = item.sellingPrice || 0;
+          const profit = revenue - (item.purchasePrice || 0);
+          periodRevenue += revenue;
+          periodProfit += profit;
+        });
+
+        // Ajouter au cumulatif pour le graphique
+        cumulativeRevenue += periodRevenue;
+        cumulativeProfit += periodProfit;
+
+        // Données cumulatives pour le graphique de tendance
+        cumulativeRevenueData.push({
           x: datePoint,
-          y: currentProfit
+          y: cumulativeRevenue
+        });
+        cumulativeProfitData.push({
+          x: datePoint,
+          y: cumulativeProfit
+        });
+
+        // Données journalières/périodiques pour analyses détaillées
+        dailyRevenueData.push({
+          x: datePoint,
+          y: periodRevenue
+        });
+        dailyProfitData.push({
+          x: datePoint,
+          y: periodProfit
         });
       });
 
-      // Return an object containing the two data series
       return {
-        revenue: revenueData,
-        profit: profitData
+        revenue: cumulativeRevenueData,
+        profit: cumulativeProfitData,
+        totalRevenueForPeriod,
+        totalProfitForPeriod,
+        dailyRevenue: dailyRevenueData,
+        dailyProfit: dailyProfitData
       };
 
     } catch (error) {
-      console.error('[useStats] Error in calculateMonthlyStats:', error);
+      console.error('[useStats] Error in calculatePeriodStats:', error);
       Sentry.captureException(error, {
         tags: {
-          section: 'monthly_stats'
+          section: 'period_stats'
         }
       });
       throw error;
@@ -248,26 +341,27 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
     return calculateStats(items, categories);
   }, [items, categories, calculateStats, itemsError, categoriesError, selectedPeriod]);
 
-  const monthlyStats = useMemo(() => {
+  const periodStats = useMemo(() => {
     if (itemsError) {
       Sentry.captureException(itemsError, {
         tags: {
           section: 'stats',
-          action: 'calculate_monthly_stats'
+          action: 'calculate_period_stats'
         },
         extra: {
           period: selectedPeriod,
           itemCount: items.length
         }
       });
-      throw new Error('Erreur lors du calcul des statistiques mensuelles');
+      throw new Error('Erreur lors du calcul des statistiques de période');
     }
-    return calculateMonthlyStats(items);
-  }, [items, calculateMonthlyStats, itemsError, selectedPeriod]);
+    return calculatePeriodStats(items);
+  }, [items, calculatePeriodStats, itemsError, selectedPeriod]);
 
   return {
     stats,
-    monthlyStats,
+    monthlyStats: periodStats, // Garder la compatibilité avec l'ancien nom
+    periodStats,
     isLoading: false,
     error: itemsError || categoriesError
   };

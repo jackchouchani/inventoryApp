@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   SafeAreaView
 } from 'react-native';
-import { Icon } from '../../src/components';
+import { Icon, CommonHeader } from '../../src/components';
 import { useForm, Controller } from 'react-hook-form';
 import { debounce } from 'lodash';
 import type { MaterialIconName } from '../types/icons';
@@ -77,7 +77,15 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[
+      styles.safeArea,
+      Platform.OS === 'web' ? { paddingTop: 0 } : {}
+    ]}>
+      <CommonHeader 
+        title={title}
+        onBackPress={handleCancel}
+      />
+      
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
@@ -87,17 +95,6 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleCancel}
-            >
-              <Icon name="arrow_back_ios" size={24} color={theme.colors.primary} />
-              <Text style={styles.backButtonText}>Retour</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>{title}</Text>
-          </View>
-
           <View style={styles.form}>
             <Controller
               control={control}
@@ -215,28 +212,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1
-  },
-  header: {
-    padding: 16,
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    marginTop: Platform.OS === 'ios' ? 47 : 0,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backButtonText: {
-    fontSize: 17,
-    color: theme.colors.primary,
-    marginLeft: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
   },
   form: {
     padding: 16,

@@ -7,8 +7,8 @@ import type { Item } from '../../src/types/item';
 
 // Hooks Redux optimisés - utilisation des hooks existants pour le chargement initial
 import { useItems } from '../../src/hooks/useItems';
-import { useCategories } from '../../src/hooks/useCategories';
-import { useContainers } from '../../src/hooks/useContainers';
+import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from '../../src/hooks/useContainersOptimized';
 
 // Hooks optimisés pour Redux avec sélecteurs mémoïsés
 import { useFilteredItems, useGlobalSearch } from '../../src/hooks/useOptimizedSelectors';

@@ -34,7 +34,7 @@ const StatsScreen = () => {
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
   
-  const { stats, monthlyStats, isLoading, error } = useStats(selectedPeriod);
+  const { stats, periodStats, isLoading, error } = useStats(selectedPeriod);
 
   // Hook pour les données de containers
   const { itemsByContainer } = useDashboardData();
@@ -78,8 +78,10 @@ const StatsScreen = () => {
     );
   }
 
-  // monthlyStats a maintenant le format { revenue: [], profit: [] }
-  const chartData = monthlyStats;
+  const chartData = {
+    revenue: periodStats.revenue,
+    profit: periodStats.profit
+  };
 
   const formatTooltipDate = (date: Date | null) => {
     if (!date) return '';
@@ -95,13 +97,13 @@ const StatsScreen = () => {
     }
   };
 
-  // Récupérer les données du point cliqué pour le tooltip
-  const clickedRevenuePoint = tooltipPos.dataPointIndex !== null ? monthlyStats.revenue[tooltipPos.dataPointIndex] : null;
-  const clickedProfitPoint = tooltipPos.dataPointIndex !== null ? monthlyStats.profit[tooltipPos.dataPointIndex] : null;
+  const clickedRevenuePoint = tooltipPos.dataPointIndex !== null ? periodStats.revenue[tooltipPos.dataPointIndex] : null;
+  const clickedProfitPoint = tooltipPos.dataPointIndex !== null ? periodStats.profit[tooltipPos.dataPointIndex] : null;
 
-  // Récupérer les totaux pour la période (dernier point des données cumulées)
-  const totalCA_periode = monthlyStats.revenue.length > 0 ? monthlyStats.revenue[monthlyStats.revenue.length - 1].y : 0;
-  const totalMarge_periode = monthlyStats.profit.length > 0 ? monthlyStats.profit[monthlyStats.profit.length - 1].y : 0;
+  const totalCA_periode = periodStats.totalRevenueForPeriod;
+  const totalMarge_periode = periodStats.totalProfitForPeriod;
+  
+  const tauxMarge_periode = totalCA_periode > 0 ? (totalMarge_periode / totalCA_periode) * 100 : 0;
 
   return (
     <ErrorBoundary>
@@ -156,6 +158,75 @@ const StatsScreen = () => {
             </View>
           </View>
 
+          {/* 🆕 NOUVELLES SECTIONS - Articles en Stock et Vendus */}
+          {stats && (
+            <>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Articles en Stock (Disponibles)</Text>
+                <View style={styles.stockStatsContainer}>
+                  <View style={styles.stockStatRow}>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Quantité</Text>
+                      <Text style={styles.stockStatValue}>{stats.availableItemsStats.count}</Text>
+                    </View>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Prix d'Achat Total</Text>
+                      <Text style={styles.stockStatValue}>
+                        {formatCurrency(stats.availableItemsStats.totalPurchaseValue)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.stockStatRow}>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Prix de Vente Total</Text>
+                      <Text style={styles.stockStatValue}>
+                        {formatCurrency(stats.availableItemsStats.totalSellingValue)}
+                      </Text>
+                    </View>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Bénéfice Potentiel</Text>
+                      <Text style={[styles.stockStatValue, styles.potentialProfitValue]}>
+                        {formatCurrency(stats.availableItemsStats.potentialProfit)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Articles Vendus</Text>
+                <View style={styles.stockStatsContainer}>
+                  <View style={styles.stockStatRow}>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Quantité</Text>
+                      <Text style={styles.stockStatValue}>{stats.soldItemsStats.count}</Text>
+                    </View>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Prix d'Achat Total</Text>
+                      <Text style={styles.stockStatValue}>
+                        {formatCurrency(stats.soldItemsStats.totalPurchaseValue)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.stockStatRow}>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Prix de Vente Total</Text>
+                      <Text style={styles.stockStatValue}>
+                        {formatCurrency(stats.soldItemsStats.totalSellingValue)}
+                      </Text>
+                    </View>
+                    <View style={styles.stockStatItem}>
+                      <Text style={styles.stockStatLabel}>Bénéfice Réalisé</Text>
+                      <Text style={[styles.stockStatValue, styles.actualProfitValue]}>
+                        {formatCurrency(stats.soldItemsStats.actualProfit)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </>
+          )}
+
           <View style={styles.section}>
             <View style={styles.periodWrapper}>
               <PeriodSelector
@@ -167,9 +238,10 @@ const StatsScreen = () => {
               data={chartData}
               selectedPeriod={selectedPeriod}
               onDataPointClick={handleDataPointClick}
+              totalRevenueForPeriod={totalCA_periode}
+              totalProfitForPeriod={totalMarge_periode}
             />
             
-            {/* Display tooltip if a data point is clicked */}
             {tooltipPos.visible && tooltipPos.dataPointIndex !== null && (
               <View style={styles.tooltipContainer}>
                 <Text style={styles.tooltipTitle}>
@@ -193,24 +265,33 @@ const StatsScreen = () => {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Évolution des ventes ({selectedPeriod === 'week' ? 'Semaine' : selectedPeriod === 'month' ? 'Mois' : 'Année'})</Text>
-            {/* Display Totals for selected period */}
             <View style={styles.totalsContainer}>
               {isLoading ? (
                 <Text style={styles.loadingText}>Chargement des statistiques...</Text>
               ) : (
-                monthlyStats.revenue.length > 0 ? (
-                  <>
-                    <Text style={styles.totalText}>CA: {formatCurrency(totalCA_periode)}</Text>
-                    <Text style={styles.totalText}>Bénéfice: {formatCurrency(totalMarge_periode)}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.noDataText}>Aucune donnée pour cette période</Text>
-                )
+                <>
+                  <View style={styles.periodStatsRow}>
+                    <View style={styles.periodStatItem}>
+                      <Text style={styles.periodStatLabel}>CA Total</Text>
+                      <Text style={styles.periodStatValue}>{formatCurrency(totalCA_periode)}</Text>
+                    </View>
+                    <View style={styles.periodStatItem}>
+                      <Text style={styles.periodStatLabel}>Marge Total</Text>
+                      <Text style={styles.periodStatValue}>{formatCurrency(totalMarge_periode)}</Text>
+                    </View>
+                    <View style={styles.periodStatItem}>
+                      <Text style={styles.periodStatLabel}>Taux Marge</Text>
+                      <Text style={styles.periodStatValue}>{tauxMarge_periode.toFixed(1)}%</Text>
+                    </View>
+                  </View>
+                  {totalCA_periode === 0 && totalMarge_periode === 0 && (
+                    <Text style={styles.noDataText}>Aucune vente pour cette période</Text>
+                  )}
+                </>
               )}
             </View>
           </View>
 
-          {/* Section Statistiques par Catégories */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Statistiques par Catégories</Text>
             {stats?.categoryStats && stats.categoryStats.length > 0 ? (
@@ -220,7 +301,6 @@ const StatsScreen = () => {
             )}
           </View>
 
-          {/* Section Statistiques par Containers */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Statistiques par Containers</Text>
             {itemsByContainer && itemsByContainer.length > 0 ? (
@@ -230,11 +310,9 @@ const StatsScreen = () => {
             )}
           </View>
 
-          {/* Section Articles Top/Flop */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Articles Performance</Text>
             
-            {/* Meilleur article */}
             {stats?.bestSellingItem && (
               <View style={styles.performanceCard}>
                 <View style={styles.performanceHeader}>
@@ -254,7 +332,6 @@ const StatsScreen = () => {
               </View>
             )}
 
-            {/* Pire article */}
             {stats?.worstSellingItem && (
               <View style={styles.performanceCard}>
                 <View style={styles.performanceHeader}>
@@ -274,7 +351,6 @@ const StatsScreen = () => {
               </View>
             )}
 
-            {/* Moyennes globales */}
             {stats && (
               <View style={styles.performanceCard}>
                 <View style={styles.performanceHeader}>

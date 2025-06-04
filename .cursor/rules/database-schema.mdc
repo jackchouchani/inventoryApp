@@ -5,6 +5,52 @@ alwaysApply: true
 ---
 # Structure Base de Données - Schéma de Référence
 
+## Modèle d'Accès aux Données
+
+### Principe Fondamental d'Accès
+**TOUS les utilisateurs ont accès à TOUTES les données** (items, containers, categories).
+
+Il n'y a **AUCUN filtrage par user_id** dans les requêtes de lecture :
+- `getItems()` → Tous les items où `deleted = false`
+- `getContainers()` → Tous les containers où `deleted = false`  
+- `getCategories()` → Toutes les categories où `deleted = false`
+
+### Rôle du champ `user_id`
+Le champ `user_id` sert **UNIQUEMENT pour la traçabilité** :
+- **Identifier qui a créé/modifié** un enregistrement
+- **Audit et historique** des modifications
+- **PAS pour limiter l'accès** aux données
+
+### Filtrage Autorisé
+- **Seul filtre autorisé** : `deleted = false` (soft delete)
+- **Jamais de filtre** : `.eq('user_id', user.id)` dans les requêtes de lecture
+- **Exception** : Création d'enregistrements nécessite `user_id` pour traçabilité
+
+### Exemples de Requêtes Correctes
+```typescript
+// ✅ CORRECT - Lecture sans filtre user_id
+const { data } = await supabase
+  .from('containers')
+  .select('*')
+  .eq('deleted', false);
+
+// ✅ CORRECT - Création avec user_id pour traçabilité
+const { data } = await supabase
+  .from('items')
+  .insert({
+    name: 'Item',
+    user_id: user.id,  // Pour traçabilité
+    created_by: user.id
+  });
+
+// ❌ INTERDIT - Filtrage par user_id en lecture
+const { data } = await supabase
+  .from('containers')
+  .select('*')
+  .eq('deleted', false)
+  .eq('user_id', user.id);  // ❌ Limite l'accès incorrectement
+```
+
 ## Tables Principales
 
 ### Table `items`

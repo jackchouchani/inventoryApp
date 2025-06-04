@@ -1315,114 +1315,586 @@ class StyleFactory {
   }
 
   /**
-   * Styles pour Scanner
+   * Styles pour Scanner - Version moderne et complète
    */
   private static getScannerStyles(theme: AppThemeType, common: CommonStyles) {
+    const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+    const SCANNER_SIZE = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.7;
+    
     return StyleSheet.create({
-      container: common.container,
-      loadingContainer: {
+      // ===== CONTENEURS PRINCIPAUX =====
+      container: {
+        flex: 1,
+        backgroundColor: '#000',
+      },
+      centerContainer: {
         flex: 1,
         justifyContent: 'center' as const,
         alignItems: 'center' as const,
+        padding: 20,
+        backgroundColor: '#000',
+      },
+      
+      // ===== PERMISSIONS ET ÉTATS =====
+      permissionContainer: {
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        flex: 1,
+        padding: 32,
+      },
+      permissionIcon: {
+        marginBottom: 24,
+        padding: 20,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+      },
+      permissionTitle: {
+        fontSize: 24,
+        fontWeight: '700' as const,
+        color: '#fff',
+        textAlign: 'center' as const,
+        marginBottom: 12,
+      },
+      permissionText: {
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.8)',
+        textAlign: 'center' as const,
+        lineHeight: 24,
+        marginBottom: 32,
+        maxWidth: 300,
+      },
+      permissionButton: {
+        backgroundColor: theme.primary,
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 12,
+        minWidth: 200,
+        marginVertical: 8,
+        elevation: 8,
+        shadowColor: theme.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      permissionButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600' as const,
+        textAlign: 'center' as const,
+      },
+      cancelButton: {
+        backgroundColor: 'rgba(255,59,48,0.9)',
+        borderWidth: 1,
+        borderColor: '#FF3B30',
+      },
+      retryButton: {
+        backgroundColor: 'rgba(255,149,0,0.9)',
+        borderWidth: 1,
+        borderColor: '#FF9500',
+      },
+      
+      // ===== OVERLAY ET HEADER =====
+      overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'space-between' as const,
       },
       header: {
         flexDirection: 'row' as const,
         justifyContent: 'space-between' as const,
         alignItems: 'center' as const,
-        padding: 15,
-        backgroundColor: theme.surface,
+        padding: 20,
+        paddingTop: Platform.OS === 'ios' ? 60 : 30,
+        backgroundColor: 'rgba(0,0,0,0.8)',
         borderBottomWidth: 1,
-        borderBottomColor: theme.border,
-        zIndex: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
       },
-      headerTitle: {
-        fontSize: 18,
-        fontWeight: '700' as const,
-      },
-      modeButton: {
+             headerButton: {
+         padding: 12,
+         backgroundColor: 'rgba(255,255,255,0.15)',
+         borderRadius: 12,
+         borderWidth: 1,
+         borderColor: 'rgba(255,255,255,0.2)',
+       },
+      modeIndicator: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        padding: 10,
-        borderRadius: 8,
-        gap: 8,
-      },
-      modeButtonText: {
-        fontWeight: '600' as const,
-        fontSize: 16,
-      },
-      helpButton: {
-        padding: 8,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
         borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        gap: 10,
+      },
+      modeText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600' as const,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
+      },
+      
+      // ===== ZONE DE SCAN =====
+      scannerFrame: {
+        flex: 1,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
       },
       scannerContainer: {
-        flex: 1,
-        backgroundColor: '#000',
-      },
-      cameraContainer: {
-        flex: 1,
+        width: SCANNER_SIZE,
+        height: SCANNER_SIZE,
         position: 'relative' as const,
       },
-      camera: {
-        flex: 1,
+      scannerContainerSplit: {
+        width: SCANNER_SIZE * 0.8,
+        height: SCANNER_SIZE * 0.8,
+        position: 'relative' as const,
+        marginBottom: 20,
       },
-      overlay: {
+      scanner: {
+        width: '100%' as const,
+        height: '100%' as const,
+        borderWidth: 3,
+        borderColor: 'rgba(255,255,255,0.8)',
+        borderRadius: 24,
+        position: 'relative' as const,
+        overflow: 'hidden' as const,
+      },
+      scannerCorner: {
+        position: 'absolute' as const,
+        width: 24,
+        height: 24,
+        borderColor: theme.primary,
+        borderWidth: 4,
+      },
+      topLeft: {
+        top: -3,
+        left: -3,
+        borderRightWidth: 0,
+        borderBottomWidth: 0,
+        borderTopLeftRadius: 24,
+      },
+      topRight: {
+        top: -3,
+        right: -3,
+        borderLeftWidth: 0,
+        borderBottomWidth: 0,
+        borderTopRightRadius: 24,
+      },
+      bottomLeft: {
+        bottom: -3,
+        left: -3,
+        borderRightWidth: 0,
+        borderTopWidth: 0,
+        borderBottomLeftRadius: 24,
+      },
+      bottomRight: {
+        bottom: -3,
+        right: -3,
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        borderBottomRightRadius: 24,
+      },
+      scanLine: {
+        position: 'absolute' as const,
+        left: 0,
+        width: '100%' as const,
+        height: 3,
+        backgroundColor: theme.primary,
+        borderRadius: 2,
+        shadowColor: theme.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+      },
+      
+      // ===== FEEDBACK VISUEL =====
+      successOverlay: {
         position: 'absolute' as const,
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-      },
-      scanArea: {
-        position: 'absolute' as const,
-        top: '25%',
-        left: '15%',
-        right: '15%',
-        bottom: '25%',
-        borderWidth: 2,
-        borderColor: theme.primary,
-        borderRadius: 12,
-      },
-      manualContainer: {
-        flex: 1,
         justifyContent: 'center' as const,
         alignItems: 'center' as const,
-        padding: 20,
-        backgroundColor: theme.background,
+        backgroundColor: 'rgba(76,175,80,0.2)',
+        borderRadius: 24,
       },
-      manualContentWrapper: {
-        width: '100%',
-        maxWidth: 400,
+      scanInstruction: {
+        position: 'absolute' as const,
+        bottom: -60,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        padding: 16,
+        borderRadius: 12,
         alignItems: 'center' as const,
-        padding: 30,
-        borderRadius: 16,
-        ...common.shadow,
       },
-      comingSoonIcon: {
+      instructionText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '500' as const,
+        textAlign: 'center' as const,
+      },
+      
+      // ===== DIALOGUES DE CONFIRMATION =====
+      confirmationWrapper: {
+        position: 'absolute' as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+      },
+             confirmationContainer: {
+         backgroundColor: 'rgba(28,28,30,0.95)',
+         borderRadius: 20,
+         padding: 28,
+         alignItems: 'center' as const,
+         width: '90%' as const,
+         maxWidth: 420,
+         borderWidth: 1,
+         borderColor: 'rgba(255,255,255,0.1)',
+         elevation: 10,
+         shadowColor: '#000',
+         shadowOffset: { width: 0, height: 8 },
+         shadowOpacity: 0.4,
+         shadowRadius: 16,
+       },
+      confirmationHeader: {
+        alignItems: 'center' as const,
         marginBottom: 20,
+        gap: 16,
       },
-      comingSoonText: {
-        fontSize: 20,
+      confirmationIcon: {
+        padding: 16,
+        borderRadius: 50,
+        backgroundColor: 'rgba(76,175,80,0.2)',
+      },
+      confirmationTitle: {
+        color: '#fff',
+        fontSize: 22,
         fontWeight: '700' as const,
         textAlign: 'center' as const,
-        marginBottom: 10,
+        marginBottom: 8,
       },
-      comingSoonSubtext: {
+      confirmationText: {
+        color: 'rgba(255,255,255,0.9)',
         fontSize: 16,
         textAlign: 'center' as const,
-        maxWidth: '80%',
-        marginBottom: 20,
+        lineHeight: 24,
+        marginBottom: 8,
       },
-      switchToScannerButton: {
+      confirmationSubtext: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 14,
+        textAlign: 'center' as const,
+        fontStyle: 'italic' as const,
+        marginBottom: 24,
+      },
+      
+      // ===== BOUTONS =====
+      buttonGroup: {
+        flexDirection: 'row' as const,
+        gap: 12,
+        width: '100%' as const,
+        justifyContent: 'center' as const,
+        flexWrap: 'wrap' as const,
+      },
+      button: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        padding: 10,
-        borderRadius: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderRadius: 12,
         gap: 8,
+        minWidth: 120,
+        justifyContent: 'center' as const,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
       },
-      switchToScannerText: {
+      buttonPrimary: {
+        backgroundColor: theme.primary,
+        borderWidth: 1,
+        borderColor: theme.primary,
+      },
+      buttonSecondary: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+      },
+      buttonDanger: {
+        backgroundColor: 'rgba(255,59,48,0.9)',
+        borderWidth: 1,
+        borderColor: '#FF3B30',
+      },
+      buttonWarning: {
+        backgroundColor: 'rgba(255,149,0,0.9)',
+        borderWidth: 1,
+        borderColor: '#FF9500',
+      },
+      buttonText: {
+        fontSize: 15,
         fontWeight: '600' as const,
+        textAlign: 'center' as const,
+      },
+      buttonTextPrimary: {
+        color: '#fff',
+      },
+      buttonTextSecondary: {
+        color: '#fff',
+      },
+      
+      // ===== LISTE D'ARTICLES =====
+      splitContainer: {
+        flex: 1,
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+      },
+      scannerColumn: {
+        width: '48%' as const,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        paddingLeft: 10,
+      },
+      listColumn: {
+        width: '48%' as const,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        borderTopLeftRadius: 20,
+        borderBottomLeftRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        padding: 16,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+      },
+      containerInfo: {
+        alignItems: 'center' as const,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 20,
+        borderRadius: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+      },
+      containerInfoSplit: {
+        alignItems: 'center' as const,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 16,
+        borderRadius: 16,
+        width: '100%' as const,
+        maxWidth: 280,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+      },
+      containerTitle: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '700' as const,
+        marginBottom: 6,
+        textAlign: 'center' as const,
+      },
+      itemCount: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 14,
+        textAlign: 'center' as const,
+      },
+      
+      // ===== LISTE DES ARTICLES SCANNÉS =====
+      listHeader: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        marginBottom: 12,
+        paddingHorizontal: 4,
+        gap: 10,
+      },
+      listHeaderText: {
+        color: '#fff',
         fontSize: 16,
+        fontWeight: '600' as const,
+      },
+      scannedItemsContainer: {
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 16,
+        overflow: 'hidden' as const,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        flex: 1, // ✅ AJOUT: Permet au container de prendre tout l'espace disponible
+      },
+      scannedItemsList: {
+        // ✅ CORRECTION: Suppression de maxHeight pour permettre le scroll complet
+        flex: 1, // Prend tout l'espace disponible dans le container
+        paddingVertical: 4, // Petit padding pour l'amélioration UX
+      },
+      scannedItem: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        marginVertical: 2,
+        marginHorizontal: 8,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+      },
+      itemSeparator: {
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        marginHorizontal: 16,
+      },
+      scannedItemInfo: {
+        flex: 1,
+        marginRight: 12,
+      },
+      scannedItemName: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600' as const,
+        marginBottom: 4,
+      },
+      scannedItemPrice: {
+        color: theme.success || '#4CAF50',
+        fontSize: 14,
+        fontWeight: '500' as const,
+        marginBottom: 2,
+      },
+      scannedItemTime: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
+        fontStyle: 'italic' as const,
+      },
+      removeItemButton: {
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,59,48,0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,59,48,0.4)',
+      },
+      
+      // ===== ACTIONS =====
+      finishButton: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        backgroundColor: theme.success || '#4CAF50',
+        padding: 16,
+        margin: 16,
+        borderRadius: 16,
+        gap: 10,
+        elevation: 6,
+        shadowColor: theme.success || '#4CAF50',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      finishButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700' as const,
+      },
+      
+      // ===== PROGRESSION =====
+      progressContainer: {
+        alignItems: 'center' as const,
+        padding: 20,
+      },
+      progressBarContainer: {
+        width: '100%' as const,
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 4,
+        marginVertical: 20,
+        overflow: 'hidden' as const,
+      },
+      progressBar: {
+        height: '100%' as const,
+        backgroundColor: theme.primary,
+        borderRadius: 4,
+      },
+      progressText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600' as const,
+        marginBottom: 12,
+      },
+      progressSubtext: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 14,
+        textAlign: 'center' as const,
+      },
+      
+      // ===== ÉTATS VIDES =====
+      emptyState: {
+        padding: 32,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        flex: 1,
+      },
+      emptyStateIcon: {
+        marginBottom: 16,
+        padding: 20,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+      },
+      emptyStateText: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 16,
+        textAlign: 'center' as const,
+        lineHeight: 24,
+        maxWidth: 250,
+      },
+      
+      // ===== LOADING =====
+      loadingContainer: {
+        alignItems: 'center' as const,
+        padding: 32,
+      },
+      loadingText: {
+        color: '#fff',
+        fontSize: 16,
+        marginTop: 16,
+        textAlign: 'center' as const,
+      },
+      loadingSubtext: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 14,
+        marginTop: 8,
+        textAlign: 'center' as const,
+      },
+      
+      // ===== ERREURS =====
+      errorContainer: {
+        alignItems: 'center' as const,
+        padding: 32,
+      },
+      errorIcon: {
+        marginBottom: 16,
+        padding: 20,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255,59,48,0.2)',
+      },
+      errorTitle: {
+        color: '#FF3B30',
+        fontSize: 20,
+        fontWeight: '700' as const,
+        marginBottom: 12,
+        textAlign: 'center' as const,
+      },
+      errorText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 16,
+        textAlign: 'center' as const,
+        lineHeight: 24,
+        marginBottom: 24,
+        maxWidth: 300,
       },
     });
   }
@@ -1584,10 +2056,49 @@ class StyleFactory {
         color: theme.primary,
       },
       totalsContainer: {
-        flexDirection: 'row' as const,
-        justifyContent: 'space-between' as const,
-        alignItems: 'center' as const,
         padding: 16,
+        backgroundColor: theme.surface,
+        borderRadius: 8,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+        ...Platform.select({
+          web: {
+            boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+          },
+          default: {
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+          },
+        }),
+      },
+      // 🆕 NOUVEAUX STYLES pour les statistiques de période
+      periodStatsRow: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-around' as const,
+        alignItems: 'center' as const,
+        marginBottom: 8,
+      },
+      periodStatItem: {
+        flex: 1,
+        alignItems: 'center' as const,
+        paddingVertical: 8,
+      },
+      periodStatLabel: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        marginBottom: 4,
+        textAlign: 'center' as const,
+        fontWeight: '500' as const,
+      },
+      periodStatValue: {
+        fontSize: 18,
+        fontWeight: '700' as const,
+        color: theme.primary,
+        textAlign: 'center' as const,
       },
       totalText: {
         fontSize: 16,
@@ -1597,10 +2108,14 @@ class StyleFactory {
       loadingText: {
         fontSize: 16,
         color: theme.text.secondary,
+        textAlign: 'center' as const,
       },
       noDataText: {
-        fontSize: 16,
+        fontSize: 14,
         color: theme.text.secondary,
+        textAlign: 'center' as const,
+        fontStyle: 'italic' as const,
+        marginTop: 8,
       },
       categoryRow: {
         flexDirection: 'row' as const,
@@ -1733,6 +2248,55 @@ class StyleFactory {
         borderRadius: 8,
         borderWidth: 1,
         borderColor: theme.primary + '30',
+      },
+      // 🆕 STYLES pour les nouvelles sections d'articles
+      stockStatsContainer: {
+        backgroundColor: theme.surface,
+        borderRadius: 8,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: theme.border,
+        ...Platform.select({
+          web: {
+            boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+          },
+          default: {
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+          },
+        }),
+      },
+      stockStatRow: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        marginBottom: 12,
+      },
+      stockStatItem: {
+        flex: 1,
+        alignItems: 'center' as const,
+        paddingHorizontal: 8,
+      },
+      stockStatLabel: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        marginBottom: 6,
+        textAlign: 'center' as const,
+        fontWeight: '500' as const,
+      },
+      stockStatValue: {
+        fontSize: 16,
+        fontWeight: '700' as const,
+        color: theme.text.primary,
+        textAlign: 'center' as const,
+      },
+      potentialProfitValue: {
+        color: theme.primary,
+      },
+      actualProfitValue: {
+        color: theme.success,
       },
     });
   }
@@ -2058,24 +2622,24 @@ class StyleFactory {
         fontWeight: '500' as const,
       },
       
-      // ✅ AMÉLIORATION - Layout modernisé des items de liste
+      // ✅ AMÉLIORATION - Layout compact pour mobile
       itemRow: {
         backgroundColor: theme.surface,
-        marginHorizontal: 12,
-        marginVertical: 6,
-        borderRadius: 12,
+        marginHorizontal: 8,
+        marginVertical: 3,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: theme.border,
         ...Platform.select({
           web: {
-            boxShadow: `0 2px 8px ${theme.backdrop}20`,
+            boxShadow: `0 1px 4px ${theme.backdrop}20`,
           },
           default: {
             shadowColor: theme.backdrop,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 4,
-            elevation: 2,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 2,
+            elevation: 1,
           },
         }),
       },
@@ -2085,14 +2649,14 @@ class StyleFactory {
         backgroundColor: theme.primaryLight || theme.primary + '15',
         ...Platform.select({
           web: {
-            boxShadow: `0 4px 16px ${theme.primary}30`,
+            boxShadow: `0 2px 8px ${theme.primary}30`,
           },
           default: {
             shadowColor: theme.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.2,
-            shadowRadius: 8,
-            elevation: 6,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            elevation: 3,
           },
         }),
       },
@@ -2100,24 +2664,24 @@ class StyleFactory {
       itemContent: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        padding: 16,
+        padding: 10,
       },
       
       itemTextContainer: {
         flex: 1,
-        marginRight: 16,
+        marginRight: 10,
       },
       
       itemHeader: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        marginBottom: 8,
+        marginBottom: 4,
       },
       
       itemIcon: {
-        marginRight: 12,
-        padding: 8,
-        borderRadius: 8,
+        marginRight: 8,
+        padding: 4,
+        borderRadius: 6,
         backgroundColor: theme.surface,
       },
       
@@ -2126,11 +2690,11 @@ class StyleFactory {
       },
       
       itemName: {
-        fontSize: 17,
+        fontSize: 15,
         fontWeight: '600' as const,
         color: theme.text.primary,
         flex: 1,
-        marginBottom: 2,
+        marginBottom: 1,
       },
       itemNameSelected: {
         color: theme.primary,
@@ -2138,14 +2702,14 @@ class StyleFactory {
       },
       
       itemDetails: {
-        marginTop: 6,
+        marginTop: 2,
       },
       
       itemDescription: {
-        fontSize: 14,
+        fontSize: 12,
         color: theme.text.secondary,
-        lineHeight: 18,
-        marginBottom: 4,
+        lineHeight: 16,
+        marginBottom: 2,
       },
       itemDescriptionSelected: {
         color: theme.primary + 'CC',
@@ -2154,23 +2718,23 @@ class StyleFactory {
       itemMetaRow: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        marginTop: 6,
+        marginTop: 2,
         flexWrap: 'wrap' as const,
       },
       
       itemMetaItem: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        marginRight: 16,
-        marginBottom: 4,
+        marginRight: 12,
+        marginBottom: 2,
       },
       
       itemMetaIcon: {
-        marginRight: 4,
+        marginRight: 3,
       },
       
       itemContainerName: {
-        fontSize: 13,
+        fontSize: 11,
         color: theme.text.secondary,
         fontWeight: '500' as const,
       },
@@ -2179,7 +2743,7 @@ class StyleFactory {
       },
       
       itemPrice: {
-        fontSize: 15,
+        fontSize: 13,
         color: theme.success || '#4CAF50',
         fontWeight: '600' as const,
       },
@@ -2189,11 +2753,11 @@ class StyleFactory {
       },
       
       itemStatus: {
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '600' as const,
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: 8,
         backgroundColor: theme.surface,
         color: theme.text.secondary,
         overflow: 'hidden' as const,
@@ -2210,8 +2774,8 @@ class StyleFactory {
       },
       
       checkboxContainer: {
-        padding: 8,
-        borderRadius: 8,
+        padding: 4,
+        borderRadius: 6,
         backgroundColor: 'transparent',
       },
       

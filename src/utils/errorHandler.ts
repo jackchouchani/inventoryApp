@@ -2,7 +2,6 @@ import { PostgrestError } from '@supabase/supabase-js';
 import Toast from 'react-native-toast-message';
 import * as Sentry from '@sentry/react-native';
 import { Platform, Alert } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
 import { AuthError } from '@supabase/supabase-js';
 
 // Types d'erreurs
@@ -225,7 +224,6 @@ class ErrorHandler {
         })
       },
       appState: {
-        isConnected: NetInfo.useNetInfo().isConnected,
         lastAction: extraData?.lastAction || 'unknown'
       }
     };

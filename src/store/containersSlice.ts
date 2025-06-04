@@ -1,6 +1,7 @@
 import { createSlice, createEntityAdapter, PayloadAction, createSelector } from '@reduxjs/toolkit';
-import { Container } from '../database/database';
+import { Container } from '../types/container';
 import { RootState } from './store';
+import { fetchContainers, createContainer, updateContainer as updateContainerThunk, deleteContainer as deleteContainerThunk } from './containersThunks';
 
 // Type étendu pour garantir un ID non-null
 export type ContainerWithId = Omit<Container, 'id'> & { id: number };
@@ -52,6 +53,40 @@ const containersSlice = createSlice({
     setStatus: (state, action: PayloadAction<'idle' | 'loading' | 'succeeded' | 'failed'>) => {
       state.status = action.payload;
     }
+  },
+  // ✅ AJOUT des extraReducers pour gérer les thunks asynchrones
+  extraReducers: (builder) => {
+    builder
+      // Fetch containers
+      .addCase(fetchContainers.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(fetchContainers.fulfilled, (state, action) => {
+        console.log('[containersSlice] fetchContainers.fulfilled - Containers reçus:', action.payload.length);
+        state.status = 'succeeded';
+        state.error = null;
+        const containersWithId = action.payload.filter((container): container is ContainerWithId => container.id !== undefined);
+        containersAdapter.setAll(state, containersWithId);
+      })
+      .addCase(fetchContainers.rejected, (state, action) => {
+        console.log('[containersSlice] fetchContainers.rejected - Erreur:', action.payload);
+        state.status = 'failed';
+        state.error = action.payload?.message || 'Erreur lors du chargement des containers';
+      })
+      // Create container
+      .addCase(createContainer.fulfilled, (state, action) => {
+        containersAdapter.addOne(state, action.payload as ContainerWithId);
+      })
+      // Update container
+      .addCase(updateContainerThunk.fulfilled, (state, action) => {
+        containersAdapter.upsertOne(state, action.payload as ContainerWithId);
+      })
+      // Delete container
+      .addCase(deleteContainerThunk.fulfilled, (state, action) => {
+        const containerId = action.meta.arg;
+        containersAdapter.removeOne(state, containerId);
+      });
   }
 });
 

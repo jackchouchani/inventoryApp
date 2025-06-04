@@ -15,6 +15,7 @@ import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-ca
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Icon } from '../../src/components'; 
+import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
 import Reanimated, {
     useAnimatedStyle,
     withRepeat,
@@ -61,6 +62,8 @@ interface ScannerProps {
   containers: Container[];
   onUpdateItem: (item: Item) => Promise<void>;
   onFinishScan: (container: Container, items: Item[]) => Promise<void>;
+  getContainerItemCount: (containerId: number) => number;
+  clearContainerItems: (containerId: number) => Promise<void>;
 }
 
 // Machine à états finis pour le workflow de scan
@@ -127,6 +130,11 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
   cancelButton: {
     backgroundColor: theme.error,
     },
+  warningButton: {
+    backgroundColor: '#FF9500',
+    borderWidth: 1,
+    borderColor: '#FFB84D',
+  },
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.3)',
@@ -362,6 +370,13 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
         fontSize: 18,
         marginBottom: 24,
         textAlign: 'center',
+    },
+    containerItemCountText: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 14,
+        marginBottom: 16,
+        textAlign: 'center',
+        fontStyle: 'italic',
     },
   buttonGroup: {
     flexDirection: 'row',
@@ -678,7 +693,9 @@ const WebCamera: React.FC<{
 export const Scanner: React.FC<ScannerProps> = ({
   onClose,
   onScan,
-  onFinishScan
+  onFinishScan,
+  getContainerItemCount,
+  clearContainerItems
 }) => {
   const { activeTheme } = useAppTheme();
   
@@ -696,6 +713,10 @@ export const Scanner: React.FC<ScannerProps> = ({
     const [hasCheckedPermission, setHasCheckedPermission] = useState(false);
     const [lastScanTime, setLastScanTime] = useState(0);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  
+  // État pour le dialog de confirmation de vidage du container
+  const [clearDialogVisible, setClearDialogVisible] = useState(false);
+  const [containerToClear, setContainerToClear] = useState<Container | null>(null);
   
   // Refs et gestion d'état interne
   const scanActive = useRef(true);
@@ -1099,10 +1120,47 @@ export const Scanner: React.FC<ScannerProps> = ({
     if (scannerStateRef.current.status !== 'container_confirmation') return;
     
     console.log("Annulation du container, retour à ready");
+    // ✅ CORRECTION : Reset du dernier code scanné AVANT de changer d'état
+    lastScannedCode.current = null;
     // Utiliser updateScannerState au lieu de setScannerState
     updateScannerState({ status: 'ready', mode: 'container' });
-    lastScannedCode.current = null;
   }, [updateScannerState]);
+
+  // Demander confirmation pour vider le container
+  const handleRequestClearContainer = useCallback(() => {
+    if (scannerStateRef.current.status !== 'container_confirmation') return;
+    
+    const container = scannerStateRef.current.container;
+    setContainerToClear(container);
+    setClearDialogVisible(true);
+  }, []);
+
+  // Confirmer le vidage du container
+  const handleConfirmClearContainer = useCallback(async () => {
+    if (!containerToClear) return;
+    
+    try {
+      await clearContainerItems(containerToClear.id);
+      setClearDialogVisible(false);
+      setContainerToClear(null);
+      
+      // Après vidage, continuer avec le scan des articles
+      updateScannerState({ 
+        status: 'scanning_items', 
+        container: containerToClear,
+        items: []
+      });
+    } catch (error) {
+      console.error('Erreur lors du vidage du container:', error);
+      Alert.alert('Erreur', 'Impossible de vider le container. Veuillez réessayer.');
+    }
+  }, [containerToClear, clearContainerItems, updateScannerState]);
+
+  // Annuler le vidage du container
+  const handleCancelClearContainer = useCallback(() => {
+    setClearDialogVisible(false);
+    setContainerToClear(null);
+  }, []);
 
   // Retirer un élément de la liste des articles scannés
   const handleRemoveItem = useCallback((itemId: number) => {
@@ -1504,7 +1562,13 @@ export const Scanner: React.FC<ScannerProps> = ({
               {(scannerState.status as any) === 'scanning_items' && (
                                 <TouchableOpacity
                                     style={styles.resetButton}
-                  onPress={() => updateScannerState({ status: 'ready', mode: 'container' })}
+                  onPress={() => {
+                    // ✅ CORRECTION : Reset du dernier code scanné AVANT de changer d'état
+                    lastScannedCode.current = null;
+                    setTimeout(() => {
+                      updateScannerState({ status: 'ready', mode: 'container' });
+                    }, 100); // Petit délai pour s'assurer que le reset est pris en compte
+                  }}
                                 >
                                     <Icon name="refresh" size={24} color="#fff" />
                                 </TouchableOpacity>
@@ -1544,22 +1608,49 @@ export const Scanner: React.FC<ScannerProps> = ({
                                                 <Text style={styles.confirmationText}>
                         {scannerState.container.name}
                                                 </Text>
-                                                <View style={styles.buttonGroup}>
-                                                    <TouchableOpacity
-                                                        style={[styles.button, styles.cancelButton]}
-                          onPress={handleCancelContainer}
-                                                    >
-                                                        <Icon name="close" size={20} color="#fff" />
-                                                        <Text style={styles.buttonText}>Annuler</Text>
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity
-                                                        style={[styles.button, styles.confirmButton]}
-                          onPress={handleConfirmContainer}
-                                                    >
-                                                        <Icon name="qr_code_scanner" size={20} color="#fff" />
-                                                        <Text style={styles.buttonText}>Scanner des articles</Text>
-                                                    </TouchableOpacity>
-                                                </View>
+                        {(() => {
+                          const itemCount = getContainerItemCount(scannerState.container.id);
+                          return itemCount > 0 ? (
+                            <Text style={styles.containerItemCountText}>
+                              Ce container contient actuellement {itemCount} article{itemCount > 1 ? 's' : ''}
+                            </Text>
+                          ) : (
+                            <Text style={styles.containerItemCountText}>
+                              Ce container est vide
+                            </Text>
+                          );
+                        })()}
+                                                
+                        <View style={styles.buttonGroup}>
+                          <TouchableOpacity
+                            style={[styles.button, styles.cancelButton]}
+                            onPress={handleCancelContainer}
+                          >
+                            <Icon name="close" size={20} color="#fff" />
+                            <Text style={styles.buttonText}>Annuler</Text>
+                          </TouchableOpacity>
+                          
+                          {(() => {
+                            const itemCount = getContainerItemCount(scannerState.container.id);
+                            return itemCount > 0 ? (
+                              <TouchableOpacity
+                                style={[styles.button, styles.warningButton]}
+                                onPress={handleRequestClearContainer}
+                              >
+                                <Icon name="clear_all" size={20} color="#fff" />
+                                <Text style={styles.buttonText}>Vider le container</Text>
+                              </TouchableOpacity>
+                            ) : null;
+                          })()}
+                          
+                          <TouchableOpacity
+                            style={[styles.button, styles.confirmButton]}
+                            onPress={handleConfirmContainer}
+                          >
+                            <Icon name="qr_code_scanner" size={20} color="#fff" />
+                            <Text style={styles.buttonText}>Scanner des articles</Text>
+                          </TouchableOpacity>
+                        </View>
                                     </View>
                                 </BlurView>
                             )}
@@ -1632,6 +1723,17 @@ export const Scanner: React.FC<ScannerProps> = ({
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       {renderContent()}
+      
+      <ConfirmationDialog
+        visible={clearDialogVisible}
+        title="Vider le container"
+        message={`Êtes-vous sûr de vouloir vider le container "${containerToClear?.name}" ? Cette action retirera ${containerToClear ? getContainerItemCount(containerToClear.id) : 0} article${containerToClear && getContainerItemCount(containerToClear.id) > 1 ? 's' : ''} du container.`}
+        confirmText="Vider"
+        cancelText="Annuler"
+        confirmButtonStyle="destructive"
+        onConfirm={handleConfirmClearContainer}
+        onCancel={handleCancelClearContainer}
+      />
     </View>
     );
 };

@@ -13,7 +13,7 @@ import ConfirmationDialog from '../../src/components/ConfirmationDialog';
 
 // ✅ HOOKS OPTIMISÉS selon optimizations-hooks.mdc
 import { useAllContainers, useContainerPageData } from '../../src/hooks/useOptimizedSelectors';
-import { useContainers } from '../../src/hooks/useContainers';
+import { useContainersOptimized as useContainers } from '../../src/hooks/useContainersOptimized';
 
 // Redux et services
 import { useDispatch } from 'react-redux';

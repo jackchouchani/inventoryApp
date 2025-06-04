@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useItems } from './useItems';
-import { useCategories } from './useCategories';
-import { useContainers } from './useContainers';
+import { useCategoriesOptimized as useCategories } from './useCategoriesOptimized';
+import { useContainersOptimized as useContainers } from './useContainersOptimized';
 import type { Item } from '../types/item';
 import type { Container } from '../types/container';
 import type { Category } from '../types/category';
@@ -26,7 +26,7 @@ interface InventoryData {
 export function useInventoryData(filters: UseInventoryFilters) {
   const { loadAll = false } = filters;
   const { data: items, isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useItems({ loadAll });
-  const { categories, isLoading: categoriesLoading, error: categoriesError, loadCategories } = useCategories();
+  const { categories, isLoading: categoriesLoading, error: categoriesError, refetch: refetchCategories } = useCategories();
   const { data: containers, isLoading: containersLoading, error: containersError, refetch: refetchContainers } = useContainers();
 
   // Filtrer les items selon les critères
@@ -88,7 +88,7 @@ export function useInventoryData(filters: UseInventoryFilters) {
   const refetch = async () => {
     await Promise.all([
       refetchItems(),
-      loadCategories(),
+      refetchCategories(),
       refetchContainers()
     ]);
   };

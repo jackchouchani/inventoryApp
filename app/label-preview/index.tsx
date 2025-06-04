@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, Alert } from 'react-native';
+import { View, Text, ScrollView, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -63,7 +63,10 @@ const LabelPreviewScreen = () => {
 
   if (itemsToDisplay.length === 0) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[
+        styles.safeArea, 
+        Platform.OS === 'web' ? { paddingTop: 0 } : {}
+      ]}>
         <View style={styles.container}>
           {/* ✅ COMMONHEADER - Header standardisé */}
           <CommonHeader 
@@ -80,7 +83,10 @@ const LabelPreviewScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[
+      styles.safeArea, 
+      Platform.OS === 'web' ? { paddingTop: 0 } : {}
+    ]}>
       <View style={styles.container}>
         {/* ✅ COMMONHEADER - Header standardisé */}
         <CommonHeader 
