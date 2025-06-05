@@ -1,0 +1,284 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Générateur QR Code - Règles d'Utilisation Obligatoires
+
+## Utilisation Obligatoire du QRCodeGenerator
+
+### Générateur Centralisé SEULEMENT
+
+**TOUJOURS utiliser `src/utils/qrCodeGenerator.ts`** pour générer des QR codes :
+
+```typescript
+// ✅ CORRECT - Utiliser le générateur centralisé
+import { generateUniqueContainerQRCode, generateUniqueItemQRCode } from '../utils/qrCodeGenerator';
+
+// Pour containers
+const qrCode = await generateUniqueContainerQRCode(); // Format: CONT_XXXX
+
+// Pour articles
+const qrCode = await generateUniqueItemQRCode(); // Format: ART_XXXX
+```
+
+```typescript
+// ❌ INTERDIT - Génération manuelle
+const qrCode = `CONTAINER-${id}`;
+const qrCode = `ITEM-${Date.now()}`;
+const qrCode = generateId('CONTAINER');
+const qrCode = Math.random().toString();
+```
+
+### Référence d'Implémentation
+- [src/utils/qrCodeGenerator.ts](mdc:src/utils/qrCodeGenerator.ts)
+
+## Fonctions Disponibles
+
+### Fonctions Recommandées ✅
+
+#### Avec Vérification d'Unicité (OBLIGATOIRE)
+```typescript
+// Pour containers
+export const generateUniqueContainerQRCode = async (): Promise<string>
+// Retourne: "CONT_ABC1", "CONT_XY42", etc.
+
+// Pour articles  
+export const generateUniqueItemQRCode = async (): Promise<string>
+// Retourne: "ART_DEF2", "ART_ZW89", etc.
+```
+
+### Fonctions Dépréciées ⚠️
+
+#### Sans Vérification d'Unicité (ÉVITER)
+```typescript
+// ⚠️ DÉPRÉCIÉ - Pas de vérification d'unicité
+export const generateContainerQRCode = (): string
+export const generateItemQRCode = (): string
+```
+
+## Format des QR Codes
+
+### Spécifications Techniques
+- **Containers** : `CONT_XXXX` (CONT + underscore + 4 caractères alphanumériques)
+- **Articles** : `ART_XXXX` (ART + underscore + 4 caractères alphanumériques)
+- **Caractères autorisés** : A-Z et 0-9 (majuscules uniquement)
+- **Longueur totale** : 9 caractères
+
+### Exemples Valides
+```typescript
+// Containers
+"CONT_A1B2"
+"CONT_XYZ9"
+"CONT_123A"
+
+// Articles
+"ART_C3D4"
+"ART_MN78"
+"ART_456B"
+```
+
+## Vérification d'Unicité
+
+### Mécanisme Automatique
+- **Vérification Supabase** : Les fonctions vérifient automatiquement l'unicité
+- **Tentatives multiples** : Jusqu'à 100 tentatives avec format standard (4 caractères)
+- **Extension automatique** : Si échec, passe à 6 caractères puis 8 caractères
+- **Format TOUJOURS valide** : Aucun fallback avec timestamp ou caractères invalides
+- **Logs détaillés** : Suivi des tentatives et conflits
+
+### Stratégie de Génération
+```typescript
+// 1. Génération aléatoire (100 tentatives avec 4 caractères)
+const qrCode = `CONT_${generateRandomString(4)}`;
+
+// 2. Vérification en base
+const exists = await isContainerQRCodeExists(qrCode);
+
+// 3. Retry si collision
+if (exists) {
+  // Nouvelle tentative avec nouveau code aléatoire (format identique)
+}
+
+// 4. Extension automatique (100 tentatives avec 6 caractères)
+const qrCode = `CONT_${generateRandomString(6)}`;
+
+// 5. Dernier recours (8 caractères, format toujours valide)
+const ultimateCode = `CONT_${generateRandomString(8)}`;
+```
+
+## Intégration Redux
+
+### Dans les Thunks
+```typescript
+// ✅ CORRECT - Utilisation dans containersThunks.ts
+export const createContainer = createAsyncThunk(
+  'containers/createContainer',
+  async (containerInput, { rejectWithValue }) => {
+    // Générer QR code unique
+    const qrCode = await generateUniqueContainerQRCode();
+    
+    const { data, error } = await supabase
+      .from('containers')
+      .insert({
+        ...containerInput,
+        qr_code: qrCode
+      });
+  }
+);
+```
+
+### Dans les Composants
+```typescript
+// ✅ CORRECT - Utilisation dans ItemForm.tsx
+const handleSubmit = async () => {
+  await dispatch(createItem({
+    name: item.name,
+    qrCode: await generateUniqueItemQRCode(),
+    // ... autres propriétés
+  })).unwrap();
+};
+```
+
+## Validation des QR Codes
+
+### Fonctions de Validation
+```typescript
+import { isValidContainerQRCode, isValidItemQRCode } from '../utils/qrCodeGenerator';
+
+// Validation format
+const isValid = isValidContainerQRCode('CONT_ABC1'); // true
+const isValid = isValidItemQRCode('ART_XYZ2');       // true
+const isValid = isValidContainerQRCode('CONTAINER-1'); // false
+```
+
+### Regex de Validation
+```typescript
+// Containers : /^CONT_[A-Z0-9]{4}$/
+// Articles : /^ART_[A-Z0-9]{4}$/
+```
+
+## Patterns Obligatoires
+
+### Création d'Entités
+```typescript
+// ✅ CORRECT - Pattern pour créer une entité avec QR code
+const createEntity = async (entityData) => {
+  try {
+    // 1. Générer QR code unique
+    const qrCode = await generateUniqueContainerQRCode();
+    
+    // 2. Utiliser dans Redux thunk
+    await dispatch(createContainer({
+      ...entityData,
+      qrCode
+    })).unwrap();
+    
+  } catch (error) {
+    // Gestion d'erreur
+  }
+};
+```
+
+### Mise à Jour avec Nouveau QR Code
+```typescript
+// ✅ CORRECT - Régénérer QR code lors de mise à jour
+const updateEntity = async (id, updates) => {
+  if (updates.requiresNewQRCode) {
+    updates.qrCode = await generateUniqueContainerQRCode();
+  }
+  
+  await dispatch(updateContainer({ id, updates }));
+};
+```
+
+## Gestion d'Erreurs
+
+### Cas d'Erreur Gérés
+```typescript
+// 1. Erreur de connexion Supabase
+// 2. Maximum de tentatives atteint
+// 3. Format de retour invalide
+// 4. Timeout de génération
+```
+
+### Logging Automatique
+```typescript
+// Logs générés automatiquement :
+console.log(`[QR Generator] QR code container unique généré: CONT_ABC1 (tentative 1)`);
+console.log(`[QR Generator] QR code container CONT_XYZ2 existe déjà, nouvelle tentative...`);
+console.warn(`[QR Generator] Utilisation du code de secours: CONT_1234`);
+```
+
+## Interdictions Absolues
+
+### ❌ Génération Manuelle
+```typescript
+// ❌ INTERDIT - Génération manuelle de QR codes
+const qrCode = `CONTAINER-${number}`;
+const qrCode = `ITEM-${id}`;
+const qrCode = Math.random().toString().substring(2, 8);
+```
+
+### ❌ Logique de QR Code Dispersée
+```typescript
+// ❌ INTERDIT - Logique QR code dans composants
+const generateQR = () => `CONT_${Math.random()}`;
+
+// ❌ INTERDIT - Formats différents
+const qrCode = `BOX_${id}`;      // Format non standard
+const qrCode = `cont_${id}`;     // Casse incorrecte
+const qrCode = `CONT-${id}`;     // Séparateur incorrect
+```
+
+### ❌ Utilisation de generateId
+```typescript
+// ❌ INTERDIT - Ancienne fonction
+import { generateId } from '../utils/identifierManager';
+const qrCode = generateId('CONTAINER');
+const qrCode = generateId('ITEM');
+```
+
+## Migration depuis Ancien Système
+
+### Remplacement Systématique
+```typescript
+// Avant - generateId
+import { generateId } from '../utils/identifierManager';
+const qrCode = generateId('CONTAINER');
+
+// Après - QRCodeGenerator
+import { generateUniqueContainerQRCode } from '../utils/qrCodeGenerator';
+const qrCode = await generateUniqueContainerQRCode();
+```
+
+### Vérification Migration
+```bash
+# Rechercher anciens patterns
+grep -r "generateId\|CONTAINER-\|ITEM-" --include="*.ts" --include="*.tsx" .
+
+# Vérifier nouveau pattern
+grep -r "generateUniqueContainerQRCode\|generateUniqueItemQRCode" --include="*.ts" --include="*.tsx" .
+```
+
+## Avantages du Système
+
+### Robustesse
+- **Unicité garantie** par vérification base de données
+- **Format standardisé** sur toute l'application
+- **Gestion d'erreurs** intégrée avec fallbacks
+- **Logging détaillé** pour débogage
+
+### Maintenabilité
+- **Point d'entrée unique** pour génération QR codes
+- **Configuration centralisée** (longueur, format, etc.)
+- **Tests unitaires** facilitées
+- **Évolution future** simplifiée
+
+### Performance
+- **Cache potentiel** pour QR codes générés
+- **Optimisation requêtes** Supabase
+- **Retry intelligent** en cas de collision
+- **Timeout protection** contre boucles infinies
+
+Cette approche garantit la cohérence et l'unicité des QR codes dans toute l'application inventaire.

@@ -15,7 +15,7 @@ import StyleFactory from '../styles/StyleFactory';
 
 import { useScannerStateMachine } from '../hooks/useScannerStateMachine';
 import { useScannerAnimations } from '../hooks/useScannerAnimations';
-import { useScannerPermissions } from '../hooks/useScannerPermissions';
+import { useCameraPermissions } from '../hooks/useCameraPermissions';
 import { useScannerWorkflow } from '../hooks/useScannerWorkflow';
 
 import { Container } from '../types/container';
@@ -43,7 +43,7 @@ export const ScannerNew: React.FC<ScannerProps> = ({
   // Hooks personnalisés
   const { scannerState, actions } = useScannerStateMachine();
   const animations = useScannerAnimations(scannerState);
-  const permissions = useScannerPermissions();
+  const permissions = useCameraPermissions();
   const { handleScan, finalizeScan, getContainerItemCount, clearContainerItems } = useScannerWorkflow(items, containers);
 
   // États locaux

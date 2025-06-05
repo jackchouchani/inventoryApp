@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput, Platform } from 'react-native';
 import { Icon } from '../../src/components';
 import { useRouter, Stack } from 'expo-router';
-import { useCameraPermissions, CameraView as ExpoCameraView } from 'expo-camera';
+import { CameraView as ExpoCameraView } from 'expo-camera';
+import { useCameraPermissions } from '../../src/hooks/useCameraPermissions';
 import { supabase } from '../../src/config/supabase';
 import { formatCurrency } from '../../src/utils/format';
 import { getImageUrl } from '../../src/utils/r2Client';
@@ -262,7 +263,7 @@ type ScannedItemWithAlgolia = Item & { objectID?: string; photo_storage_url?: st
 
 export default function ScannerInfoScreen() {
   const router = useRouter();
-  const [permission, requestPermission] = useCameraPermissions();
+  const permissions = useCameraPermissions();
 
   const [isScanning, setIsScanning] = useState(true);
   const [scannedItem, setScannedItem] = useState<ScannedItemWithAlgolia | null>(null);
@@ -301,10 +302,10 @@ export default function ScannerInfoScreen() {
   }, []);
 
   useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
+    if (!permissions.isGranted && permissions.needsRequest) {
+      permissions.requestPermission();
     }
-  }, [permission, requestPermission]);
+  }, [permissions.isGranted, permissions.needsRequest, permissions.requestPermission]);
 
   const fetchContainerName = async (containerId: string | null | undefined) => {
     // Si containerId est null ou undefined, retourner directement 'Non spécifié'
@@ -575,7 +576,7 @@ export default function ScannerInfoScreen() {
     }
   };
 
-  if (!permission) {
+  if (permissions.isLoading) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ 
@@ -593,7 +594,7 @@ export default function ScannerInfoScreen() {
     );
   }
 
-  if (!permission.granted) {
+  if (!permissions.isGranted) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{
@@ -606,12 +607,21 @@ export default function ScannerInfoScreen() {
         }} />
         <View style={styles.centerContent}>
           <Text style={styles.message}>L'accès à la caméra est nécessaire pour scanner les QR codes.</Text>
+          {permissions.instructions && (
+            <Text style={styles.message}>{permissions.instructions}</Text>
+          )}
           <TouchableOpacity
             style={styles.button}
-            onPress={requestPermission}
+            onPress={permissions.requestPermission}
+            disabled={permissions.isLoading}
           >
-            <Text style={styles.buttonText}>Autoriser l'accès</Text>
+            <Text style={styles.buttonText}>
+              {permissions.isLoading ? 'Demande en cours...' : 'Autoriser l\'accès'}
+            </Text>
           </TouchableOpacity>
+          {permissions.error && (
+            <Text style={styles.message}>{permissions.error}</Text>
+          )}
         </View>
       </View>
     );

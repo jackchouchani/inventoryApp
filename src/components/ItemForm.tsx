@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { useDispatch } from 'react-redux';
-import { generateId } from '../utils/identifierManager';
+import { generateUniqueItemQRCode } from '../utils/qrCodeGenerator';
 import { AppDispatch } from '../store/store';
 import { createItem } from '../store/itemsThunks';
 import type { Category } from '../types/category';
@@ -521,7 +521,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                 sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
                 categoryId,
                 containerId: item.containerId || null,
-                qrCode: generateId('ITEM'),
+                qrCode: await generateUniqueItemQRCode(),
                 photo_storage_url: photoStorageUrl
             })).unwrap();
 

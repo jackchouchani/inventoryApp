@@ -4,7 +4,7 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
-import { generateId } from '../utils/identifierManager';
+import { generateContainerQRCode, generateItemQRCode } from '../utils/qrCodeGenerator';
 
 export const database = supabaseDatabase;
 
@@ -134,7 +134,7 @@ export interface DatabaseInterface {
 }
 
 export const createContainer = async (_data: Omit<Container, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Container> => {
-  const qrCode = generateId('CONTAINER');
+      const qrCode = generateContainerQRCode();
   
 
   const container = await database.getContainerByQRCode(qrCode);
@@ -144,7 +144,7 @@ export const createContainer = async (_data: Omit<Container, 'id' | 'qrCode' | '
 };
 
 export const createItem = async (_data: Omit<Item, 'id' | 'qrCode' | 'createdAt' | 'updatedAt'>): Promise<Item> => {
-  const qrCode = generateId('ITEM');
+  const qrCode = generateItemQRCode();
   
 
   const item = await database.getItemByQRCode(qrCode);

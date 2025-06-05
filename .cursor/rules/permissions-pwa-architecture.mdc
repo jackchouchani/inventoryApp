@@ -1,0 +1,153 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Architecture Permissions & PWA - Règles Obligatoires
+
+## Règles Fondamentales
+
+### Hooks Unifiés OBLIGATOIRES
+
+**TOUJOURS utiliser ces 3 hooks uniquement pour les permissions/PWA :**
+
+1. **`useCameraPermissions`** - Pour toute utilisation de caméra (scanner, photos)
+2. **`usePWALifecycle`** - Pour la gestion du cycle de vie PWA iOS  
+3. **`checkPhotoPermissions`** - Uniquement pour la galerie photo
+
+### ❌ Interdictions Absolues
+
+```typescript
+// ❌ INTERDIT - Ne jamais créer ces fichiers
+src/hooks/useScannerPermissions.ts
+src/hooks/usePWAServiceWorker.ts
+src/hooks/usePermissions.ts  
+src/services/permissions.ts
+src/utils/pwaPermissions.ts
+
+// ❌ INTERDIT - Ne jamais utiliser expo-permissions (déprécié)
+import * as Permissions from 'expo-permissions';
+
+// ❌ INTERDIT - Ne jamais créer de Service Worker manuel
+navigator.serviceWorker.register('/sw.js');
+```
+
+### ✅ Patterns Obligatoires
+
+#### Scanner/Caméra
+```typescript
+import { useCameraPermissions } from '../hooks/useCameraPermissions';
+
+const ScannerComponent = () => {
+  const permissions = useCameraPermissions({
+    enableLogging: __DEV__,
+    timeoutMs: 10000,
+    maxRetries: 3
+  });
+
+  if (permissions.isLoading) return <Loading />;
+  if (!permissions.isGranted) return <PermissionRequest onRequest={permissions.requestPermission} />;
+  
+  return <CameraView />;
+};
+```
+
+#### PWA Lifecycle App Principal
+```typescript
+import { usePWAServiceWorker } from '../hooks/usePWALifecycle';
+
+const App = () => {
+  const pwa = usePWAServiceWorker({
+    onDataRefreshNeeded: () => {
+      // Auto-refresh données critiques après réactivation PWA
+      store.dispatch(fetchItems());
+      store.dispatch(fetchCategories());
+      store.dispatch(fetchContainers());
+    }
+  });
+  
+  return <AppContent />;
+};
+```
+
+#### Galerie Photo
+```typescript
+import { checkPhotoPermissions } from '../utils/permissions';
+
+const handleImagePicker = async () => {
+  const hasPermission = await checkPhotoPermissions();
+  if (!hasPermission) return;
+  
+  const result = await ImagePicker.launchImageLibraryAsync({...});
+};
+```
+
+## Configurations Standard
+
+### Development
+```typescript
+const permissions = useCameraPermissions({
+  enableLogging: true,      // Debug actif
+  timeoutMs: 15000,        // Plus de temps pour debug
+  maxRetries: 5            // Plus de tentatives
+});
+```
+
+### Production
+```typescript
+const permissions = useCameraPermissions({
+  enableLogging: false,     // Pas de logs
+  timeoutMs: 10000,        // Timeout standard
+  maxRetries: 3            // Tentatives limitées
+});
+```
+
+## Fichiers de Référence
+
+### ✅ Fichiers Autorisés
+- `src/hooks/useCameraPermissions.ts` - Hook unifié caméra
+- `src/hooks/usePWALifecycle.ts` - Hook PWA moderne
+- `src/utils/permissions.ts` - Seulement `checkPhotoPermissions`
+
+### 📄 Documentation Complète
+- `docs/PERMISSIONS_PWA_ARCHITECTURE.md` - Guide architectural complet
+
+## Problèmes Typiques & Solutions
+
+### Scanner Bloqué "Initialisation"
+```typescript
+const permissions = useCameraPermissions({
+  timeoutMs: 8000,          // Réduire timeout
+  maxRetries: 2,            // Moins de tentatives
+  enableLogging: true       // Debug actif
+});
+```
+
+### Permissions Redemandées
+```typescript
+// Vérifier la persistance
+const permissions = useCameraPermissions({
+  persistenceKey: '@app:camera_permission_v2'  // Clé correcte
+});
+```
+
+### PWA iOS Bloquée après Inactivité
+```typescript
+const pwa = usePWAServiceWorker({
+  inactivityThreshold: 20000,    // Réduire seuil
+  enableAutoRefresh: true,
+  onDataRefreshNeeded: refreshCriticalData
+});
+```
+
+## Migration depuis Ancien Code
+
+### Pattern de Remplacement
+```typescript
+// ❌ ANCIEN
+const [permission, requestPermission] = useCameraPermissions();
+
+// ✅ NOUVEAU
+const permissions = useCameraPermissions();
+// Utiliser: permissions.isGranted, permissions.requestPermission()
+```

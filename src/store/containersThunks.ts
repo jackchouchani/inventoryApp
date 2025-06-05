@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
+import { generateUniqueContainerQRCode } from '../utils/qrCodeGenerator';
 
 // Types pour les réponses et erreurs
 interface ThunkError {
@@ -128,8 +129,8 @@ export const createContainer = createAsyncThunk<
       throw new Error('Utilisateur non authentifié');
     }
 
-    // Générer le QR code basé sur l'ID ou le numéro
-    const qrCode = `CONTAINER-${containerInput.number}`;
+    // Générer le QR code unique au format CONT_XXXX
+    const qrCode = await generateUniqueContainerQRCode();
     
     const { data, error } = await supabase
       .from('containers')
@@ -179,9 +180,9 @@ export const updateContainer = createAsyncThunk<
       updated_at: new Date().toISOString()
     };
 
-    // Mettre à jour le QR code si le numéro change
+    // Générer un nouveau QR code unique si le numéro change
     if (updates.number !== undefined) {
-      updateData.qr_code = `CONTAINER-${updates.number}`;
+      updateData.qr_code = await generateUniqueContainerQRCode();
     }
 
     const { data, error } = await supabase

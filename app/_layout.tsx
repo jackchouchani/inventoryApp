@@ -10,7 +10,7 @@ import { DataLoader } from '../src/components/DataLoader';
 import UpdateNotification from '../src/components/UpdateNotification';
 import * as Sentry from '@sentry/react-native';
 import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
-import { usePWAServiceWorker } from '../src/hooks/usePWAServiceWorker';
+import { usePWAServiceWorker } from '../src/hooks/usePWALifecycle';
 
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
@@ -37,110 +37,28 @@ const toastConfig = {
   )
 };
 
-// Hook pour gérer le cycle de vie PWA
+// Hook pour gérer le cycle de vie PWA - VERSION SIMPLIFIÉE
 function usePWALifecycle() {
-  const [appWasHidden, setAppWasHidden] = useState(false);
-  const [reactivationCount, setReactivationCount] = useState(0);
-  const lastActiveTime = useRef(Date.now());
-  const { isServiceWorkerReady, sendMessage, lastReactivation } = usePWAServiceWorker();
-  
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-
-    const handleVisibilityChange = () => {
-      const now = Date.now();
-      const timeSinceLastActive = now - lastActiveTime.current;
-      
-      if (document.hidden) {
-        // App devient invisible
-        console.log('🔒 App devient invisible');
-        lastActiveTime.current = now;
-      } else {
-        // App redevient visible
-        console.log('👁️ App redevient visible, inactivité:', timeSinceLastActive / 1000, 's');
-        
-        // Si l'app était cachée plus de 30 secondes, marquer pour rafraîchissement
-        if (timeSinceLastActive > 30000) {
-          console.log('⚠️ Longue inactivité détectée, marquage pour rafraîchissement');
-          setAppWasHidden(true);
-          setReactivationCount(prev => prev + 1);
-          
-          // Déclencher un rafraîchissement des données critiques
-          setTimeout(() => {
-            console.log('🔄 Rafraîchissement automatique après inactivité');
-            // Dispatch d'actions Redux pour recharger les données
-            try {
-              store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
-              store.dispatch({ type: 'categories/fetchCategories' });
-              store.dispatch({ type: 'containers/fetchContainers' });
-            } catch (error) {
-              console.error('Erreur lors du rafraîchissement automatique:', error);
-            }
-            setAppWasHidden(false);
-          }, 1000);
-        }
-        lastActiveTime.current = now;
+  const { isAppReactivated, reactivationCount, isServiceWorkerReady, lastReactivation } = usePWAServiceWorker({
+    onDataRefreshNeeded: () => {
+      // Auto-refresh des données critiques après réactivation PWA
+      console.log('🔄 Refresh automatique des données après réactivation PWA');
+      try {
+        store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
+        store.dispatch({ type: 'categories/fetchCategories' });
+        store.dispatch({ type: 'containers/fetchContainers' });
+      } catch (error) {
+        console.error('Erreur lors du refresh automatique:', error);
       }
-    };
-
-    const handleFocus = () => {
-      console.log('🎯 Focus window détecté');
-      lastActiveTime.current = Date.now();
-    };
-
-    const handlePageShow = (event: PageTransitionEvent) => {
-      console.log('📄 Page show détecté, persisted:', event.persisted);
-      if (event.persisted) {
-        // Page restaurée depuis le cache bfcache
-        console.log('🔄 Page restaurée depuis bfcache, rafraîchissement forcé');
-        setAppWasHidden(true);
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
-    };
-
-    const handlePWAReactivation = (event: CustomEvent) => {
-      console.log('🔄 Réactivation PWA détectée via Service Worker');
-      setReactivationCount(prev => prev + 1);
-      setAppWasHidden(true);
-      
-      // Rafraîchir les données après réactivation
-      setTimeout(() => {
-        try {
-          store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
-          store.dispatch({ type: 'categories/fetchCategories' });
-          store.dispatch({ type: 'containers/fetchContainers' });
-        } catch (error) {
-          console.error('Erreur lors du rafraîchissement post-réactivation:', error);
-        }
-        setAppWasHidden(false);
-      }, 1500);
-    };
-
-    // Écouter les événements de cycle de vie
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('pageshow', handlePageShow);
-    window.addEventListener('pwa-reactivated', handlePWAReactivation as EventListener);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('pageshow', handlePageShow);
-      window.removeEventListener('pwa-reactivated', handlePWAReactivation as EventListener);
-    };
-  }, [isServiceWorkerReady]);
-
-  // Réagir aux réactivations détectées par le service worker
-  useEffect(() => {
-    if (lastReactivation) {
-      console.log('🔄 Réactivation détectée par SW à:', lastReactivation);
-      setReactivationCount(prev => prev + 1);
     }
-  }, [lastReactivation]);
+  });
 
-  return { appWasHidden, reactivationCount };
+  // ✅ Plus besoin de logique complexe, le hook usePWAServiceWorker gère tout !
+  
+  return { 
+    appWasHidden: isAppReactivated, 
+    reactivationCount 
+  };
 }
 
 // Root Layout avec providers essentiels
