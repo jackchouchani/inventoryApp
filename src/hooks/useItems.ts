@@ -54,11 +54,13 @@ export const useItems = (options: UseItemsOptions = {}) => {
     }
   }, [loadItems, isLoading, pagination.hasMore]);
 
+  // Déclenche le chargement initial dès que le status revient à 'idle'
+  // Cela couvre le cas où un seul item est présent (par ex. suite à fetchItemById)
   useEffect(() => {
-    if (items.length === 0 && status === 'idle') {
+    if (status === 'idle') {
       loadItems(true);
     }
-  }, [loadItems, items.length, status]);
+  }, [loadItems, status]);
 
   // Synchroniser avec le status Redux
   useEffect(() => {

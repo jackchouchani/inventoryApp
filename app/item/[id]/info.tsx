@@ -6,6 +6,7 @@ import { supabase } from '../../../src/config/supabase';
 import { formatCurrency } from '../../../src/utils/format';
 import { getImageUrl } from '../../../src/utils/r2Client';
 import { ReceiptGenerator } from '../../../src/components/ReceiptGenerator';
+import { LabelGenerator } from '../../../src/components/LabelGenerator';
 import { useCategoriesOptimized as useCategories } from '../../../src/hooks/useCategoriesOptimized';
 import { useContainersOptimized as useContainers } from '../../../src/hooks/useContainersOptimized';
 import { useItem } from '../../../src/hooks/useItem';
@@ -26,6 +27,7 @@ export default function ItemInfoScreen() {
   const [salePrice, setSalePrice] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isReceiptGeneratorVisible, setIsReceiptGeneratorVisible] = useState(false);
+  const [isLabelGeneratorVisible, setIsLabelGeneratorVisible] = useState(false);
 
   // Utiliser Redux pour tout
   const { item, isLoading, error, refetch } = useItem(id as string);
@@ -38,14 +40,12 @@ export default function ItemInfoScreen() {
   const category = useMemo(() => {
     if (!item?.categoryId || !categories) return null;
     const found = categories.find(cat => cat.id === Number(item.categoryId));
-    console.log('[INFO] Category trouvée via Redux:', found, 'pour item.categoryId:', item.categoryId);
     return found;
   }, [item?.categoryId, categories]);
 
   const container = useMemo(() => {
     if (!item?.containerId || !containers) return null;
     const found = containers.find(cont => cont.id === Number(item.containerId));
-    console.log('[INFO] Container trouvé via Redux:', found, 'pour item.containerId:', item.containerId);
     return found;
   }, [item?.containerId, containers]);
 
@@ -64,22 +64,10 @@ export default function ItemInfoScreen() {
 
   // Initialiser le prix de vente
   useEffect(() => {
-    console.log('[INFO] useEffect - item changed:', item);
     if (item) {
-      console.log('[INFO] Setting salePrice to:', item.sellingPrice);
-      console.log('[INFO] Item structure in useEffect:');
-      console.log('  - purchasePrice:', item.purchasePrice);
-      console.log('  - sellingPrice:', item.sellingPrice);
-      console.log('  - category object:', category);
-      console.log('  - container object:', container);
       setSalePrice(item.sellingPrice || 0);
     }
   }, [item, category, container]);
-
-  // Débogage de l'état des données
-  console.log('[INFO] Render - item:', item);
-  console.log('[INFO] Render - isLoading:', isLoading);
-  console.log('[INFO] Render - error:', error);
 
   const handleMarkAsSold = async () => {
     if (!item) return;
@@ -266,6 +254,14 @@ export default function ItemInfoScreen() {
                   <Icon name="receipt" size={24} color="#fff" />
                   <Text style={styles.buttonText}>Générer un ticket de caisse</Text>
                 </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.button, styles.labelButton]}
+                  onPress={() => setIsLabelGeneratorVisible(true)}
+                >
+                  <Icon name="label" size={24} color="#fff" />
+                  <Text style={styles.buttonText}>Générer une étiquette</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -357,6 +353,46 @@ export default function ItemInfoScreen() {
                 setIsReceiptGeneratorVisible(false);
                 Alert.alert('Erreur', `Erreur lors de la génération du reçu: ${error.message}`);
               }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal pour le générateur d'étiquettes */}
+      <Modal
+        visible={isLabelGeneratorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsLabelGeneratorVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Générer une étiquette</Text>
+            
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsLabelGeneratorVisible(false)}
+            >
+              <Icon name="close" size={24} color={activeTheme.text.primary} />
+            </TouchableOpacity>
+            
+            <LabelGenerator
+              items={[{
+                id: Number(item.id),
+                name: item.name,
+                qrCode: item.qrCode || `ITEM-${item.id}`,
+                sellingPrice: item.sellingPrice || 0,
+                description: item.description || "",
+              }]}
+              onComplete={() => {
+                setIsLabelGeneratorVisible(false);
+                Alert.alert('Succès', 'Étiquette PDF générée avec succès');
+              }}
+              onError={(error) => {
+                setIsLabelGeneratorVisible(false);
+                Alert.alert('Erreur', `Erreur lors de la génération de l'étiquette: ${error.message}`);
+              }}
+              mode="items"
             />
           </View>
         </View>
@@ -498,6 +534,9 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   },
   receiptButton: {
     backgroundColor: theme.warning,
+  },
+  labelButton: {
+    backgroundColor: theme.secondary,
   },
   buttonText: {
     color: '#ffffff',

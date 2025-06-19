@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Text, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, ActivityIndicator, TextInput, ScrollView, TouchableOpacity, Modal, Platform, Keyboard } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { useStockActions } from '../../src/hooks/useStockActions';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
@@ -83,14 +84,25 @@ const SellingPriceInputModal: React.FC<{
     );
 };
 
-// --- Nouvelle SearchBox optimisée ---
-const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) => {
+// --- SearchBox optimisée avec gestion scroll iOS PWA ---
+const SearchBox: React.FC<SearchBoxProps & { 
+  onFocus?: () => void; 
+  onBlur?: () => void; 
+  inputRef?: React.RefObject<TextInput>;
+}> = ({ 
+  searchQuery, 
+  setSearchQuery, 
+  onFocus, 
+  onBlur, 
+  inputRef 
+}) => {
   const { activeTheme } = useAppTheme();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'FilterBar');
   
   return (
     <View style={styles.container}>
       <TextInput
+        ref={inputRef}
         style={[styles.filterButton, { flex: 1, marginRight: 0, color: activeTheme.text.primary }]}
         value={searchQuery}
         onChangeText={setSearchQuery}
@@ -99,6 +111,11 @@ const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) =>
         clearButtonMode="always"
         autoCapitalize="none"
         autoCorrect={false}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        // Propriétés spécifiques pour PWA iOS
+        inputMode="search"
+        enterKeyHint="search"
       />
     </View>
   );
@@ -106,9 +123,13 @@ const SearchBox: React.FC<SearchBoxProps> = ({ searchQuery, setSearchQuery }) =>
 
 const StockScreenContent = () => {
   const { activeTheme } = useAppTheme();
+  const router = useRouter();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemList');
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // États pour gérer le clavier iOS PWA
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
   
   // --- STATES OPTIMISÉS ---
   const [filters, setFilters] = useState<StockFilters>({ status: 'available' });
@@ -186,20 +207,67 @@ const StockScreenContent = () => {
     filters: reduxFilters 
   });
 
+  // Debug pour comprendre les re-renders/refresh
+  console.log('[StockScreen] Component render - timestamp:', Date.now());
+
+  // Callbacks pour gérer le scroll iOS PWA
+  const handleSearchFocus = useCallback(() => {
+    if (Platform.OS === 'web') {
+      // Sur iOS PWA, prévenir la perte de contexte de scroll
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          // Cast pour accéder aux API web
+          const element = (searchInputRef.current as any)?._nativeTag 
+            ? document.querySelector(`[data-tag="${(searchInputRef.current as any)._nativeTag}"]`)
+            : null;
+          
+          if (element && element.scrollIntoView) {
+            element.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'nearest' 
+            });
+          }
+        }
+      }, 100);
+    }
+  }, []);
+
+  const handleSearchBlur = useCallback(() => {
+    if (Platform.OS === 'web' && isKeyboardVisible) {
+      // Forcer le focus sur la liste après la fermeture du clavier
+      setTimeout(() => {
+        setKeyboardVisible(false);
+      }, 200);
+    }
+  }, [isKeyboardVisible]);
+
   // Utiliser le hook d'actions du stock
   const { handleMarkAsSold, handleMarkAsAvailable } = useStockActions();
+
+  // Gestion du clavier pour PWA iOS
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const keyboardShowListener = Keyboard.addListener('keyboardDidShow', () => {
+        setKeyboardVisible(true);
+      });
+      const keyboardHideListener = Keyboard.addListener('keyboardDidHide', () => {
+        setKeyboardVisible(false);
+      });
+
+      return () => {
+        keyboardShowListener?.remove();
+        keyboardHideListener?.remove();
+      };
+    }
+  }, []);
 
   // Mettre en place les callbacks stables en utilisant useRef
   const stableCallbacks = useRef({
     currentItemToMarkSold: null as Item | null,
     handleItemPress: (item: Item) => {
-      setSelectedItem(item);
-    },
-    handleEditSuccess: () => {
-      setSelectedItem(null);
-    },
-    handleEditCancel: () => {
-      setSelectedItem(null);
+      // Navigation directe vers la page info de l'item
+      // Utiliser REPLACE pour éviter l'accumulation d'historique
+      router.replace(`/item/${item.id}/info`);
     },
     handleMarkAsSoldPress: (item: Item) => {
         console.log('[handleMarkAsSoldPress] Received item:', item);
@@ -422,8 +490,14 @@ const StockScreenContent = () => {
 
   return (
     <View style={styles.container}>
-      {/* Barre de recherche optimisée */}
-      <SearchBox searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+      {/* Barre de recherche optimisée avec gestion scroll iOS PWA */}
+      <SearchBox 
+        searchQuery={searchQuery} 
+        setSearchQuery={setSearchQuery}
+        onFocus={handleSearchFocus}
+        onBlur={handleSearchBlur}
+        inputRef={searchInputRef}
+      />
       
       {/* Bouton Filtres compact */}
       <TouchableOpacity
@@ -444,19 +518,33 @@ const StockScreenContent = () => {
       {/* Filtres compacts */}
       {showFilters && <CompactFilterBar />}
 
-      {/* Liste virtualisée optimisée */}
-      <VirtualizedItemList
-        items={filteredItems}
-        categories={categories}
-        containers={containers}
-        isLoading={isLoading}
-        onItemPress={stableCallbacks.current.handleItemPress}
-        onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
-        onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
-        onEndReached={loadMore}
-        isLoadingMore={itemsLoading && items.length > 0}
-        estimatedItemSize={120}
-      />
+      {/* Liste virtualisée optimisée avec gestion iOS PWA */}
+      <View 
+        style={{ flex: 1 }}
+        // Styles web spécifiques pour iOS PWA 
+        {...(Platform.OS === 'web' && isKeyboardVisible && {
+          style: {
+            flex: 1,
+            position: 'relative',
+            overflow: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y pinch-zoom',
+          } as any
+        })}
+      >
+        <VirtualizedItemList
+          items={filteredItems}
+          categories={categories}
+          containers={containers}
+          isLoading={isLoading}
+          onItemPress={stableCallbacks.current.handleItemPress}
+          onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
+          onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
+          onEndReached={loadMore}
+          isLoadingMore={itemsLoading && items.length > 0}
+          estimatedItemSize={120}
+        />
+      </View>
 
       {/* Modal de sélection de date et prix optimisé */}
       <Modal
@@ -480,6 +568,44 @@ const StockScreenContent = () => {
                   setSelectedSoldDate(params.date);
                 }
               }}
+              styles={{
+                // Cases des jours
+                day: {
+                  backgroundColor: 'transparent',
+                  borderRadius: 8,
+                },
+                day_label: {
+                  color: activeTheme.text.primary,
+                  fontSize: 16,
+                },
+                // Jour d'aujourd'hui
+                today: {
+                  backgroundColor: activeTheme.primary + '20', // 20% d'opacité
+                  borderColor: activeTheme.primary,
+                  borderWidth: 2,
+                  borderRadius: 8,
+                },
+                today_label: {
+                  color: activeTheme.primary,
+                  fontWeight: '600',
+                },
+                // Jour sélectionné - LE PLUS IMPORTANT pour voir la sélection
+                selected: {
+                  backgroundColor: activeTheme.primary,
+                  borderRadius: 8,
+                },
+                selected_label: {
+                  color: activeTheme.text.onPrimary,
+                  fontWeight: '600',
+                },
+                // Jours désactivés
+                disabled: {
+                  opacity: 0.3,
+                },
+                disabled_label: {
+                  color: activeTheme.text.disabled,
+                },
+              } as any}
             />
             
             <Text style={[styles.modalLabel, { color: activeTheme.text.primary }]}>Prix de vente :</Text>

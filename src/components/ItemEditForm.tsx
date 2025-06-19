@@ -16,7 +16,7 @@ import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
 import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 import * as ExpoImagePicker from 'expo-image-picker';
-import { LabelGenerator } from './LabelGenerator';
+
 
 interface ItemEditFormProps {
     item: Item;
@@ -255,7 +255,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         itemId: null
     });
 
-    const [showLabelGenerator, setShowLabelGenerator] = useState(false);
+
 
     useEffect(() => {
         setEditedItem(initialItemState);
@@ -319,6 +319,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
              }
 
             if (sellingPrice < purchasePrice) {
+                Alert.alert('Attention !', 'Le prix de vente est inférieur au prix d\'achat. Vous pouvez vendre à perte si vous le souhaitez.');
                 // C'est un avertissement, pas une erreur bloquante. Laissez l'utilisateur continuer s'il le souhaite.
             }
 
@@ -780,39 +781,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     />
                 </View>
 
-                <View style={styles.actionsContainer}>
-                    <TouchableOpacity
-                        style={[styles.button, styles.generateLabelButton]}
-                        onPress={() => setShowLabelGenerator(true)}
-                    >
-                        <Icon name="receipt" size={20} color="#fff" style={styles.buttonIcon} />
-                        <Text style={styles.buttonText}>Générer Étiquette</Text>
-                    </TouchableOpacity>
 
-                    {showLabelGenerator && adaptedItem && (
-                        <View style={styles.labelGeneratorContainer}>
-                            <LabelGenerator
-                                items={[{
-                                    id: adaptedItem.id,
-                                    name: adaptedItem.name,
-                                    qrCode: adaptedItem.qrCode || `ITEM-${adaptedItem.id}`,
-                                    sellingPrice: adaptedItem.sellingPrice,
-                                    description: adaptedItem.description,
-                                }]}
-                                onComplete={() => {
-                                    Alert.alert('Succès', 'Étiquette PDF générée.');
-                                    setShowLabelGenerator(false);
-                                }}
-                                onError={(err) => {
-                                    console.error('Error generating label:', err);
-                                    Alert.alert('Erreur', 'Impossible de générer l\'étiquette: ' + err.message);
-                                    setShowLabelGenerator(false);
-                                }}
-                                mode="items"
-                            />
-                        </View>
-                    )}
-                </View>
 
                 <View style={styles.buttonContainer}>
                     <View style={styles.secondaryButtonsRow}>
@@ -1027,11 +996,7 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     categoryIcon: {
         marginRight: 8,
     },
-    actionsContainer: {
-        marginTop: 16,
-        marginBottom: 12,
-        gap: 12,
-    },
+
     buttonContainer: {
         flexDirection: 'column',
         marginTop: 16,
@@ -1078,9 +1043,7 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
         borderRadius: 12,
         minHeight: 56,
     },
-    generateLabelButton: {
-        backgroundColor: '#6c5ce7',
-    },
+
     buttonIcon: {
         marginRight: 4,
     },
@@ -1339,13 +1302,5 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
         fontSize: 14,
         flexShrink: 1,
     },
-    labelGeneratorContainer: {
-        marginTop: 10,
-        marginBottom: 0,
-        padding: 10,
-        backgroundColor: theme.surface,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
+
 });

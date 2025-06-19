@@ -12,17 +12,18 @@ export default function ItemLayout() {
   const handleGoBack = () => {
     const currentPage = segments[segments.length - 1]; // Dernière partie de l'URL
     
+    console.log('[Navigation Debug] Segments:', segments);
+    console.log('[Navigation Debug] Current page:', currentPage);
+    console.log('[Navigation Debug] ID:', id);
+    
     if (currentPage === 'edit') {
       // Depuis la page edit, retourner vers la page info de l'article
+      console.log('[Navigation] Edit → Info');
       router.replace(`/item/${id}/info${returnTo ? `?returnTo=${returnTo}` : ''}`);
-    } else if (currentPage === 'info' && returnTo) {
-      // Si on a un paramètre returnTo, l'utiliser pour la navigation retour
-      router.replace(returnTo as string);
     } else {
-      // Pour tous les autres cas, utiliser la navigation naturelle
-      // Cela permet de retourner à la page précédente dans l'historique
-      // (stock, container, catégorie, recherche, etc.)
-      router.back();
+      // ✅ NAVIGATION SIMPLE : Un seul niveau de Stack maintenant !
+      console.log('[Navigation] Simple back to stock (single Stack level)');
+      router.replace('/(tabs)/stock');
     }
   };
 
