@@ -15,15 +15,25 @@ export default function ItemLayout() {
     console.log('[Navigation Debug] Segments:', segments);
     console.log('[Navigation Debug] Current page:', currentPage);
     console.log('[Navigation Debug] ID:', id);
+    console.log('[Navigation Debug] ReturnTo raw:', returnTo);
+    console.log('[Navigation Debug] ReturnTo type:', typeof returnTo);
     
     if (currentPage === 'edit') {
       // Depuis la page edit, retourner vers la page info de l'article
       console.log('[Navigation] Edit → Info');
       router.replace(`/item/${id}/info${returnTo ? `?returnTo=${returnTo}` : ''}`);
     } else {
-      // ✅ NAVIGATION SIMPLE : Un seul niveau de Stack maintenant !
-      console.log('[Navigation] Simple back to stock (single Stack level)');
-      router.replace('/(tabs)/stock');
+      // ✅ UTILISER returnTo si disponible, sinon retour vers stock
+      const returnToPath = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+      
+      if (returnToPath && typeof returnToPath === 'string' && returnToPath.trim() !== '') {
+        const decodedPath = decodeURIComponent(returnToPath);
+        console.log('[Navigation] Using returnTo path:', decodedPath);
+        router.replace(decodedPath);
+      } else {
+        console.log('[Navigation] No valid returnTo, defaulting to stock');
+        router.replace('/(tabs)/stock');
+      }
     }
   };
 

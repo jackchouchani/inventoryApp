@@ -145,11 +145,11 @@ export const useContainerPageData = (filters?: ItemFilters) => {
     loadAllItems();
   }, [dispatch, hasMore, allItems.length, totalItems]);
 
-  // Appliquer les filtres aux items
+  // Appliquer les filtres et tri aux items
   const filteredItems = useMemo(() => {
     if (!filters) return allItems;
     
-    return allItems.filter(item => {
+    const filtered = allItems.filter(item => {
       // Filtre par statut
       if (filters.status && filters.status !== 'all' && item.status !== filters.status) {
         return false;
@@ -180,6 +180,21 @@ export const useContainerPageData = (filters?: ItemFilters) => {
       
       return true;
     });
+
+    // Tri spécial pour les items vendus : tri par date de vente (plus récent en premier)
+    if (filters.status === 'sold') {
+      return filtered.sort((a, b) => {
+        // Si un item n'a pas de soldAt, le mettre à la fin
+        if (!a.soldAt && !b.soldAt) return 0;
+        if (!a.soldAt) return 1;
+        if (!b.soldAt) return -1;
+        
+        // Tri décroissant : date la plus récente en premier
+        return new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime();
+      });
+    }
+
+    return filtered;
   }, [allItems, filters]);
 
   return useMemo(() => ({
@@ -288,4 +303,7 @@ export const useGlobalSearch = (searchQuery: string) => {
     isSearching,
     total: searchResults.length
   };
-}; 
+};
+
+// Export du hook Algolia optimisé pour réutilisation
+export { useAlgoliaOptimizedSearch } from './useAlgoliaOptimizedSearch'; 

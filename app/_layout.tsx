@@ -11,6 +11,9 @@ import UpdateNotification from '../src/components/UpdateNotification';
 import * as Sentry from '@sentry/react-native';
 import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
 import { usePWAServiceWorker } from '../src/hooks/usePWALifecycle';
+import { fetchItems } from '../src/store/itemsThunks';
+import { fetchCategories } from '../src/store/categoriesThunks';
+import { fetchContainers } from '../src/store/containersThunks';
 
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
@@ -44,9 +47,10 @@ function usePWALifecycle() {
       // Auto-refresh des données critiques après réactivation PWA
       console.log('🔄 Refresh automatique des données après réactivation PWA');
       try {
-        store.dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
-        store.dispatch({ type: 'categories/fetchCategories' });
-        store.dispatch({ type: 'containers/fetchContainers' });
+        // Utilisation correcte des thunks Redux
+        store.dispatch(fetchItems({ page: 0, limit: 50 }));
+        store.dispatch(fetchCategories());
+        store.dispatch(fetchContainers());
       } catch (error) {
         console.error('Erreur lors du refresh automatique:', error);
       }

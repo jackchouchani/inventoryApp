@@ -121,7 +121,7 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
         const categoryRevenue = categoryItems.reduce((sum, item) => 
           sum + item.sellingPrice, 0);
 
-        return {
+        const result = {
           categoryId: category.id,
           categoryName: category.name,
           itemCount: categoryItems.length,
@@ -130,6 +130,10 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
             ? (categoryProfit / categoryRevenue) * 100 
             : 0
         };
+
+
+
+        return result;
       });
 
       return {
@@ -322,6 +326,8 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
   const { items = [], error: itemsError } = useContainerPageData();
   const { categories = [], error: categoriesError } = useCategories();
+
+
 
   const stats = useMemo(() => {
     if (itemsError || categoriesError) {

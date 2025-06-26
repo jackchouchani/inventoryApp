@@ -43,7 +43,7 @@ export interface ItemFilters {
   searchQuery?: string;
 }
 
-// Sélecteur mémoïsé pour filtrer les items
+// Sélecteur mémoïsé pour filtrer et trier les items
 export const selectFilteredItems = createSelector(
   [selectAllItems, (_state: RootState, filters: ItemFilters) => filters],
   (items, filters) => {
@@ -51,7 +51,7 @@ export const selectFilteredItems = createSelector(
       return items;
     }
 
-    return items.filter((item: Item) => {
+    const filteredItems = items.filter((item: Item) => {
       // Filtre par statut
       if (filters.status && filters.status !== 'all' && item.status !== filters.status) {
         return false;
@@ -89,6 +89,21 @@ export const selectFilteredItems = createSelector(
 
       return true;
     });
+
+    // Tri spécial pour les items vendus : tri par date de vente (plus récent en premier)
+    if (filters.status === 'sold') {
+      return filteredItems.sort((a, b) => {
+        // Si un item n'a pas de soldAt, le mettre à la fin
+        if (!a.soldAt && !b.soldAt) return 0;
+        if (!a.soldAt) return 1;
+        if (!b.soldAt) return -1;
+        
+        // Tri décroissant : date la plus récente en premier
+        return new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime();
+      });
+    }
+
+    return filteredItems;
   }
 );
 

@@ -8,9 +8,10 @@ import { fr } from 'date-fns/locale';
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
 import StyleFactory from '../../src/styles/StyleFactory';
 
-import { CommonHeader } from '../../src/components';
+import { CommonHeader, SalesBarChart } from '../../src/components';
 import { useStats } from '../../src/hooks/useStats';
 import { useDashboardData } from '../../src/hooks/useOptimizedSelectors';
+
 import { StatsChart } from '../../src/components/StatsChart';
 import CategoryPieChart from '../../src/components/CategoryPieChart';
 import ContainerBarChart from '../../src/components/ContainerBarChart';
@@ -18,12 +19,14 @@ import { formatCurrency } from '../../src/utils/formatters';
 import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 import PeriodSelector from '../../src/components/PeriodSelector';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
+import { useSalesData } from '../../src/hooks/useSalesData';
 
 const StatsScreen = () => {
   const { activeTheme } = useAppTheme();
   const router = useRouter();
   
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const [salesPeriod, setSalesPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [tooltipPos, setTooltipPos] = useState({
     x: 0,
     y: 0,
@@ -35,6 +38,11 @@ const StatsScreen = () => {
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
   
   const { stats, periodStats, isLoading, error } = useStats(selectedPeriod);
+
+
+  
+  // Hook pour les données de ventes avec navigation temporelle
+  const salesData = useSalesData(salesPeriod);
 
   // Hook pour les données de containers
   const { itemsByContainer } = useDashboardData();
@@ -50,6 +58,11 @@ const StatsScreen = () => {
     setSelectedPeriod(period);
     resetTooltip(); // Reset tooltip when period changes
   }, [resetTooltip]);
+
+  // 🆕 Handler pour le changement de période du graphique de ventes
+  const handleSalesPeriodChange = useCallback((period: 'week' | 'month' | 'year') => {
+    setSalesPeriod(period);
+  }, []);
 
   // handleDataPointClick reçoit maintenant l'index du point cliqué
   const handleDataPointClick = useCallback((index: number, x: number, y: number) => {
@@ -116,6 +129,23 @@ const StatsScreen = () => {
         />
 
         <ScrollView style={styles.content}>
+          {/* 🆕 GRAPHIQUE VENTES - Tout en haut */}
+          <SalesBarChart
+            data={salesData.data}
+            selectedPeriod={salesPeriod}
+            currentDate={salesData.currentDate}
+            onDateChange={salesData.setCurrentDate}
+            navigateByDays={salesData.navigateByDays}
+            navigateByWeeks={salesData.navigateByWeeks}
+            navigateByMonths={salesData.navigateByMonths}
+            goToToday={salesData.goToToday}
+            canGoNext={salesData.canGoNext}
+            periodInfo={salesData.periodInfo}
+            height={350}
+            isLoading={salesData.isLoading}
+            onPeriodChange={handleSalesPeriodChange}
+          />
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Vue d'ensemble</Text>
             <View style={styles.statRow}>
@@ -264,36 +294,8 @@ const StatsScreen = () => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Évolution des ventes ({selectedPeriod === 'week' ? 'Semaine' : selectedPeriod === 'month' ? 'Mois' : 'Année'})</Text>
-            <View style={styles.totalsContainer}>
-              {isLoading ? (
-                <Text style={styles.loadingText}>Chargement des statistiques...</Text>
-              ) : (
-                <>
-                  <View style={styles.periodStatsRow}>
-                    <View style={styles.periodStatItem}>
-                      <Text style={styles.periodStatLabel}>CA Total</Text>
-                      <Text style={styles.periodStatValue}>{formatCurrency(totalCA_periode)}</Text>
-                    </View>
-                    <View style={styles.periodStatItem}>
-                      <Text style={styles.periodStatLabel}>Marge Total</Text>
-                      <Text style={styles.periodStatValue}>{formatCurrency(totalMarge_periode)}</Text>
-                    </View>
-                    <View style={styles.periodStatItem}>
-                      <Text style={styles.periodStatLabel}>Taux Marge</Text>
-                      <Text style={styles.periodStatValue}>{tauxMarge_periode.toFixed(1)}%</Text>
-                    </View>
-                  </View>
-                  {totalCA_periode === 0 && totalMarge_periode === 0 && (
-                    <Text style={styles.noDataText}>Aucune vente pour cette période</Text>
-                  )}
-                </>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Statistiques par Catégories</Text>
+
             {stats?.categoryStats && stats.categoryStats.length > 0 ? (
               <CategoryPieChart data={stats.categoryStats} height={220} />
             ) : (
@@ -375,6 +377,8 @@ const StatsScreen = () => {
               </View>
             )}
           </View>
+
+
 
         </ScrollView>
       </View>

@@ -113,10 +113,7 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
   const triggerReactivation = useCallback((reason: string) => {
     const now = new Date();
     
-    if (finalConfig.enableLogging) {
-      console.log(`[PWALifecycle] 🔄 Réactivation PWA (${reason})`);
-    }
-    
+
     setIsAppReactivated(true);
     setLastReactivation(now);
     setReactivationCount(prev => prev + 1);
@@ -151,16 +148,9 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
       const timeSinceLastActive = now - lastActiveTime.current;
       
       if (document.hidden) {
-        // App devient invisible
-        if (finalConfig.enableLogging) {
-          console.log('[PWALifecycle] 🔒 App devient invisible');
-        }
         lastActiveTime.current = now;
       } else {
-        // App redevient visible
-        if (finalConfig.enableLogging) {
-          console.log(`[PWALifecycle] 👁️ App redevient visible, inactivité: ${Math.round(timeSinceLastActive / 1000)}s`);
-        }
+
         
         // Ignorer le premier chargement
         if (isFirstLoad.current) {
@@ -179,15 +169,11 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
     };
     
     const handlePageShow = (event: PageTransitionEvent) => {
-      if (finalConfig.enableLogging) {
-        console.log(`[PWALifecycle] 📄 Page show, persisted: ${event.persisted}`);
-      }
+      
       
       if (event.persisted) {
         // ⚠️ CRITIQUE: Page restaurée depuis le cache bfcache (problème iOS PWA)
-        if (finalConfig.enableLogging) {
-          console.log('[PWALifecycle] ⚠️ Restauration bfcache détectée, rechargement forcé');
-        }
+        
         
         // Forcer un rechargement complet pour éviter les états corrompus
         setTimeout(() => {
@@ -201,17 +187,13 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
     };
     
     const handleFocus = () => {
-      if (finalConfig.enableLogging) {
-        console.log('[PWALifecycle] 🎯 Focus window');
-      }
+      
       lastActiveTime.current = Date.now();
     };
     
     const handleBeforeUnload = () => {
       // Nettoyer avant fermeture
-      if (finalConfig.enableLogging) {
-        console.log('[PWALifecycle] 🚪 App se ferme');
-      }
+      
     };
     
     // ================================================================================
@@ -269,16 +251,12 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
   
   const sendMessage = useCallback((message: any) => {
     // Compatible avec l'ancien API usePWAServiceWorker
-    if (finalConfig.enableLogging) {
-      console.log('[PWALifecycle] 📤 Message (legacy compatibility):', message);
-    }
+    
     // Dans notre cas, pas besoin de Service Worker, mais on garde la compatibilité
   }, [finalConfig.enableLogging]);
   
   const forceRefresh = useCallback(() => {
-    if (finalConfig.enableLogging) {
-      console.log('[PWALifecycle] 🔄 Refresh forcé');
-    }
+    
     
     triggerReactivation('refresh forcé');
   }, [triggerReactivation, finalConfig.enableLogging]);

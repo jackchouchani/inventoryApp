@@ -65,8 +65,11 @@ export default function CategoryContentScreen() {
 
   // Navigation vers les détails d'un article
   const handleItemPress = useCallback((item: Item) => {
-    router.push(`/item/${item.id}/info`);
-  }, [router]);
+    // Navigation vers les détails de l'item avec paramètre de retour
+    const returnUrl = `/category/${categoryId}/content`;
+    console.log('[CategoryContent] Navigation vers item:', item.id, 'avec returnTo:', returnUrl);
+    router.push(`/item/${item.id}/info?returnTo=${encodeURIComponent(returnUrl)}`);
+  }, [router, categoryId]);
 
   // Marquer un article comme vendu
   const handleMarkAsSold = useCallback(async (item: Item) => {

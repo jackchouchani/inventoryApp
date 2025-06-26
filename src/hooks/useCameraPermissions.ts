@@ -120,13 +120,11 @@ const usePWALifecycle = (config: PermissionConfig, onReactivation?: () => void):
       if (document.hidden) {
         // App devient invisible
         if (config.enableLogging) {
-          console.log('[PWALifecycle] App devient invisible');
         }
         lastActiveTime.current = now;
       } else {
         // App redevient visible
         if (config.enableLogging) {
-          console.log(`[PWALifecycle] App redevient visible, inactivité: ${timeSinceLastActive / 1000}s`);
         }
         
         // Si c'est le premier chargement, ignorer
@@ -139,7 +137,6 @@ const usePWALifecycle = (config: PermissionConfig, onReactivation?: () => void):
         // Si l'app était cachée plus que le seuil, déclencher une réactivation
         if (timeSinceLastActive > config.pwaInactivityThreshold) {
           if (config.enableLogging) {
-            console.log('[PWALifecycle] Longue inactivité détectée, réactivation...');
           }
           
           setIsAppReactivated(true);
@@ -163,13 +160,11 @@ const usePWALifecycle = (config: PermissionConfig, onReactivation?: () => void):
     
     const handlePageShow = (event: PageTransitionEvent) => {
       if (config.enableLogging) {
-        console.log(`[PWALifecycle] Page show détecté, persisted: ${event.persisted}`);
       }
       
       if (event.persisted) {
         // Page restaurée depuis le cache bfcache (problème iOS)
         if (config.enableLogging) {
-          console.log('[PWALifecycle] Restauration bfcache détectée, rechargement forcé');
         }
         
         // Forcer un rechargement complet pour éviter les états corrompus
@@ -180,9 +175,7 @@ const usePWALifecycle = (config: PermissionConfig, onReactivation?: () => void):
     };
     
     const handleFocus = () => {
-      if (config.enableLogging) {
-        console.log('[PWALifecycle] Focus window détecté');
-      }
+
       lastActiveTime.current = Date.now();
     };
     

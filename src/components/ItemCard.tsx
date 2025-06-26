@@ -29,6 +29,7 @@ export interface ItemCardProps {
 
 const ItemCard: React.FC<ItemCardProps> = ({ 
   item, 
+  onPress,
   onMarkAsSold,
   onMarkAsAvailable,
   fadeAnimation,
@@ -43,12 +44,15 @@ const ItemCard: React.FC<ItemCardProps> = ({
   const [localStatus, setLocalStatus] = useState(item.status);
 
   const handlePress = useCallback(() => {
-    // Priorité 1: Utiliser la nouvelle route dédiée
-    router.push(`/item/${item.id}/info`);
+    // Priorité 1: Utiliser onPress personnalisé si fourni (avec returnTo)
+    if (onPress) {
+      onPress(item);
+      return;
+    }
     
-    // Priorité 2: Fallback vers l'ancienne méthode si fournie
-    // onPress?.(item);
-  }, [item.id, router]);
+    // Priorité 2: Fallback vers la route par défaut
+    router.push(`/item/${item.id}/info`);
+  }, [item, onPress, router]);
 
   const handlePressIn = useCallback(() => {
     scaleAnimation?.scaleUp({ duration: 150 });

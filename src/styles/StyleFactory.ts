@@ -23,6 +23,7 @@ type ComponentName =
   | 'ContainerContents'
   | 'Scanner'
   | 'Stats'
+  | 'SalesChart'
   | 'FilterBar'
   | 'Settings'
   | 'Labels'
@@ -94,6 +95,8 @@ class StyleFactory {
         return this.getScannerStyles(theme, commonStyles);
       case 'Stats':
         return this.getStatsStyles(theme, commonStyles);
+      case 'SalesChart':
+        return this.getSalesChartStyles(theme, commonStyles);
       case 'FilterBar':
         return this.getFilterBarStyles(theme, commonStyles);
       case 'Settings':
@@ -2100,6 +2103,285 @@ class StyleFactory {
         color: theme.primary,
         textAlign: 'center' as const,
       },
+      
+      // 🆕 NOUVEAUX STYLES pour SalesBarChart
+      salesChartContainer: {
+        backgroundColor: theme.surface,
+        borderRadius: 16,
+        margin: 16,
+        borderWidth: 1,
+        borderColor: theme.border,
+        ...Platform.select({
+          web: {
+            boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
+          },
+          default: {
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 6,
+          },
+        }),
+      },
+      salesChartHeader: {
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+      },
+      salesChartTitleRow: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        marginBottom: 12,
+      },
+      salesChartTitle: {
+        fontSize: 18,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+      },
+      salesPeriodSelectors: {
+        flexDirection: 'row' as const,
+        gap: 8,
+      },
+      salesPeriodText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        backgroundColor: theme.backgroundSecondary,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+      },
+      salesTotalContainer: {
+        alignItems: 'center' as const,
+        marginVertical: 16,
+      },
+      salesTotalAmount: {
+        fontSize: 32,
+        fontWeight: '700' as const,
+        color: theme.text.primary,
+        marginBottom: 4,
+      },
+      salesTotalPeriod: {
+        fontSize: 14,
+        color: theme.text.secondary,
+      },
+      salesNavigation: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        marginTop: 16,
+      },
+      salesNavButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        borderRadius: 12,
+        backgroundColor: theme.backgroundSecondary,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        borderWidth: 1,
+        borderColor: theme.border,
+        minWidth: 60,
+      },
+      salesNavButtonDisabled: {
+        opacity: 0.4,
+        backgroundColor: theme.border,
+      },
+      salesNavCenter: {
+        flex: 1,
+        alignItems: 'center' as const,
+        paddingHorizontal: 16,
+      },
+      salesNavDate: {
+        fontSize: 14,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+        textAlign: 'center' as const,
+      },
+      salesChartContent: {
+        paddingHorizontal: 16,
+        paddingVertical: 20,
+        minHeight: 250,
+      },
+      chartWrapper: {
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      salesLegend: {
+        flexDirection: 'row' as const,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderTopWidth: 1,
+        borderTopColor: theme.border,
+      },
+      salesLegendItem: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        gap: 8,
+      },
+      salesLegendColor: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+      },
+      salesLegendText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontWeight: '500' as const,
+      },
+      
+      // 🆕 NOUVEAUX STYLES pour navigation avancée
+      salesNavigationExtended: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        marginTop: 16,
+        paddingHorizontal: 4,
+        gap: 8,
+      },
+      salesNavButtonFast: {
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 14,
+        backgroundColor: theme.primary,
+        borderWidth: 1,
+        borderColor: theme.primary,
+        minWidth: 70,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      salesNavButtonFastText: {
+        fontSize: 11,
+        fontWeight: '600' as const,
+        color: theme.text.onPrimary,
+        textAlign: 'center' as const,
+      },
+      salesNavButtonText: {
+        fontSize: 11,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+        textAlign: 'center' as const,
+      },
+      salesNavButtonTextDisabled: {
+        color: theme.text.disabled,
+      },
+      salesTodayButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: theme.success,
+        borderWidth: 1,
+        borderColor: theme.success,
+        flex: 1,
+        maxWidth: 100,
+      },
+      salesTodayButtonDisabled: {
+        backgroundColor: theme.border,
+        borderColor: theme.border,
+      },
+      salesTodayButtonText: {
+        fontSize: 12,
+        fontWeight: '600' as const,
+        color: 'white',
+        textAlign: 'center' as const,
+      },
+      salesTodayButtonTextDisabled: {
+        color: theme.text.disabled,
+      },
+      salesInfoText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        textAlign: 'center' as const,
+        marginTop: 4,
+      },
+      
+      // 🆕 STYLES pour le tooltip de détail du jour
+      dayDetailTooltip: {
+        position: 'absolute' as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        zIndex: 1000,
+      },
+      dayDetailContent: {
+        backgroundColor: theme.surface,
+        borderRadius: 16,
+        padding: 24,
+        marginHorizontal: 40,
+        borderWidth: 1,
+        borderColor: theme.border,
+        alignItems: 'center' as const,
+        minWidth: 280,
+        ...Platform.select({
+          web: {
+            boxShadow: '0px 8px 32px rgba(0, 0, 0, 0.2)',
+          },
+          default: {
+            elevation: 8,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+          },
+        }),
+      },
+      dayDetailClose: {
+        position: 'absolute' as const,
+        top: 12,
+        right: 12,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: theme.border,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+      },
+      dayDetailCloseText: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        fontWeight: '600' as const,
+      },
+      dayDetailDate: {
+        fontSize: 18,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        marginBottom: 16,
+        textAlign: 'center' as const,
+        textTransform: 'capitalize' as const,
+      },
+      dayDetailAmount: {
+        fontSize: 32,
+        fontWeight: '700' as const,
+        color: theme.primary,
+        marginBottom: 8,
+        textAlign: 'center' as const,
+      },
+      dayDetailLabel: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        marginBottom: 16,
+        textAlign: 'center' as const,
+      },
+      dayDetailNoSales: {
+        fontSize: 14,
+        color: theme.text.disabled,
+        fontStyle: 'italic' as const,
+        textAlign: 'center' as const,
+      },
+      salesClickHint: {
+        fontSize: 11,
+        color: theme.text.secondary,
+        textAlign: 'center' as const,
+        marginTop: 8,
+        fontStyle: 'italic' as const,
+      },
+      
       totalText: {
         fontSize: 16,
         fontWeight: '600' as const,
@@ -2297,6 +2579,318 @@ class StyleFactory {
       },
       actualProfitValue: {
         color: theme.success,
+      },
+    });
+  }
+
+  /**
+   * Styles pour SalesChart
+   */
+  private static getSalesChartStyles(theme: AppThemeType, common: CommonStyles) {
+    return StyleSheet.create({
+      // Container principal
+      salesChartContainer: {
+        backgroundColor: theme.surface,
+        borderRadius: 12,
+        marginHorizontal: 16,
+        marginVertical: 8,
+        ...common.shadow,
+      },
+      
+      // Header du graphique
+      salesChartHeader: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 12,
+      },
+      salesChartTitleRow: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        marginBottom: 16,
+      },
+      salesChartTitle: {
+        fontSize: 20,
+        fontWeight: '700' as const,
+        color: theme.text.primary,
+      },
+      
+      // 🆕 ONGLETS DE PÉRIODE
+      periodTabsContainer: {
+        flexDirection: 'row' as const,
+        backgroundColor: theme.backgroundSecondary,
+        borderRadius: 10,
+        padding: 4,
+        marginBottom: 16,
+      },
+      periodTab: {
+        flex: 1,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      periodTabActive: {
+        backgroundColor: theme.primary,
+        ...common.shadow,
+      },
+      periodTabIcon: {
+        fontSize: 16,
+        marginBottom: 2,
+      },
+      periodTabLabel: {
+        fontSize: 13,
+        fontWeight: '600' as const,
+        color: theme.text.secondary,
+        marginBottom: 1,
+      },
+      periodTabLabelActive: {
+        color: theme.text.onPrimary,
+      },
+      periodTabSubtitle: {
+        fontSize: 10,
+        color: theme.text.secondary,
+        fontWeight: '400' as const,
+      },
+      periodTabSubtitleActive: {
+        color: theme.text.onPrimary,
+        opacity: 0.8,
+      },
+      
+      // Totaux et infos
+      salesTotalContainer: {
+        alignItems: 'center' as const,
+        marginBottom: 16,
+      },
+      salesTotalAmount: {
+        fontSize: 32,
+        fontWeight: '800' as const,
+        color: theme.primary,
+        marginBottom: 4,
+      },
+      salesTotalPeriod: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        marginBottom: 2,
+      },
+      salesInfoText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontStyle: 'italic' as const,
+      },
+      
+      // Navigation temporelle
+      salesNavigationExtended: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        flexWrap: 'wrap' as const,
+        gap: 8,
+      },
+      
+      // Groupes de navigation
+      navGroup: {
+        flexDirection: 'row' as const,
+        gap: 6,
+        alignItems: 'center' as const,
+      },
+      
+      // Boutons de navigation
+      salesNavButton: {
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: theme.backgroundSecondary,
+        borderWidth: 1,
+        borderColor: theme.border,
+        minWidth: 60,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      salesNavButtonFast: {
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderRadius: 8,
+        backgroundColor: theme.primary + '15',
+        borderWidth: 1,
+        borderColor: theme.primary + '30',
+        minWidth: 65,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      salesNavButtonDisabled: {
+        opacity: 0.4,
+        backgroundColor: theme.border,
+      },
+      
+      // Textes des boutons
+      salesNavButtonText: {
+        fontSize: 11,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+      },
+      salesNavButtonFastText: {
+        fontSize: 11,
+        fontWeight: '600' as const,
+        color: theme.primary,
+      },
+      salesNavButtonTextDisabled: {
+        color: theme.text.disabled,
+      },
+      
+      // Bouton aujourd'hui
+      salesTodayButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: theme.success + '15',
+        borderWidth: 1,
+        borderColor: theme.success + '30',
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        flex: 1,
+        maxWidth: 140,
+      },
+      salesTodayButtonDisabled: {
+        backgroundColor: theme.border,
+        borderColor: theme.border,
+      },
+      salesTodayButtonText: {
+        fontSize: 12,
+        fontWeight: '600' as const,
+        color: theme.success,
+      },
+      salesTodayButtonTextDisabled: {
+        color: theme.text.disabled,
+      },
+      
+      // Contenu du graphique
+      salesChartContent: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        flex: 1,
+      },
+      
+      // États loading/erreur
+      loadingContainer: {
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        paddingVertical: 40,
+      },
+      loadingText: {
+        color: theme.text.secondary,
+        fontSize: 14,
+      },
+      noDataContainer: {
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        paddingVertical: 60,
+      },
+      noDataText: {
+        color: theme.text.secondary,
+        fontSize: 16,
+        fontStyle: 'italic' as const,
+      },
+      
+      // Wrapper du graphique
+      chartWrapper: {
+        alignItems: 'center' as const,
+      },
+      
+      // 🆕 TOOLTIP DE DÉTAIL DU JOUR
+      dayDetailTooltip: {
+        position: 'absolute' as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        zIndex: 1000,
+      },
+      dayDetailContent: {
+        backgroundColor: theme.surface,
+        borderRadius: 16,
+        padding: 24,
+        marginHorizontal: 32,
+        alignItems: 'center' as const,
+        ...common.shadow,
+        minWidth: 250,
+      },
+      dayDetailClose: {
+        position: 'absolute' as const,
+        top: 8,
+        right: 8,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: theme.border,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+      },
+      dayDetailCloseText: {
+        color: theme.text.secondary,
+        fontSize: 16,
+        fontWeight: '600' as const,
+      },
+      dayDetailDate: {
+        fontSize: 16,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        marginBottom: 8,
+        textAlign: 'center' as const,
+      },
+      dayDetailAmount: {
+        fontSize: 24,
+        fontWeight: '800' as const,
+        color: theme.primary,
+        marginBottom: 4,
+      },
+      dayDetailLabel: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        marginBottom: 8,
+      },
+      dayDetailNoSales: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontStyle: 'italic' as const,
+        textAlign: 'center' as const,
+      },
+      
+      // 🆕 LÉGENDE DU GRAPHIQUE
+      salesLegend: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: theme.border,
+      },
+      salesLegendItem: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+      },
+      salesLegendColor: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: 8,
+      },
+      salesLegendText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontWeight: '500' as const,
+      },
+      salesClickHint: {
+        fontSize: 11,
+        color: theme.text.secondary,
+        fontStyle: 'italic' as const,
       },
     });
   }

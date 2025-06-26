@@ -14,6 +14,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../../src/store/store';
 import { updateItemStatus } from '../../../src/store/itemsThunks';
 import { useAppTheme, type AppThemeType } from '../../../src/contexts/ThemeContext';
+import { SimilarItems } from '../../../src/components';
 
 export default function ItemInfoScreen() {
   const router = useRouter();
@@ -218,6 +219,21 @@ export default function ItemInfoScreen() {
             </Text>
           </View>
           
+          {item.status === 'sold' && item.soldAt && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Date de vente:</Text>
+              <Text style={styles.infoValue}>
+                {new Date(item.soldAt).toLocaleDateString('fr-FR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Text>
+            </View>
+          )}
+          
           {item.description ? (
             <View style={styles.descriptionContainer}>
               <Text style={styles.infoLabel}>Description:</Text>
@@ -263,10 +279,17 @@ export default function ItemInfoScreen() {
                   <Text style={styles.buttonText}>Générer une étiquette</Text>
                 </TouchableOpacity>
               </>
-            )}
+                          )}
+            </View>
           </View>
+
+          {/* Section Articles Similaires */}
+          <SimilarItems 
+            itemId={item.id}
+            maxRecommendations={3}
+            title="Articles similaires"
+          />
         </View>
-      </View>
 
       {/* Modal pour marquer comme vendu */}
       <Modal

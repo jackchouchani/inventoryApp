@@ -15,6 +15,9 @@ import { useContainersOptimized as useContainers } from '../../src/hooks/useCont
 import { useFilteredItems, useGlobalSearch } from '../../src/hooks/useOptimizedSelectors';
 import { ItemFilters } from '../../src/store/selectors';
 
+// Hook Algolia optimisé pour la recherche économique
+import { useAlgoliaOptimizedSearch } from '../../src/hooks/useAlgoliaOptimizedSearch';
+
 // Composants optimisés
 import VirtualizedItemList from '../../src/components/VirtualizedItemList';
 import StyleFactory from '../../src/styles/StyleFactory';
@@ -161,38 +164,64 @@ const StockScreenContent = () => {
   }, [filters, searchQuery, categories, containers]);
 
   // --- Utilisation intelligente des hooks selon le contexte ---
-  const isSearchActive = searchQuery.trim().length > 0;
+  const isSearchActive = searchQuery.trim().length >= 2; // Algolia minimum 2 caractères
   
-  // Si recherche active, utiliser useGlobalSearch pour charger tous les items
-  const { items: searchResults, isSearching } = useGlobalSearch(isSearchActive ? searchQuery : '');
+  // Hook Algolia optimisé pour la recherche (avec debounce et pagination)
+  const algoliaSearch = useAlgoliaOptimizedSearch(searchQuery, {
+    enabled: isSearchActive, // Seulement activer si recherche active
+    debounceMs: 400, // 400ms de délai pour économiser les requêtes
+    hitsPerPage: 20, // Maximum 20 résultats par page
+    minQueryLength: 2 // Minimum 2 caractères
+  });
   
-  // Sinon, utiliser le filtrage standard
+  // Fallback Redux pour le filtrage standard (sans recherche)
   const standardResults = useFilteredItems(isSearchActive ? {} : reduxFilters);
   
   // Résultats finaux selon le mode
   const filteredItems = useMemo(() => {
-    if (isSearchActive) {
-      // En mode recherche, appliquer les autres filtres sur les résultats de recherche
-      let results = searchResults;
+    if (isSearchActive && algoliaSearch.items.length > 0) {
+      // En mode recherche Algolia, appliquer les autres filtres localement
+      let results = algoliaSearch.items;
       
-      if (reduxFilters.status) {
+      if (reduxFilters.status && reduxFilters.status !== 'all') {
         results = results.filter(item => item.status === reduxFilters.status);
       }
       if (reduxFilters.categoryId) {
         results = results.filter(item => item.categoryId === reduxFilters.categoryId);
       }
-      if (reduxFilters.containerId) {
-        results = results.filter(item => item.containerId === reduxFilters.containerId);
+      if (reduxFilters.containerId !== undefined) {
+        if (reduxFilters.containerId === null) {
+          results = results.filter(item => item.containerId === null);
+        } else {
+          results = results.filter(item => item.containerId === reduxFilters.containerId);
+        }
+      }
+      
+      // Tri spécial pour les items vendus (même pour Algolia)
+      if (reduxFilters.status === 'sold') {
+        results = results.sort((a, b) => {
+          // Si un item n'a pas de soldAt, le mettre à la fin
+          if (!a.soldAt && !b.soldAt) return 0;
+          if (!a.soldAt) return 1;
+          if (!b.soldAt) return -1;
+          
+          // Tri décroissant : date la plus récente en premier
+          return new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime();
+        });
       }
       
       return results;
+    } else if (isSearchActive && algoliaSearch.items.length === 0 && !algoliaSearch.isLoading) {
+      // Recherche active mais aucun résultat Algolia
+      return [];
     } else {
+      // Mode filtrage standard Redux (le tri est déjà fait dans les sélecteurs)
       return standardResults;
     }
-  }, [isSearchActive, searchResults, standardResults, reduxFilters]);
+  }, [isSearchActive, algoliaSearch.items, algoliaSearch.isLoading, standardResults, reduxFilters]);
 
   // Combiner les états de chargement et erreurs
-  const isLoading = (itemsLoading || categoriesLoading || containersLoading || isSearching);
+  const isLoading = (itemsLoading || categoriesLoading || containersLoading || algoliaSearch.isLoading || algoliaSearch.isSearching);
   const error = itemsError || categoriesError || containersError;
 
   console.log('[StockScreen] Hook data:', { 
@@ -201,7 +230,9 @@ const StockScreenContent = () => {
     categoriesCount: categories.length, 
     containersCount: containers?.length || 0, 
     isSearchActive,
-    isSearching,
+    algoliaSearching: algoliaSearch.isSearching,
+    algoliaLoading: algoliaSearch.isLoading,
+    algoliaTotalHits: algoliaSearch.totalHits,
     isLoading, 
     error,
     filters: reduxFilters 
@@ -518,6 +549,39 @@ const StockScreenContent = () => {
       {/* Filtres compacts */}
       {showFilters && <CompactFilterBar />}
 
+      {/* Indicateur de recherche Algolia */}
+      {isSearchActive && (
+        <View style={{
+          backgroundColor: activeTheme.primary + '10',
+          borderColor: activeTheme.primary + '30',
+          borderWidth: 1,
+          borderRadius: 6,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          marginHorizontal: 12,
+          marginBottom: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Text style={{
+            color: activeTheme.primary,
+            fontSize: 12,
+            fontWeight: '500'
+          }}>
+            🔍 Recherche Algolia • {algoliaSearch.totalHits} résultat{algoliaSearch.totalHits > 1 ? 's' : ''}
+          </Text>
+          {algoliaSearch.canLoadMore && (
+            <Text style={{
+              color: activeTheme.text.secondary,
+              fontSize: 11
+            }}>
+              Scroll pour plus
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Liste virtualisée optimisée avec gestion iOS PWA */}
       <View 
         style={{ flex: 1 }}
@@ -540,8 +604,8 @@ const StockScreenContent = () => {
           onItemPress={stableCallbacks.current.handleItemPress}
           onMarkAsSold={stableCallbacks.current.handleMarkAsSoldPress}
           onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
-          onEndReached={loadMore}
-          isLoadingMore={itemsLoading && items.length > 0}
+          onEndReached={isSearchActive ? algoliaSearch.loadMore : loadMore}
+          isLoadingMore={isSearchActive ? algoliaSearch.isSearching : (itemsLoading && items.length > 0)}
           estimatedItemSize={120}
         />
       </View>

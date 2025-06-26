@@ -45,7 +45,6 @@ export const usePWAServiceWorker = (): UsePWAServiceWorkerReturn => {
           if (registration.active) {
             serviceWorkerRef.current = registration.active;
             setIsServiceWorkerReady(true);
-            console.log('[PWA] Service Worker connecté et prêt');
           }
 
           // Écouter les messages du service worker
@@ -65,7 +64,6 @@ export const usePWAServiceWorker = (): UsePWAServiceWorkerReturn => {
 
       switch (type) {
         case 'APP_REACTIVATED':
-          console.log('[PWA] App réactivée détectée par SW');
           setLastReactivation(new Date());
           
           // Déclencher un événement custom pour que l'app puisse réagir
@@ -75,18 +73,15 @@ export const usePWAServiceWorker = (): UsePWAServiceWorkerReturn => {
           break;
 
         case 'UPDATE_AVAILABLE':
-          console.log('[PWA] Mise à jour disponible:', data);
           window.dispatchEvent(new CustomEvent('pwa-update-available', {
             detail: data
           }));
           break;
 
         case 'SW_UPDATED':
-          console.log('[PWA] Service Worker mis à jour:', data.version);
           break;
 
         default:
-          console.log('[PWA] Message SW non géré:', type, data);
       }
     };
 
@@ -101,10 +96,8 @@ export const usePWAServiceWorker = (): UsePWAServiceWorkerReturn => {
       if (document.hidden) {
         // App devient invisible
         sendMessage({ type: 'APP_SUSPENDED' });
-        console.log('[PWA] App suspendue notifiée au SW');
       } else {
         // App redevient visible
-        console.log('[PWA] App redevient visible');
         
         // Relancer le heartbeat si nécessaire
         if (!heartbeatIntervalRef.current) {
@@ -122,7 +115,6 @@ export const usePWAServiceWorker = (): UsePWAServiceWorkerReturn => {
     };
 
     const handlePageShow = () => {
-      console.log('[PWA] Page show event');
       if (!heartbeatIntervalRef.current) {
         startHeartbeat();
       }

@@ -5,6 +5,9 @@ import { useSegments } from 'expo-router';
 import { useInitialData } from '../hooks/useInitialData';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../store/store';
+import { fetchItems } from '../store/itemsThunks';
+import { fetchCategories } from '../store/categoriesThunks';
+import { fetchContainers } from '../store/containersThunks';
 
 interface DataLoaderProps {
   children: React.ReactNode;
@@ -145,9 +148,9 @@ export const DataLoader: React.FC<DataLoaderProps> = memo(({
 
     // Tenter un refetch via Redux actions
     try {
-      dispatch({ type: 'categories/fetchCategories' });
-      dispatch({ type: 'containers/fetchContainers' });
-      dispatch({ type: 'items/fetchItems', payload: { page: 0, limit: 50 } });
+      dispatch(fetchCategories());
+      dispatch(fetchContainers());
+      dispatch(fetchItems({ page: 0, limit: 50 }));
     } catch (error) {
       console.error('Erreur lors du refetch Redux:', error);
       
