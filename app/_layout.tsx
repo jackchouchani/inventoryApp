@@ -14,6 +14,7 @@ import { usePWAServiceWorker } from '../src/hooks/usePWALifecycle';
 import { fetchItems } from '../src/store/itemsThunks';
 import { fetchCategories } from '../src/store/categoriesThunks';
 import { fetchContainers } from '../src/store/containersThunks';
+import { fetchLocations } from '../src/store/locationsThunks';
 
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
@@ -51,6 +52,7 @@ function usePWALifecycle() {
         store.dispatch(fetchItems({ page: 0, limit: 50 }));
         store.dispatch(fetchCategories());
         store.dispatch(fetchContainers());
+        store.dispatch(fetchLocations());
       } catch (error) {
         console.error('Erreur lors du refresh automatique:', error);
       }

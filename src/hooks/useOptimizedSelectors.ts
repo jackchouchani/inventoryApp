@@ -6,16 +6,22 @@ import {
   selectAllItems,
   selectAllCategories,
   selectAllContainers,
+  selectAllLocations,
   selectItemStats,
   selectItemsByCategory,
   selectItemsByContainer,
+  selectItemsByLocation,
+  selectContainersByLocation,
   selectItemsLoading,
   selectItemsError,
   selectPaginationInfo,
   type ItemFilters
 } from '../store/selectors';
 import { fetchItems } from '../store/itemsThunks';
+import { fetchLocations } from '../store/locationsThunks';
 import { AppDispatch } from '../store/store';
+import { useLocationsOptimized } from './useLocationsOptimized';
+import { useContainersOptimized } from './useContainersOptimized';
 
 /**
  * Hook optimisé pour récupérer les items filtrés avec memoization
@@ -59,6 +65,20 @@ export const useItemsByContainer = () => {
 };
 
 /**
+ * Hook pour les items groupés par emplacement
+ */
+export const useItemsByLocation = () => {
+  return useSelector(selectItemsByLocation);
+};
+
+/**
+ * Hook pour les containers groupés par emplacement
+ */
+export const useContainersByLocation = () => {
+  return useSelector(selectContainersByLocation);
+};
+
+/**
  * Hook pour récupérer toutes les catégories
  */
 export const useAllCategories = () => {
@@ -67,9 +87,31 @@ export const useAllCategories = () => {
 
 /**
  * Hook pour récupérer tous les containers
+ * Utilise le hook optimisé pour gérer le chargement automatique
  */
 export const useAllContainers = () => {
-  return useSelector(selectAllContainers);
+  const { data } = useContainersOptimized();
+  return data || [];
+};
+
+/**
+ * Hook pour récupérer tous les emplacements
+ * Déclenche le chargement si nécessaire et utilise le selector
+ */
+export const useAllLocations = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const locations = useSelector(selectAllLocations);
+  const status = useSelector((state: RootState) => state.locations?.status || 'idle');
+  
+  useEffect(() => {
+    console.log('[useAllLocations] Status:', status, 'Locations count:', locations.length);
+    if (status === 'idle') {
+      console.log('[useAllLocations] Dispatching fetchLocations...');
+      dispatch(fetchLocations());
+    }
+  }, [dispatch, status, locations.length]);
+  
+  return locations || [];
 };
 
 /**
@@ -100,6 +142,7 @@ export const useStockPageData = (filters?: ItemFilters) => {
   const items = useFilteredItems(filters);
   const categories = useAllCategories();
   const containers = useAllContainers();
+  const locations = useAllLocations();
   const isLoading = useItemsLoading();
   const error = useItemsError();
   const pagination = usePaginationInfo();
@@ -109,10 +152,11 @@ export const useStockPageData = (filters?: ItemFilters) => {
     items,
     categories,
     containers,
+    locations,
     isLoading,
     error,
     pagination,
-  }), [items, categories, containers, isLoading, error, pagination]);
+  }), [items, categories, containers, locations, isLoading, error, pagination]);
 
   return memoizedData;
 };
@@ -125,6 +169,7 @@ export const useContainerPageData = (filters?: ItemFilters) => {
   const allItems = useSelector(selectAllItems);
   const categories = useAllCategories();
   const containers = useAllContainers();
+  const locations = useAllLocations();
   const isLoading = useItemsLoading();
   const error = useItemsError();
   const { totalItems, hasMore } = useSelector((state: RootState) => state.items);
@@ -178,6 +223,15 @@ export const useContainerPageData = (filters?: ItemFilters) => {
         }
       }
       
+      // Filtre par emplacement
+      if (filters.locationId !== undefined) {
+        if (filters.locationId === null && item.locationId !== null) {
+          return false;
+        } else if (filters.locationId !== null && item.locationId !== filters.locationId) {
+          return false;
+        }
+      }
+      
       return true;
     });
 
@@ -201,11 +255,114 @@ export const useContainerPageData = (filters?: ItemFilters) => {
     items: filteredItems,
     categories,
     containers,
+    locations,
     isLoading,
     error,
     totalItems: allItems.length,
     hasMore,
-  }), [filteredItems, categories, containers, isLoading, error, allItems.length, hasMore]);
+  }), [filteredItems, categories, containers, locations, isLoading, error, allItems.length, hasMore]);
+};
+
+/**
+ * Hook spécifique pour les emplacements - Force le chargement de TOUS les items et containers
+ */
+export const useLocationPageData = (filters?: ItemFilters) => {
+  const dispatch = useDispatch<AppDispatch>();
+  const allItems = useSelector(selectAllItems);
+  const categories = useAllCategories();
+  const containers = useAllContainers();
+  const locations = useAllLocations();
+  const isLoading = useItemsLoading();
+  const error = useItemsError();
+  const { totalItems, hasMore } = useSelector((state: RootState) => state.items);
+  
+  // Force le chargement de TOUS les items si ce n'est pas déjà fait
+  useEffect(() => {
+    const loadAllItems = async () => {
+      if (hasMore && allItems.length < totalItems) {
+        console.log('[useLocationPageData] Chargement de TOUS les items pour emplacements');
+        try {
+          await dispatch(fetchItems({ page: 0, limit: 10000 })).unwrap();
+        } catch (error) {
+          console.error('[useLocationPageData] Erreur chargement items:', error);
+        }
+      }
+    };
+
+    loadAllItems();
+  }, [dispatch, hasMore, allItems.length, totalItems]);
+
+  // Appliquer les filtres et tri aux items
+  const filteredItems = useMemo(() => {
+    if (!filters) return allItems;
+    
+    const filtered = allItems.filter(item => {
+      // Filtre par statut
+      if (filters.status && filters.status !== 'all' && item.status !== filters.status) {
+        return false;
+      }
+      
+      // Filtre par recherche
+      if (filters.searchQuery) {
+        const query = filters.searchQuery.toLowerCase();
+        if (!item.name.toLowerCase().includes(query) && 
+            !(item.description || '').toLowerCase().includes(query)) {
+          return false;
+        }
+      }
+      
+      // Filtre par catégorie
+      if (filters.categoryId && item.categoryId !== filters.categoryId) {
+        return false;
+      }
+      
+      // Filtre par container
+      if (filters.containerId !== undefined) {
+        if (filters.containerId === null && item.containerId !== null) {
+          return false;
+        } else if (filters.containerId !== null && item.containerId !== filters.containerId) {
+          return false;
+        }
+      }
+      
+      // Filtre par emplacement
+      if (filters.locationId !== undefined) {
+        if (filters.locationId === null && item.locationId !== null) {
+          return false;
+        } else if (filters.locationId !== null && item.locationId !== filters.locationId) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+
+    // Tri spécial pour les items vendus : tri par date de vente (plus récent en premier)
+    if (filters.status === 'sold') {
+      return filtered.sort((a, b) => {
+        // Si un item n'a pas de soldAt, le mettre à la fin
+        if (!a.soldAt && !b.soldAt) return 0;
+        if (!a.soldAt) return 1;
+        if (!b.soldAt) return -1;
+        
+        // Tri décroissant : date la plus récente en premier
+        return new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime();
+      });
+    }
+
+    return filtered;
+  }, [allItems, filters]);
+
+  return useMemo(() => ({
+    items: filteredItems,
+    categories,
+    containers,
+    locations,
+    isLoading,
+    error,
+    totalItems: allItems.length,
+    hasMore,
+  }), [filteredItems, categories, containers, locations, isLoading, error, allItems.length, hasMore]);
 };
 
 /**
@@ -227,14 +384,18 @@ export const useDashboardData = () => {
   const stats = useItemStats();
   const itemsByCategory = useItemsByCategory();
   const itemsByContainer = useItemsByContainer();
+  const itemsByLocation = useItemsByLocation();
+  const containersByLocation = useContainersByLocation();
   const isLoading = useItemsLoading();
 
   return useMemo(() => ({
     stats,
     itemsByCategory,
     itemsByContainer,
+    itemsByLocation,
+    containersByLocation,
     isLoading,
-  }), [stats, itemsByCategory, itemsByContainer, isLoading]);
+  }), [stats, itemsByCategory, itemsByContainer, itemsByLocation, containersByLocation, isLoading]);
 };
 
 /**

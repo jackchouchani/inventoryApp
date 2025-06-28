@@ -84,8 +84,8 @@ const EditContainerScreen = () => {
         // Mise à jour Redux
         dispatch(updateContainer(result.container));
 
-        // Retourner à la page de contenu
-        router.back();
+        // Retourner à la page de contenu ou la liste des containers
+        router.push('/container');
         return true;
       } else {
         Alert.alert('Erreur', 'Impossible de modifier le container');
@@ -149,7 +149,7 @@ const EditContainerScreen = () => {
   };
 
   const handleCancel = () => {
-    router.back();
+    router.push('/container');
   };
 
   // Bouton de suppression

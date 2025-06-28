@@ -1,11 +1,11 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
-import { Container } from '../types/container';
+import { Location } from '../types/location';
 import { RootState } from './store';
 import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
-import { generateUniqueContainerQRCode } from '../utils/qrCodeGenerator';
+import { generateUniqueLocationQRCode } from '../utils/qrCodeGenerator';
 
 // Types pour les réponses et erreurs
 interface ThunkError {
@@ -14,11 +14,10 @@ interface ThunkError {
   originalError: unknown;
 }
 
-interface ContainerInput {
+interface LocationInput {
   name: string;
+  address?: string;
   description?: string;
-  number: number;
-  locationId?: number | null;
 }
 
 // Fonction utilitaire pour convertir ErrorDetails en ThunkError
@@ -39,37 +38,36 @@ const handleThunkError = (error: unknown): ThunkError => {
 };
 
 /**
- * Récupérer tous les containers
+ * Récupérer tous les emplacements
  */
-export const fetchContainers = createAsyncThunk<
-  Container[],
+export const fetchLocations = createAsyncThunk<
+  Location[],
   void,
   { state: RootState; rejectValue: ThunkError }
->('containers/fetchContainers', async (_, { rejectWithValue }) => {
+>('locations/fetchLocations', async (_, { rejectWithValue }) => {
   try {
-    console.log('[fetchContainers] Début du chargement des containers...');
+    console.log('[fetchLocations] Début du chargement des emplacements...');
 
     const { data, error } = await supabase
-      .from('containers')
+      .from('locations')
       .select('*')
       .eq('deleted', false)
-      .order('number', { ascending: true });
+      .order('name', { ascending: true });
 
-    console.log('[fetchContainers] Résultat query:', { data: data?.length, error });
+    console.log('[fetchLocations] Résultat query:', { data: data?.length, error });
 
     if (error) throw error;
 
-    return data.map(container => ({
-      id: container.id,
-      number: container.number,
-      name: container.name,
-      description: container.description || '',
-      qrCode: container.qr_code,
-      locationId: container.location_id || null,
-      createdAt: container.created_at,
-      updatedAt: container.updated_at,
-      deleted: container.deleted,
-      userId: container.user_id
+    return data.map(location => ({
+      id: location.id,
+      name: location.name,
+      address: location.address,
+      description: location.description,
+      qrCode: location.qr_code,
+      createdAt: location.created_at,
+      updatedAt: location.updated_at,
+      deleted: location.deleted,
+      userId: location.user_id
     }));
   } catch (error) {
     return rejectWithValue(handleThunkError(error));
@@ -77,16 +75,16 @@ export const fetchContainers = createAsyncThunk<
 });
 
 /**
- * Récupérer un container par son QR code
+ * Récupérer un emplacement par son QR code
  */
-export const fetchContainerByQRCode = createAsyncThunk<
-  Container | null,
+export const fetchLocationByQRCode = createAsyncThunk<
+  Location | null,
   string,
   { state: RootState; rejectValue: ThunkError }
->('containers/fetchContainerByQRCode', async (qrCode, { rejectWithValue }) => {
+>('locations/fetchLocationByQRCode', async (qrCode, { rejectWithValue }) => {
   try {
     const { data, error } = await supabase
-      .from('containers')
+      .from('locations')
       .select('*')
       .eq('qr_code', qrCode)
       .eq('deleted', false)
@@ -101,11 +99,10 @@ export const fetchContainerByQRCode = createAsyncThunk<
 
     return {
       id: data.id,
-      number: data.number,
       name: data.name,
-      description: data.description || '',
+      address: data.address,
+      description: data.description,
       qrCode: data.qr_code,
-      locationId: data.location_id || null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       deleted: data.deleted,
@@ -117,13 +114,13 @@ export const fetchContainerByQRCode = createAsyncThunk<
 });
 
 /**
- * Créer un nouveau container
+ * Créer un nouvel emplacement
  */
-export const createContainer = createAsyncThunk<
-  Container,
-  ContainerInput,
+export const createLocation = createAsyncThunk<
+  Location,
+  LocationInput,
   { state: RootState; rejectValue: ThunkError }
->('containers/createContainer', async (containerInput, { rejectWithValue }) => {
+>('locations/createLocation', async (locationInput, { rejectWithValue }) => {
   try {
     // Récupérer l'utilisateur actuel depuis Supabase Auth
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -132,16 +129,15 @@ export const createContainer = createAsyncThunk<
       throw new Error('Utilisateur non authentifié');
     }
 
-    // Générer le QR code unique au format CONT_XXXX
-    const qrCode = await generateUniqueContainerQRCode();
+    // Générer le QR code unique au format LOC_XXXX
+    const qrCode = await generateUniqueLocationQRCode();
     
     const { data, error } = await supabase
-      .from('containers')
+      .from('locations')
       .insert({
-        name: containerInput.name,
-        description: containerInput.description || '',
-        number: containerInput.number,
-        location_id: containerInput.locationId || null,
+        name: locationInput.name,
+        address: locationInput.address,
+        description: locationInput.description,
         qr_code: qrCode,
         user_id: user.id, // ✅ AJOUT du user_id requis
         created_at: new Date().toISOString(),
@@ -152,15 +148,14 @@ export const createContainer = createAsyncThunk<
       .single();
 
     if (error) throw error;
-    if (!data) throw new Error('Erreur lors de la création du container');
+    if (!data) throw new Error('Erreur lors de la création de l\'emplacement');
 
     return {
       id: data.id,
-      number: data.number,
       name: data.name,
-      description: data.description || '',
+      address: data.address,
+      description: data.description,
       qrCode: data.qr_code,
-      locationId: data.location_id || null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       deleted: data.deleted,
@@ -172,46 +167,35 @@ export const createContainer = createAsyncThunk<
 });
 
 /**
- * Mettre à jour un container
+ * Mettre à jour un emplacement
  */
-export const updateContainer = createAsyncThunk<
-  Container,
-  { id: number; updates: Partial<ContainerInput> },
+export const updateLocation = createAsyncThunk<
+  Location,
+  { id: number; updates: Partial<LocationInput> },
   { state: RootState; rejectValue: ThunkError }
->('containers/updateContainer', async ({ id, updates }, { rejectWithValue }) => {
+>('locations/updateLocation', async ({ id, updates }, { rejectWithValue }) => {
   try {
     const updateData: any = {
+      ...updates,
       updated_at: new Date().toISOString()
     };
 
-    // Mapper les champs camelCase vers snake_case pour la base de données
-    if (updates.name !== undefined) updateData.name = updates.name;
-    if (updates.description !== undefined) updateData.description = updates.description;
-    if (updates.number !== undefined) updateData.number = updates.number;
-    if (updates.locationId !== undefined) updateData.location_id = updates.locationId;
-
-    // Générer un nouveau QR code unique si le numéro change
-    if (updates.number !== undefined) {
-      updateData.qr_code = await generateUniqueContainerQRCode();
-    }
-
     const { data, error } = await supabase
-      .from('containers')
+      .from('locations')
       .update(updateData)
       .eq('id', id)
       .select('*')
       .single();
 
     if (error) throw error;
-    if (!data) throw new Error('Container non trouvé');
+    if (!data) throw new Error('Emplacement non trouvé');
 
     return {
       id: data.id,
-      number: data.number,
       name: data.name,
-      description: data.description || '',
+      address: data.address,
+      description: data.description,
       qrCode: data.qr_code,
-      locationId: data.location_id || null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       deleted: data.deleted,
@@ -223,24 +207,24 @@ export const updateContainer = createAsyncThunk<
 });
 
 /**
- * Supprimer un container (soft delete)
+ * Supprimer un emplacement (soft delete)
  */
-export const deleteContainer = createAsyncThunk<
+export const deleteLocation = createAsyncThunk<
   void,
   number,
   { state: RootState; rejectValue: ThunkError }
->('containers/deleteContainer', async (containerId, { rejectWithValue }) => {
+>('locations/deleteLocation', async (locationId, { rejectWithValue }) => {
   try {
     const { error } = await supabase
-      .from('containers')
+      .from('locations')
       .update({
         deleted: true,
         updated_at: new Date().toISOString()
       })
-      .eq('id', containerId);
+      .eq('id', locationId);
 
     if (error) throw error;
   } catch (error) {
     return rejectWithValue(handleThunkError(error));
   }
-}); 
+});

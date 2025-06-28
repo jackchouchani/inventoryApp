@@ -5,6 +5,8 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import { QRCodeGenerator } from './QRCodeGenerator';
 import { generateId } from '../utils/identifierManager';
 import { useValidation } from '../hooks/useValidation';
+import { LocationPicker } from './LocationPicker';
+import { useAllLocations } from '../hooks/useOptimizedSelectors';
 
 interface ContainerFormProps {
   initialData?: Container | null;
@@ -35,8 +37,12 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
     number: initialData?.number?.toString() || '',
     name: initialData?.name || '',
     description: initialData?.description || '',
+    locationId: initialData?.locationId || null,
     qrCode: initialData?.qrCode || generateId('CONTAINER')
   });
+
+  // Charger les emplacements disponibles
+  const locations = useAllLocations();
 
   const { errors, validateField, validateForm, clearErrors } = useValidation(CONTAINER_VALIDATION_RULES);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,6 +77,7 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
         name: formData.name.trim(),
         number: parseInt(formData.number.trim(), 10),
         description: formData.description.trim(),
+        locationId: formData.locationId,
         qrCode: formData.qrCode,
         createdAt: initialData?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -131,6 +138,14 @@ const ContainerFormComponent: React.FC<ContainerFormProps> = ({ initialData, onS
         numberOfLines={4}
         maxLength={500}
         testID="container-description-input"
+      />
+
+      <Text style={styles.label}>Emplacement (Optionnel)</Text>
+      <LocationPicker
+        locations={locations}
+        selectedLocationId={formData.locationId}
+        onLocationSelect={(locationId) => setFormData(prev => ({ ...prev, locationId }))}
+        placeholder="Sélectionner un emplacement"
       />
 
       {memoizedQRCode}

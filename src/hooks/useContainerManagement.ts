@@ -23,7 +23,8 @@ export const useContainerManagement = () => {
           updates: {
             name: containerData.name || '',
             description: containerData.description || '',
-            ...(containerData.number !== null && containerData.number !== undefined && { number: containerData.number })
+            ...(containerData.number !== null && containerData.number !== undefined && { number: containerData.number }),
+            ...(containerData.locationId !== undefined && { locationId: containerData.locationId })
           }
         })).unwrap();
         
@@ -35,7 +36,8 @@ export const useContainerManagement = () => {
         const result = await dispatch(createContainer({
           name: containerData.name || '',
           description: containerData.description || '',
-          number: containerData.number || 0
+          number: containerData.number || 0,
+          locationId: containerData.locationId || null
         })).unwrap();
         
         resultContainer = result;

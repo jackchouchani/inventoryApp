@@ -138,6 +138,15 @@ const SettingsScreen = () => {
 
       <TouchableOpacity 
         style={styles.menuItem}
+        onPress={() => router.push('/location')}
+      >
+        <Icon name="location_on" size={24} color={activeTheme.primary} />
+        <Text style={styles.menuText}>Gérer les emplacements</Text>
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.menuItem}
         onPress={() => router.push('/labels')}
       >
         <Icon name="label" size={24} color={activeTheme.primary} />

@@ -10,6 +10,7 @@ import type { Item } from '../../src/types/item';
 import { useItems } from '../../src/hooks/useItems';
 import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
 import { useContainersOptimized as useContainers } from '../../src/hooks/useContainersOptimized';
+import { useLocationsOptimized as useLocations } from '../../src/hooks/useLocationsOptimized';
 
 // Hooks optimisés pour Redux avec sélecteurs mémoïsés
 import { useFilteredItems, useGlobalSearch } from '../../src/hooks/useOptimizedSelectors';
@@ -147,6 +148,7 @@ const StockScreenContent = () => {
   const { data: items, isLoading: itemsLoading, error: itemsError, loadMore } = useItems();
   const { categories, isLoading: categoriesLoading, error: categoriesError } = useCategories();  
   const { data: containers, isLoading: containersLoading, error: containersError } = useContainers();
+  const { locations, isLoading: locationsLoading, error: locationsError } = useLocations();
 
   // --- Conversion des filtres StockFilters vers ItemFilters ---
   const reduxFilters: ItemFilters = useMemo(() => {

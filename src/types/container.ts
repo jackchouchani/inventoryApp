@@ -4,6 +4,7 @@ export interface Container {
     description?: string;
     number: number;
     qrCode: string;
+    locationId?: number | null;
     createdAt: string;
     updatedAt: string;
     deleted?: boolean;

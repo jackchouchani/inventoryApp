@@ -3,14 +3,17 @@ import { RootState } from './store';
 import { itemsAdapter } from './itemsAdapter';
 import { categoriesAdapter } from './categorySlice';
 import { containersAdapter } from './containersSlice';
+import { locationsAdapter } from './locationsSlice';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
 import type { Container } from '../types/container';
+import type { Location } from '../types/location';
 
 // Sélecteurs de base optimisés
 export const selectItemsState = (state: RootState) => state.items;
 export const selectCategoriesState = (state: RootState) => state.categories;
 export const selectContainersState = (state: RootState) => state.containers;
+export const selectLocationsState = (state: RootState) => state.locations;
 
 // Sélecteurs d'entités avec adaptateurs
 export const {
@@ -33,11 +36,18 @@ export const {
   selectEntities: selectContainerEntities,
 } = containersAdapter.getSelectors(selectContainersState);
 
+export const {
+  selectAll: selectAllLocations,
+  selectById: selectLocationById,
+  selectEntities: selectLocationEntities,
+} = locationsAdapter.getSelectors(selectLocationsState);
+
 // Interface pour les filtres
 export interface ItemFilters {
   status?: 'all' | 'available' | 'sold';
   categoryId?: number;
   containerId?: number;
+  locationId?: number;
   minPrice?: number;
   maxPrice?: number;
   searchQuery?: string;
@@ -64,6 +74,11 @@ export const selectFilteredItems = createSelector(
 
       // Filtre par container
       if (filters.containerId && item.containerId !== filters.containerId) {
+        return false;
+      }
+
+      // Filtre par emplacement
+      if (filters.locationId && item.locationId !== filters.locationId) {
         return false;
       }
 
@@ -109,12 +124,13 @@ export const selectFilteredItems = createSelector(
 
 // Sélecteur mémoïsé pour les items avec leurs relations
 export const selectItemsWithRelations = createSelector(
-  [selectFilteredItems, selectCategoryEntities, selectContainerEntities],
-  (items, categories, containers) => {
+  [selectFilteredItems, selectCategoryEntities, selectContainerEntities, selectLocationEntities],
+  (items, categories, containers, locations) => {
     return items.map((item: Item) => ({
       ...item,
       category: item.categoryId ? categories[item.categoryId] : undefined,
       container: item.containerId ? containers[item.containerId] : undefined,
+      location: item.locationId ? locations[item.locationId] : undefined,
     }));
   }
 );
@@ -197,6 +213,58 @@ export const selectItemsByContainer = createSelector(
     });
 
     return Array.from(itemsByContainer.values()).filter(data => data.count > 0);
+  }
+);
+
+// Sélecteur mémoïsé pour les items par emplacement
+export const selectItemsByLocation = createSelector(
+  [selectAllItems, selectAllLocations],
+  (items, locations) => {
+    const itemsByLocation = new Map<number, { location: Location; items: Item[]; count: number }>();
+
+    locations.forEach((location: Location) => {
+      itemsByLocation.set(location.id, {
+        location,
+        items: [],
+        count: 0,
+      });
+    });
+
+    items.forEach((item: Item) => {
+      if (item.locationId && itemsByLocation.has(item.locationId)) {
+        const locationData = itemsByLocation.get(item.locationId)!;
+        locationData.items.push(item);
+        locationData.count++;
+      }
+    });
+
+    return Array.from(itemsByLocation.values()).filter(data => data.count > 0);
+  }
+);
+
+// Sélecteur mémoïsé pour les containers par emplacement
+export const selectContainersByLocation = createSelector(
+  [selectAllContainers, selectAllLocations],
+  (containers, locations) => {
+    const containersByLocation = new Map<number, { location: Location; containers: Container[]; count: number }>();
+
+    locations.forEach((location: Location) => {
+      containersByLocation.set(location.id, {
+        location,
+        containers: [],
+        count: 0,
+      });
+    });
+
+    containers.forEach((container: Container) => {
+      if (container.locationId && containersByLocation.has(container.locationId)) {
+        const locationData = containersByLocation.get(container.locationId)!;
+        locationData.containers.push(container);
+        locationData.count++;
+      }
+    });
+
+    return Array.from(containersByLocation.values()).filter(data => data.count > 0);
   }
 );
 

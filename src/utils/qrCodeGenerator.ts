@@ -1,6 +1,6 @@
 /**
- * Génération des QR codes pour containers et articles
- * Format: CONT_XXXX pour containers, ART_XXXX pour articles
+ * Génération des QR codes pour containers, articles et emplacements
+ * Format: CONT_XXXX pour containers, ART_XXXX pour articles, LOC_XXXX pour emplacements
  * XXXX = 4 caractères alphanumériques aléatoires
  * 
  * ⚠️ RÈGLE : TOUJOURS utiliser les fonctions *Unique* pour garantir l'unicité
@@ -68,6 +68,30 @@ const isItemQRCodeExists = async (qrCode: string): Promise<boolean> => {
     return !!data;
   } catch (error) {
     console.error('Erreur lors de la vérification du QR code item:', error);
+    return false;
+  }
+};
+
+/**
+ * Vérifie si un QR code emplacement existe déjà dans la base de données
+ */
+const isLocationQRCodeExists = async (qrCode: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('locations')
+      .select('id')
+      .eq('qr_code', qrCode)
+      .eq('deleted', false)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Erreur lors de la vérification du QR code emplacement:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch (error) {
+    console.error('Erreur lors de la vérification du QR code emplacement:', error);
     return false;
   }
 };
@@ -143,6 +167,41 @@ export const generateUniqueItemQRCode = async (): Promise<string> => {
 };
 
 /**
+ * ✅ RECOMMANDÉ - Génère un QR code unique pour un emplacement
+ * Format: LOC_XXXX avec vérification d'unicité
+ */
+export const generateUniqueLocationQRCode = async (): Promise<string> => {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const qrCode = `LOC_${generateRandomString(QR_CODE_LENGTH)}`;
+    
+    const exists = await isLocationQRCodeExists(qrCode);
+    if (!exists) {
+      console.log(`[QR Generator] QR code emplacement unique généré: ${qrCode} (tentative ${attempt + 1})`);
+      return qrCode;
+    }
+    
+    console.log(`[QR Generator] QR code emplacement ${qrCode} existe déjà, nouvelle tentative...`);
+  }
+  
+  // Si après 100 tentatives on n'y arrive pas, utiliser une stratégie différente
+  // Générer avec un suffixe plus long pour garantir l'unicité
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const qrCode = `LOC_${generateRandomString(QR_CODE_LENGTH + 2)}`; // 6 caractères au lieu de 4
+    
+    const exists = await isLocationQRCodeExists(qrCode);
+    if (!exists) {
+      console.warn(`[QR Generator] QR code emplacement avec suffixe étendu: ${qrCode} (tentative ${attempt + 1})`);
+      return qrCode;
+    }
+  }
+  
+  // Dernière stratégie : utiliser 8 caractères aléatoires
+  const ultimateCode = `LOC_${generateRandomString(8)}`;
+  console.error(`[QR Generator] Utilisation du code ultime (non vérifié): ${ultimateCode}`);
+  return ultimateCode;
+};
+
+/**
  * ⚠️ DÉPRÉCIÉ - Génère un QR code pour un container SANS vérification d'unicité
  * Utiliser generateUniqueContainerQRCode() à la place
  */
@@ -161,6 +220,15 @@ export const generateItemQRCode = (): string => {
 };
 
 /**
+ * ⚠️ DÉPRÉCIÉ - Génère un QR code pour un emplacement SANS vérification d'unicité
+ * Utiliser generateUniqueLocationQRCode() à la place
+ */
+export const generateLocationQRCode = (): string => {
+  const randomSuffix = generateRandomString(QR_CODE_LENGTH);
+  return `LOC_${randomSuffix}`;
+};
+
+/**
  * Valide le format d'un QR code container
  */
 export const isValidContainerQRCode = (qrCode: string): boolean => {
@@ -172,4 +240,16 @@ export const isValidContainerQRCode = (qrCode: string): boolean => {
  */
 export const isValidItemQRCode = (qrCode: string): boolean => {
   return /^ART_[A-Z0-9]{4}$/.test(qrCode);
-}; 
+};
+
+/**
+ * Valide le format d'un QR code emplacement
+ */
+export const isValidLocationQRCode = (qrCode: string): boolean => {
+  return /^LOC_[A-Z0-9]{4}$/.test(qrCode);
+};
+
+/**
+ * Export de la fonction de vérification d'existence pour les emplacements
+ */
+export { isLocationQRCodeExists }; 

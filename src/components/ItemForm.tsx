@@ -6,18 +6,19 @@ import { AppDispatch } from '../store/store';
 import { createItem } from '../store/itemsThunks';
 import type { Category } from '../types/category';
 import type { Container } from '../types/container';
+import type { Location } from '../types/location';
 import { Icon } from '../../src/components';
 import type { MaterialIconName } from '../types/icons';
 import AdaptiveImage from './AdaptiveImage';
 import { handleError } from '../utils/errorHandler';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { FallbackProps } from 'react-error-boundary';
-import type { Item } from '../types/item';
 import { usePhoto } from '../hooks/usePhoto';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { checkPhotoPermissions } from '../utils/permissions';
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useAllLocations } from '../hooks/useOptimizedSelectors';
 
 const FORM_VALIDATION = {
     NAME_MAX_LENGTH: 100,
@@ -29,10 +30,10 @@ const FORM_VALIDATION = {
 /**
  * Type pour les erreurs de validation du formulaire
  */
-type ValidationError = {
+interface ValidationError {
     field: string;
     message: string;
-};
+}
 
 /**
  * Props pour le composant ContainerOption
@@ -55,6 +56,7 @@ interface CategoryOptionProps {
 interface ItemFormProps {
     containers: Container[];
     categories: Category[];
+    locations?: Location[];
     onSuccess?: () => void;
     onCancel?: () => void;
 }
@@ -68,6 +70,7 @@ interface ItemFormState {
     photo_storage_url?: string;
     containerId?: number | null;
     categoryId?: number | null;
+    locationId?: number | null;
 }
 
 const INITIAL_STATE: ItemFormState = {
@@ -79,6 +82,7 @@ const INITIAL_STATE: ItemFormState = {
     photo_storage_url: undefined,
     containerId: null, // Aucun container sélectionné par défaut
     categoryId: null,
+    locationId: null,
 };
 
 /**
@@ -304,11 +308,22 @@ const ItemFormWithErrorBoundary: React.FC<ItemFormProps> = (props) => (
     </ErrorBoundary>
 );
 
-const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategories, onSuccess }) => {
+const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategories, locations: propLocations, onSuccess }) => {
     // Trier les catégories par created_at (plus ancien en premier) pour que "Bags" soit en premier
     const categories = Array.isArray(propCategories) 
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
+    
+    // Charger les emplacements disponibles
+    const allLocations = useAllLocations();
+    const locations = propLocations || allLocations;
+    
+    console.log('[ItemForm] Debug locations:', {
+        propLocations: propLocations?.length || 0,
+        allLocations: allLocations?.length || 0,
+        finalLocations: locations?.length || 0
+    });
+    
     const dispatch = useDispatch<AppDispatch>();
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
     const { uploadPhoto } = usePhoto();
@@ -521,6 +536,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                 sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
                 categoryId,
                 containerId: item.containerId || null,
+                locationId: item.locationId || null,
                 qrCode: await generateUniqueItemQRCode(),
                 photo_storage_url: photoStorageUrl
             })).unwrap();
@@ -541,16 +557,22 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
     const handleContainerSelect = useCallback((containerId: number | undefined) => {
         if (containerId) {
-            setItem(prev => ({ ...prev, containerId }));
+            // Si on sélectionne un container, hériter de son emplacement
+            const selectedContainer = containers.find(c => c.id === containerId);
+            setItem(prev => ({ 
+                ...prev, 
+                containerId,
+                locationId: selectedContainer?.locationId || null
+            }));
         }
-    }, []);
+    }, [containers]);
 
     const handleCategorySelect = useCallback((categoryId: number | undefined) => {
         if (categoryId) {
             setItem(prev => ({ ...prev, categoryId }));
         }
     }, []);
-    
+
     // Fonction pour supprimer la photo sélectionnée
     const handlePhotoDelete = useCallback(() => {
         setLocalImage(null);
@@ -719,6 +741,70 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                         theme={activeTheme}
                     />
                 </View>
+
+                {/* Section Emplacement - Affichage simple */}
+                {!item.containerId && (
+                    <View style={styles.formSection}>
+                        <Text style={styles.sectionTitle}>
+                            Emplacement
+                        </Text>
+                        <Text style={styles.sectionDescription}>
+                            L'emplacement est assigné automatiquement lors de l'assignation à un container.
+                        </Text>
+                        <View style={[
+                            styles.inputContainer, 
+                            {
+                                backgroundColor: activeTheme.backgroundSecondary,
+                                borderWidth: 1,
+                                borderColor: activeTheme.border,
+                                borderRadius: 8,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 12,
+                                paddingHorizontal: 16
+                            }
+                        ]}>
+                            <Icon 
+                                name={item.locationId ? "location_on" : "location_off"} 
+                                size={20} 
+                                color={item.locationId ? activeTheme.primary : activeTheme.text.disabled} 
+                                style={{ marginRight: 12 }}
+                            />
+                            <Text style={[
+                                styles.inputText, 
+                                { 
+                                    color: item.locationId ? activeTheme.text.primary : activeTheme.text.secondary,
+                                    flex: 1,
+                                    fontSize: 16
+                                }
+                            ]}>
+                                {item.locationId 
+                                    ? locations.find(l => l.id === item.locationId)?.name || 'Emplacement introuvable'
+                                    : 'Aucun emplacement assigné'}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Affichage de l'emplacement hérité du container */}
+                {item.containerId && (() => {
+                    const selectedContainer = containers.find(c => c.id === item.containerId);
+                    const containerLocation = selectedContainer?.locationId ? 
+                        locations.find(l => l.id === selectedContainer.locationId) : null;
+                    
+                    return containerLocation ? (
+                        <View style={styles.formSection}>
+                            <Text style={styles.sectionTitle}>Emplacement (Hérité du container)</Text>
+                            <View style={styles.inheritedLocationDisplay}>
+                                <Icon name="location_on" size={16} color={activeTheme.primary} />
+                                <Text style={styles.inheritedLocationText}>
+                                    {containerLocation.name}
+                                    {containerLocation.address && ` - ${containerLocation.address}`}
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null;
+                })()} 
 
                 <View style={[styles.formSection, styles.formSectionLast]}>
                     <Text style={styles.sectionTitle}>Catégorie</Text>
@@ -1106,6 +1192,41 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     },
     iconOptionSelected: {
         backgroundColor: '#007AFF',
+    },
+    sectionDescription: {
+        fontSize: 13,
+        color: theme.text.secondary,
+        marginBottom: 12,
+        lineHeight: 18,
+        fontStyle: 'italic',
+    },
+    inheritedLocationDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.backgroundSecondary,
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    inheritedLocationText: {
+        marginLeft: 8,
+        color: theme.text.primary,
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
+    },
+    inputContainer: {
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+    },
+    inputText: {
+        fontSize: 16,
+        color: theme.text.primary,
     },
 });
 
