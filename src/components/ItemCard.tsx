@@ -4,7 +4,7 @@ import { Item } from '../types/item';
 import { Icon } from '../../src/components';
 import Animated, { SharedValue } from 'react-native-reanimated';
 import { AnimationConfig } from '../hooks/useAnimatedComponents';
-import { getImageUrl } from '../utils/r2Client';
+import { getImageUrl, getImageUrlWithOfflineSupport } from '../utils/r2Client';
 import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 import { useRouter } from 'expo-router';
 
@@ -96,12 +96,23 @@ const ItemCard: React.FC<ItemCardProps> = ({
     if (item.photo_storage_url) {
       setIsLoading(true);
       setErrorMessage(null);
-      // Utiliser getImageUrl pour générer l'URL Cloudflare R2
-      const url = getImageUrl(item.photo_storage_url);
-      setLocalUri(url);
-      setIsLoading(false);
+      
+      // ✅ OFFLINE - Utiliser la version avec support offline
+      getImageUrlWithOfflineSupport(item.photo_storage_url)
+        .then(url => {
+          setLocalUri(url);
+          setIsLoading(false);
+        })
+        .catch(error => {
+          console.warn('[ItemCard] Erreur getImageUrlWithOfflineSupport, fallback vers URL simple:', error);
+          // Fallback vers l'URL simple
+          const fallbackUrl = getImageUrl(item.photo_storage_url!);
+          setLocalUri(fallbackUrl);
+          setIsLoading(false);
+        });
     } else {
       setLocalUri(null);
+      setIsLoading(false);
     }
   }, [item.photo_storage_url, item.id]);
 

@@ -5,7 +5,6 @@ import {
   selectFilteredItems,
   selectAllItems,
   selectAllCategories,
-  selectAllContainers,
   selectAllLocations,
   selectItemStats,
   selectItemsByCategory,
@@ -19,8 +18,8 @@ import {
 } from '../store/selectors';
 import { fetchItems } from '../store/itemsThunks';
 import { fetchLocations } from '../store/locationsThunks';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AppDispatch } from '../store/store';
-import { useLocationsOptimized } from './useLocationsOptimized';
 import { useContainersOptimized } from './useContainersOptimized';
 
 /**
@@ -280,11 +279,9 @@ export const useLocationPageData = (filters?: ItemFilters) => {
   useEffect(() => {
     const loadAllItems = async () => {
       if (hasMore && allItems.length < totalItems) {
-        console.log('[useLocationPageData] Chargement de TOUS les items pour emplacements');
         try {
           await dispatch(fetchItems({ page: 0, limit: 10000 })).unwrap();
         } catch (error) {
-          console.error('[useLocationPageData] Erreur chargement items:', error);
         }
       }
     };
@@ -432,7 +429,6 @@ export const useGlobalSearch = (searchQuery: string) => {
   useEffect(() => {
     const loadAllItemsForSearch = async () => {
       if (searchQuery.trim() && hasMore && allItems.length < totalItems) {
-        console.log('[useGlobalSearch] Chargement de tous les items pour la recherche');
         setIsSearching(true);
         try {
           // Charger tous les items restants

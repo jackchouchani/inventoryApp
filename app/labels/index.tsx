@@ -14,7 +14,8 @@ registerLocale('fr', fr);
 setDefaultLocale('fr'); 
 import Select, { ActionMeta, SingleValue, GroupBase } from 'react-select'; 
 
-import { searchItems, SearchFilters } from '../../src/services/searchService';
+import { useSelector } from 'react-redux';
+import { selectAllItems } from '../../src/store/selectors';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
@@ -41,6 +42,9 @@ type SelectOption<TValue = number | 'none' | null> = {
 const LabelScreenContent = () => {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
+  
+  // ✅ REDUX - Récupération des données depuis le store Redux
+  const allItems = useSelector(selectAllItems);
   
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Labels');
@@ -87,43 +91,60 @@ const LabelScreenContent = () => {
   
   const isLoadingStaticData = isLoadingCategories || isLoadingContainers;
 
-  const performSearch = useCallback(async (currentSearchQuery: string, currentFilters: Filters) => {
+  const performSearch = useCallback((currentSearchQuery: string, currentFilters: Filters) => {
     setIsLoadingSearch(true);
     try {
-      const supabaseFilters: SearchFilters = {
-        search: currentSearchQuery.trim() || undefined, 
-        status: currentFilters.status === 'all' ? undefined : currentFilters.status,
-        pageSize: 1000, 
-      };
+      // ✅ REDUX - Filtrer les items depuis le store Redux (marche offline et online)
+      let filteredItems = [...allItems];
 
+      // Filtre par texte de recherche
+      if (currentSearchQuery.trim()) {
+        const searchLower = currentSearchQuery.toLowerCase();
+        filteredItems = filteredItems.filter(item => 
+          item.name.toLowerCase().includes(searchLower) ||
+          (item.description && item.description.toLowerCase().includes(searchLower)) ||
+          (item.qrCode && item.qrCode.toLowerCase().includes(searchLower))
+        );
+      }
+
+      // Filtre par statut
+      if (currentFilters.status !== 'all') {
+        filteredItems = filteredItems.filter(item => item.status === currentFilters.status);
+      }
+
+      // Filtre par catégorie
       if (currentFilters.categoryId) {
-        supabaseFilters.categoryId = currentFilters.categoryId;
+        filteredItems = filteredItems.filter(item => item.categoryId === currentFilters.categoryId);
       }
       
+      // Filtre par conteneur
       if (currentFilters.containerId === 'none') {
-        supabaseFilters.containerId = 'none';
+        filteredItems = filteredItems.filter(item => !item.containerId);
       } else if (currentFilters.containerId) {
-        supabaseFilters.containerId = currentFilters.containerId;
+        filteredItems = filteredItems.filter(item => item.containerId === currentFilters.containerId);
       }
 
+      // Filtre par prix minimum
       const minPriceNum = parseFloat(currentFilters.minPrice);
       if (!isNaN(minPriceNum)) {
-        supabaseFilters.minPrice = minPriceNum;
+        filteredItems = filteredItems.filter(item => (item.sellingPrice || 0) >= minPriceNum);
       }
+
+      // Filtre par prix maximum
       const maxPriceNum = parseFloat(currentFilters.maxPrice);
       if (!isNaN(maxPriceNum)) {
-        supabaseFilters.maxPrice = maxPriceNum;
+        filteredItems = filteredItems.filter(item => (item.sellingPrice || 0) <= maxPriceNum);
       }
-      const result = await searchItems(supabaseFilters);
-      setSearchResults(result.items || []);
+
+      setSearchResults(filteredItems);
     } catch (error) {
-      Sentry.captureException(error, { tags: { type: 'labels_supabase_search_error' } });
+      Sentry.captureException(error, { tags: { type: 'labels_redux_search_error' } });
       setSearchResults([]);
       Alert.alert('Erreur de recherche', 'Une erreur est survenue lors de la recherche des articles.');
     } finally {
       setIsLoadingSearch(false);
     }
-  }, []);
+  }, [allItems]);
 
   useEffect(() => {
     performSearch(debouncedSearchQuery, filters);
@@ -226,7 +247,6 @@ const LabelScreenContent = () => {
         newItemsMap.set(itemId, item);
         setSelectedItemsMap(newItemsMap);
       }
-      console.log('[LabelsScreen] handleToggleItem - new selectedItems:', newSet);
       return newSet;
     });
   };
@@ -253,7 +273,6 @@ const LabelScreenContent = () => {
         newContainersMap.set(containerId, container);
         setSelectedContainersMap(newContainersMap);
       }
-      console.log('[LabelsScreen] handleToggleContainer - new selectedContainers:', newSet);
       return newSet;
     });
   };
@@ -320,14 +339,8 @@ const LabelScreenContent = () => {
   };
 
   const getItemsToGenerate = useCallback((): LabelData[] => {
-    console.log('[LabelsScreen] getItemsToGenerate called.');
-    console.log('[LabelsScreen] showContainers:', showContainers);
-    console.log('[LabelsScreen] selectedItemsMap size:', selectedItemsMap.size);
-    console.log('[LabelsScreen] selectedContainersMap size:', selectedContainersMap.size);
-
     if (showContainers) {
       const containers = Array.from(selectedContainersMap.values());
-      console.log('[LabelsScreen] Selected containers from Map:', containers);
       
       return containers.map(c => ({
         id: c.id,
@@ -338,7 +351,6 @@ const LabelScreenContent = () => {
       }));
     } else {
       const items = Array.from(selectedItemsMap.values());
-      console.log('[LabelsScreen] Selected items from Map:', items);
       
       return items.map(i => ({
         id: i.id,

@@ -845,20 +845,11 @@ export const Scanner: React.FC<ScannerProps> = ({
                 if (Platform.OS === 'web') {
                     console.log("Plateforme web/PWA détectée");
                     
-                    const pwaPermissionStatus = await checkCameraPermissionPWA();
-                    console.log("Statut permissions PWA:", pwaPermissionStatus);
+                    const hasPermission = await checkCameraPermissionPWA();
+                    console.log("Statut permissions PWA:", hasPermission);
                     
-                    if (pwaPermissionStatus.denied) {
-                        console.log("Permission caméra refusée dans la PWA");
-                        updateScannerState({ 
-                            status: 'error', 
-                            message: `Permission caméra refusée.\n\n${getCameraInstructionsPWA()}` 
-                        });
-                        return;
-                    }
-                    
-                    if (pwaPermissionStatus.prompt && pwaPermissionStatus.isPWA) {
-                        console.log("Permission caméra en attente pour PWA");
+                    if (!hasPermission) {
+                        console.log("Permission caméra non accordée dans la PWA");
                         updateScannerState({ 
                             status: 'permission-needed', 
                             message: 'Autorisation caméra requise pour scanner les codes QR' 

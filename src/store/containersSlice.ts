@@ -16,6 +16,14 @@ const initialState = containersAdapter.getInitialState({
   status: 'idle',
   error: null as string | null,
   loading: false,
+  offline: {
+    isOffline: false,
+    lastSyncTime: null,
+    pendingEvents: 0,
+    syncInProgress: false,
+    syncErrors: []
+  },
+  localChanges: 0,
 });
 
 export type ContainersState = typeof initialState;
@@ -72,7 +80,7 @@ const containersSlice = createSlice({
       .addCase(fetchContainers.rejected, (state, action) => {
         console.log('[containersSlice] fetchContainers.rejected - Erreur:', action.payload);
         state.status = 'failed';
-        state.error = action.payload?.message || 'Erreur lors du chargement des containers';
+        state.error = (action.payload as any)?.message || 'Erreur lors du chargement des containers';
       })
       // Create container
       .addCase(createContainer.fulfilled, (state, action) => {
@@ -102,10 +110,10 @@ export const {
 export const selectContainerWithItems = createSelector(
   [selectAllContainers, (state: RootState) => state.items],
   (containers, itemsState) => {
-    return containers.map(container => ({
+    return containers.map((container: any) => ({
       ...container,
       items: Object.values(itemsState.entities || {}).filter(
-        item => item?.containerId === container.id
+        (item: any) => item?.containerId === container.id
       )
     }));
   }
@@ -116,9 +124,9 @@ export const selectContainersWithItemsCount = createSelector(
   [selectAllContainers, (state: RootState) => state.items],
   (containers, itemsState) => {
     const itemsArray = Object.values(itemsState.entities || {});
-    return containers.map(container => ({
+    return containers.map((container: any) => ({
       ...container,
-      itemCount: itemsArray.filter(item => item?.containerId === container.id).length
+      itemCount: itemsArray.filter((item: any) => item?.containerId === container.id).length
     }));
   }
 );
@@ -128,11 +136,11 @@ export const selectContainersWithStats = createSelector(
   [selectAllContainers, (state: RootState) => state.items],
   (containers, itemsState) => {
     const itemsArray = Object.values(itemsState.entities || {});
-    return containers.map(container => {
-      const containerItems = itemsArray.filter(item => item?.containerId === container.id);
-      const totalValue = containerItems.reduce((sum, item) => sum + (item?.sellingPrice || 0), 0);
-      const availableItems = containerItems.filter(item => item?.status === 'available').length;
-      const soldItems = containerItems.filter(item => item?.status === 'sold').length;
+    return containers.map((container: any) => {
+      const containerItems = itemsArray.filter((item: any) => item?.containerId === container.id);
+      const totalValue = containerItems.reduce((sum: number, item: any) => sum + (item?.sellingPrice || 0), 0);
+      const availableItems = containerItems.filter((item: any) => item?.status === 'available').length;
+      const soldItems = containerItems.filter((item: any) => item?.status === 'sold').length;
 
       return {
         ...container,
@@ -149,7 +157,7 @@ export const selectContainersWithStats = createSelector(
 export const selectContainerWithStats = createSelector(
   [selectContainersWithStats, (_state: RootState, containerId: number) => containerId],
   (containersWithStats, containerId) => 
-    containersWithStats.find(container => container.id === containerId)
+    containersWithStats.find((container: any) => container.id === containerId)
 );
 
 export const selectContainerByNumber = createSelector(

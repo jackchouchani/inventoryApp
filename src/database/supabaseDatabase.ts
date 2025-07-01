@@ -791,7 +791,7 @@ export class SupabaseDatabase implements DatabaseInterface {
     }
   }
 
-  async addLocation(location: LocationInput): Promise<Location | null> {
+  async addLocation(location: LocationInput): Promise<number> {
     try {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Utilisateur non authentifié');
@@ -812,64 +812,39 @@ export class SupabaseDatabase implements DatabaseInterface {
         .single();
 
       if (error) throw error;
-      if (!data) return null;
+      if (!data) throw new Error('Failed to create location');
 
-      return {
-        id: data.id,
-        name: data.name,
-        address: data.address,
-        description: data.description,
-        qrCode: data.qr_code,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-        deleted: data.deleted,
-        userId: data.user_id
-      };
+      return data.id;
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
-      return null;
+      throw error;
     }
   }
 
-  async updateLocation(id: number, updates: LocationUpdate): Promise<Location | null> {
+  async updateLocation(id: number, location: Partial<LocationInput>): Promise<void> {
     try {
       const updateData: any = {
         updated_at: new Date().toISOString()
       };
 
-      if (updates.name !== undefined) updateData.name = updates.name;
-      if (updates.address !== undefined) updateData.address = updates.address;
-      if (updates.description !== undefined) updateData.description = updates.description;
+      if (location.name !== undefined) updateData.name = location.name;
+      if (location.address !== undefined) updateData.address = location.address;
+      if (location.description !== undefined) updateData.description = location.description;
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('locations')
         .update(updateData)
         .eq('id', id)
-        .is('deleted', false)
-        .select('*')
-        .single();
+        .is('deleted', false);
 
       if (error) throw error;
-      if (!data) return null;
-
-      return {
-        id: data.id,
-        name: data.name,
-        address: data.address,
-        description: data.description,
-        qrCode: data.qr_code,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-        deleted: data.deleted,
-        userId: data.user_id
-      };
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
-      return null;
+      throw error;
     }
   }
 
-  async deleteLocation(id: number): Promise<boolean> {
+  async deleteLocation(id: number): Promise<void> {
     try {
       const { error } = await supabase
         .from('locations')
@@ -880,10 +855,9 @@ export class SupabaseDatabase implements DatabaseInterface {
         .eq('id', id);
 
       if (error) throw error;
-      return true;
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
-      return false;
+      throw error;
     }
   }
 }

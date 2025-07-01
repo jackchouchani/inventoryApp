@@ -16,6 +16,14 @@ const initialState = locationsAdapter.getInitialState({
   status: 'idle',
   error: null as string | null,
   loading: false,
+  offline: {
+    isOffline: false,
+    lastSyncTime: null,
+    pendingEvents: 0,
+    syncInProgress: false,
+    syncErrors: []
+  },
+  localChanges: 0,
 });
 
 export type LocationsState = typeof initialState;
@@ -72,7 +80,7 @@ const locationsSlice = createSlice({
       .addCase(fetchLocations.rejected, (state, action) => {
         console.log('[locationsSlice] fetchLocations.rejected - Erreur:', action.payload);
         state.status = 'failed';
-        state.error = action.payload?.message || 'Erreur lors du chargement des emplacements';
+        state.error = (action.payload as any)?.message || 'Erreur lors du chargement des emplacements';
       })
       // Create location
       .addCase(createLocation.fulfilled, (state, action) => {
@@ -102,10 +110,10 @@ export const {
 export const selectLocationWithContainers = createSelector(
   [selectAllLocations, (state: RootState) => state.containers],
   (locations, containersState) => {
-    return locations.map(location => ({
+    return locations.map((location: any) => ({
       ...location,
       containers: Object.values(containersState.entities || {}).filter(
-        container => container?.locationId === location.id
+        (container: any) => container?.locationId === location.id
       )
     }));
   }
@@ -116,9 +124,9 @@ export const selectLocationsWithContainersCount = createSelector(
   [selectAllLocations, (state: RootState) => state.containers],
   (locations, containersState) => {
     const containersArray = Object.values(containersState.entities || {});
-    return locations.map(location => ({
+    return locations.map((location: any) => ({
       ...location,
-      containerCount: containersArray.filter(container => container?.locationId === location.id).length
+      containerCount: containersArray.filter((container: any) => container?.locationId === location.id).length
     }));
   }
 );
@@ -130,17 +138,17 @@ export const selectLocationsWithStats = createSelector(
     const containersArray = Object.values(containersState.entities || {});
     const itemsArray = Object.values(itemsState.entities || {});
     
-    return locations.map(location => {
-      const locationContainers = containersArray.filter(container => container?.locationId === location.id);
-      const directItems = itemsArray.filter(item => item?.locationId === location.id && !item.containerId);
-      const containersItems = itemsArray.filter(item => 
-        item?.containerId && locationContainers.some(container => container?.id === item.containerId)
+    return locations.map((location: any) => {
+      const locationContainers = containersArray.filter((container: any) => container?.locationId === location.id);
+      const directItems = itemsArray.filter((item: any) => item?.locationId === location.id && !item.containerId);
+      const containersItems = itemsArray.filter((item: any) => 
+        item?.containerId && locationContainers.some((container: any) => container?.id === item.containerId)
       );
       const allLocationItems = [...directItems, ...containersItems];
       
-      const totalValue = allLocationItems.reduce((sum, item) => sum + (item?.sellingPrice || 0), 0);
-      const availableItems = allLocationItems.filter(item => item?.status === 'available').length;
-      const soldItems = allLocationItems.filter(item => item?.status === 'sold').length;
+      const totalValue = allLocationItems.reduce((sum: number, item: any) => sum + (item?.sellingPrice || 0), 0);
+      const availableItems = allLocationItems.filter((item: any) => item?.status === 'available').length;
+      const soldItems = allLocationItems.filter((item: any) => item?.status === 'sold').length;
 
       return {
         ...location,
@@ -158,7 +166,7 @@ export const selectLocationsWithStats = createSelector(
 export const selectLocationWithStats = createSelector(
   [selectLocationsWithStats, (_state: RootState, locationId: number) => locationId],
   (locationsWithStats, locationId) => 
-    locationsWithStats.find(location => location.id === locationId)
+    locationsWithStats.find((location: any) => location.id === locationId)
 );
 
 export const selectLocationsStatus = (state: RootState) => state.locations.status;

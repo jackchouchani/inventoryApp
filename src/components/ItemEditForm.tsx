@@ -222,11 +222,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const allLocations = useAllLocations();
     const locations = propLocations || allLocations;
     
-    console.log('[ItemEditForm] Debug locations:', {
-        propLocations: propLocations?.length || 0,
-        allLocations: allLocations?.length || 0,
-        finalLocations: locations?.length || 0
-    });
 
     const dispatch = useDispatch<AppDispatch>();
     const { uploadPhoto, deletePhoto, loadImage, state: photoHookState } = usePhoto();
@@ -280,14 +275,11 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         setLocalImageNeedsUpload(false);
 
         if (adaptedItem.photo_storage_url && typeof adaptedItem.photo_storage_url === 'string') {
-            console.log("[ItemEditForm] useEffect - Loading initial image from R2:", adaptedItem.photo_storage_url);
             loadImage(adaptedItem.photo_storage_url);
         } else {
-             console.log("[ItemEditForm] useEffect - No initial image to load or photo_storage_url is null.");
         }
 
         return () => {
-             console.log("[ItemEditForm] useEffect - Cleanup");
         };
 
     }, [initialItemState, adaptedItem.photo_storage_url, adaptedItem.id, loadImage]);
@@ -360,7 +352,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
     const handleImagePreview = useCallback(async () => {
         try {
-            console.log("[ItemEditForm] handleImagePreview - Sélection d'image...");
             const hasPermissions = await checkPhotoPermissions();
             if (!hasPermissions) {
                 console.error("handleImagePreview - Permission refusée");
@@ -368,7 +359,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 return;
             }
 
-            console.log("[ItemEditForm] handleImagePreview - Lancement du sélecteur d'image...");
             const result = await ExpoImagePicker.launchImageLibraryAsync({
                 mediaTypes: ExpoImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
@@ -378,20 +368,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 exif: false,
             });
 
-            console.log("[ItemEditForm] handleImagePreview - Résultat du sélecteur:", {
-                canceled: result.canceled,
-                hasAssets: result.assets ? result.assets.length : 0
-            });
-
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 const selectedAsset = result.assets[0];
-                console.log("[ItemEditForm] handleImagePreview - Asset sélectionné:", {
-                    uri: selectedAsset.uri ? selectedAsset.uri.substring(0, 50) + "..." : "null",
-                    hasBase64: !!selectedAsset.base64,
-                    mimeType: selectedAsset.mimeType,
-                    width: selectedAsset.width,
-                    height: selectedAsset.height
-                });
 
                 let selectedUri = selectedAsset.uri;
 
@@ -402,7 +380,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                         const mimeType = selectedAsset.mimeType || 'image/jpeg';
                         const base64Uri = `data:${mimeType};base64,${selectedAsset.base64}`;
                         selectedUri = base64Uri;
-                        console.log("[ItemEditForm] Image convertie en base64 pour le web");
                     } else {
                         console.error("handleImagePreview - Impossible d'obtenir l'image en base64");
                         Alert.alert('Erreur', 'Impossible d\'obtenir l\'image en format compatible');
@@ -415,7 +392,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 setLocalImageNeedsUpload(true);
                 setEditedItem(prev => ({ ...prev, photo_storage_url: undefined }));
             } else {
-                console.log("[ItemEditForm] handleImagePreview - Sélection d'image annulée ou aucun asset.");
             }
         } catch (error) {
             console.error("handleImagePreview - Erreur:", error);
@@ -434,12 +410,10 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         if (!validateForm()) {
-            console.log("[ItemEditForm] handleSubmit - Échec de la validation du formulaire.");
             return;
         }
 
         if (!adaptedItem.id) {
-            console.error("[ItemEditForm] handleSubmit - ID de l'article manquant");
             Alert.alert('Erreur interne', "Impossible de sauvegarder: ID de l'article manquant.");
             return;
         }
@@ -448,10 +422,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
 
         // Cas 1: Suppression d'une image existante (bouton "Supprimer" cliqué)
         if (adaptedItem.photo_storage_url && editedItem.photo_storage_url === null) {
-            console.log(`[ItemEditForm] handleSubmit - Suppression de l'image existante ${adaptedItem.photo_storage_url} demandée.`);
             try {
                 await deletePhoto(adaptedItem.photo_storage_url);
-                console.log(`[ItemEditForm] handleSubmit - Image R2 ${adaptedItem.photo_storage_url} supprimée.`);
                 finalPhotoStorageUrl = null;
             } catch (deleteError) {
                 console.warn(`[ItemEditForm] handleSubmit - Échec de la suppression de l'image R2 ${adaptedItem.photo_storage_url}:`, deleteError);
@@ -466,11 +438,9 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
         // Cas 2: Upload d'une nouvelle image
         else if (localImageUri && localImageNeedsUpload) {
-            console.log("[ItemEditForm] handleSubmit - Upload d'une nouvelle image nécessaire.");
             try {
                 const uploadedFilename = await uploadPhoto(localImageUri, true, adaptedItem.photo_storage_url || undefined);
                 if (uploadedFilename) {
-                    console.log(`[ItemEditForm] handleSubmit - Nouvelle image R2 uploadée: ${uploadedFilename}`);
                     finalPhotoStorageUrl = uploadedFilename;
                     setLocalImageNeedsUpload(false);
                     setLocalImageUri(null);
@@ -506,7 +476,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handleSubmit - Mise à jour de l'article ${adaptedItem.id} via Redux thunk`);
             
             // ✅ UTILISER REDUX THUNK - Remplace database.updateItem + dispatch manuel
             await dispatch(updateItem({
@@ -555,13 +524,10 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'article ${itemId} via Redux thunk.`);
 
             if (adaptedItem.photo_storage_url) {
-                console.log(`[ItemEditForm] handleConfirmDelete - Suppression de l'image R2 associée: ${adaptedItem.photo_storage_url}`);
                  try {
                     await deletePhoto(adaptedItem.photo_storage_url);
-                    console.log(`[ItemEditForm] handleConfirmDelete - Image R2 associée supprimée avec succès.`);
                  } catch (deleteError) {
                     console.warn(`[ItemEditForm] handleConfirmDelete - Échec de la suppression de l'image R2 ${adaptedItem.photo_storage_url} lors de la suppression de l'item:`, deleteError);
                      handleError(deleteError, 'Avertissement Suppression Image', {
@@ -575,7 +541,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             // ✅ UTILISER REDUX THUNK - Remplace database.deleteItem + dispatch manuel
             await dispatch(deleteItem(itemId)).unwrap();
 
-            console.log("[ItemEditForm] handleConfirmDelete - Article supprimé avec succès, navigation vers la page stock");
             // Après suppression réussie, naviguer vers la page stock au lieu d'appeler onCancel
             router.replace('/stock');
         } catch (error) {
@@ -591,14 +556,11 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     }, [confirmDialog.itemId, dispatch, adaptedItem, deletePhoto, router]);
 
     const handleCancelDelete = useCallback(() => {
-        console.log("[ItemEditForm] handleCancelDelete - Suppression annulée.");
         setConfirmDialog({ visible: false, itemId: null });
     }, []);
 
     const handlePhotoDelete = useCallback(async () => {
-        console.log("[ItemEditForm] handlePhotoDelete - Suppression de la photo demandée via UI");
         if (!adaptedItem.photo_storage_url) {
-            console.log("[ItemEditForm] handlePhotoDelete - Aucune photo existante à supprimer.");
             setLocalImageUri(null);
             setLocalImageNeedsUpload(false);
             setEditedItem(prev => ({ ...prev, photo_storage_url: null }));
@@ -606,12 +568,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         }
 
         try {
-            console.log(`[ItemEditForm] handlePhotoDelete - Suppression de l'image R2: ${adaptedItem.photo_storage_url}`);
             await deletePhoto(adaptedItem.photo_storage_url);
 
-            console.log("[ItemEditForm] handlePhotoDelete - Image R2 supprimée avec succès.");
-
-            console.log(`[ItemEditForm] handlePhotoDelete - Mise à jour de l'article ${adaptedItem.id} via Redux thunk (photo_storage_url = null).`);
             
             // ✅ UTILISER REDUX THUNK - Remplace database.updateItem + dispatch manuel
             await dispatch(updateItem({
@@ -906,7 +864,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                             localImageNeedsUpload && !isPhotoProcessing ? styles.uploadButton : null
                         ]}
                         onPress={() => {
-                            console.log("[ItemEditForm] Bouton de sauvegarde cliqué");
                             handleSubmit();
                         }}
                         disabled={isSaveDisabled}

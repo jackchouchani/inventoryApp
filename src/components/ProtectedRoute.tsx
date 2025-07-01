@@ -1,6 +1,5 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { DataLoader } from './DataLoader';
 import { ErrorBoundary } from './ErrorBoundary';
 
 interface ProtectedRouteProps {
@@ -21,7 +20,7 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
 
   return (
     <ErrorBoundary>
-      <DataLoader>{children}</DataLoader>
+      {children}
     </ErrorBoundary>
   );
 } 

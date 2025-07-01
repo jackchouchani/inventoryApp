@@ -22,9 +22,7 @@ export const useLocationsOptimized = () => {
 
   // Chargement automatique si nécessaire
   useEffect(() => {
-    console.log('[useLocationsOptimized] Status:', status, 'Locations count:', locations.length);
     if (status === 'idle') {
-      console.log('[useLocationsOptimized] Dispatching fetchLocations...');
       dispatch(fetchLocations());
     }
   }, [dispatch, status, locations.length]);

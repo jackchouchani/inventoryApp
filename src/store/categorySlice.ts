@@ -15,6 +15,14 @@ export const categoriesAdapter = createEntityAdapter<CategoryWithId>({
 const initialState = categoriesAdapter.getInitialState({
   status: 'idle' as 'idle' | 'loading' | 'succeeded' | 'failed',
   error: null as string | null,
+  offline: {
+    isOffline: false,
+    lastSyncTime: null,
+    pendingEvents: 0,
+    syncInProgress: false,
+    syncErrors: []
+  },
+  localChanges: 0,
 });
 
 const categorySlice = createSlice({
@@ -60,7 +68,7 @@ const categorySlice = createSlice({
       })
       .addCase(fetchCategories.rejected, (state, action) => {
         state.status = 'failed';
-        state.error = action.payload?.message || 'Erreur lors du chargement des catégories';
+        state.error = (action.payload as any)?.message || 'Erreur lors du chargement des catégories';
       })
       // createCategory
       .addCase(createCategory.fulfilled, (state, action) => {
@@ -99,10 +107,10 @@ export const {
 export const selectCategoriesWithItemCount = createSelector(
   [selectAllCategories, (state: RootState) => state.items],
   (categories, itemsState) => {
-    return categories.map(category => ({
+    return categories.map((category: any) => ({
       ...category,
       itemCount: Object.values(itemsState.entities || {}).filter(
-        item => item?.categoryId === category.id
+        (item: any) => item?.categoryId === category.id
       ).length
     }));
   }

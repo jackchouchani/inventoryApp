@@ -23,9 +23,9 @@ export const compressImage = async (uri: string): Promise<string> => {
     }
     
     // Pour les plateformes natives, utiliser expo-image-manipulator
-    let quality = PHOTO_COMPRESSION_OPTIONS.quality;
-    let maxWidth = PHOTO_COMPRESSION_OPTIONS.maxWidth;
-    let maxHeight = PHOTO_COMPRESSION_OPTIONS.maxHeight;
+    const quality = PHOTO_COMPRESSION_OPTIONS.quality;
+    const maxWidth = PHOTO_COMPRESSION_OPTIONS.maxWidth;
+    const maxHeight = PHOTO_COMPRESSION_OPTIONS.maxHeight;
     
     console.log(`[imageCompression] Compression avec qualité ${quality*100}%, taille max ${maxWidth}x${maxHeight}`);
     

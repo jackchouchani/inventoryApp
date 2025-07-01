@@ -4,9 +4,12 @@ import { Icon } from '../../src/components';
 import { useRouter, Stack } from 'expo-router';
 import { CameraView as ExpoCameraView } from 'expo-camera';
 import { useCameraPermissions } from '../../src/hooks/useCameraPermissions';
-import { supabase } from '../../src/config/supabase';
 import { formatCurrency } from '../../src/utils/format';
 import { getImageUrl } from '../../src/utils/r2Client';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectAllItems, selectAllCategories, selectAllContainers } from '../../src/store/selectors';
+import { updateItem } from '../../src/store/itemsThunks';
+import { AppDispatch } from '../../src/store/store';
 // Importation de la librairie algoliasearch
 import algoliasearch from 'algoliasearch';
 import { ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY, INDEX_NAME } from '../../src/config/algolia';
@@ -264,6 +267,12 @@ type ScannedItemWithAlgolia = Item & { objectID?: string; photo_storage_url?: st
 export default function ScannerInfoScreen() {
   const router = useRouter();
   const permissions = useCameraPermissions();
+  const dispatch = useDispatch<AppDispatch>();
+  
+  // Hooks Redux pour accéder aux données offline
+  const allItems = useSelector(selectAllItems);
+  const allCategories = useSelector(selectAllCategories);
+  const allContainers = useSelector(selectAllContainers);
 
   const [isScanning, setIsScanning] = useState(true);
   const [scannedItem, setScannedItem] = useState<ScannedItemWithAlgolia | null>(null);
@@ -314,14 +323,9 @@ export default function ScannerInfoScreen() {
     }
     
     try {
-      const { data, error } = await supabase
-        .from('containers')
-        .select('name')
-        .eq('id', containerId)
-        .single();
-
-      if (error) throw error;
-      return data?.name || 'Non spécifié';
+      // Utiliser les données Redux au lieu de Supabase
+      const container = allContainers.find(cont => cont.id === containerId);
+      return container?.name || 'Non spécifié';
     } catch (error) {
       console.error('Erreur lors de la récupération du conteneur:', error);
       return 'Non spécifié';
@@ -335,14 +339,9 @@ export default function ScannerInfoScreen() {
     }
     
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('name')
-        .eq('id', categoryId)
-        .single();
-
-      if (error) throw error;
-      return data?.name || 'Non spécifiée';
+      // Utiliser les données Redux au lieu de Supabase
+      const category = allCategories.find(cat => cat.id === categoryId);
+      return category?.name || 'Non spécifiée';
     } catch (error) {
       console.error('Erreur lors de la récupération de la catégorie:', error);
       return 'Non spécifiée';
@@ -381,31 +380,53 @@ export default function ScannerInfoScreen() {
     }
 
     try {
-      const { data: supabaseItem, error: supabaseError } = await supabase
-        .from('items')
-        .select('*, containers(name), categories(name)')
-        .eq('qr_code', qrCodeValue)
-        .single();
-
-      if (supabaseError || !supabaseItem) {
-        console.error('Erreur Supabase ou article non trouvé:', supabaseError);
-        setError(supabaseError?.message || 'Article non trouvé dans Supabase.');
+      console.log('[Scanner] Recherche de l\'item avec QR code:', qrCodeValue);
+      
+      // Rechercher l'item dans les données Redux (marche offline et online)
+      const foundItem = allItems.find(item => item.qrCode === qrCodeValue);
+      
+      if (!foundItem) {
+        console.error('[Scanner] Article non trouvé dans les données locales:', qrCodeValue);
+        setError('Article non trouvé. Assurez-vous que les données sont synchronisées.');
         setLoading(false);
         setIsScanning(true);
         return;
       }
 
+      console.log('[Scanner] Article trouvé:', foundItem.id);
+      
+      // Récupérer les informations de catégorie et container depuis Redux
+      const category = allCategories.find(cat => cat.id === foundItem.categoryId);
+      const container = allContainers.find(cont => cont.id === foundItem.containerId);
+      
+      // Créer l'objet item avec les relations
+      const itemWithRelations = {
+        ...foundItem,
+        id: foundItem.id,
+        qr_code: foundItem.qrCode, // Mapping pour compatibilité
+        name: foundItem.name,
+        purchase_price: foundItem.purchasePrice,
+        selling_price: foundItem.sellingPrice,
+        container_id: foundItem.containerId,
+        category_id: foundItem.categoryId,
+        status: foundItem.status,
+        description: foundItem.description,
+        photo_url: foundItem.photo_storage_url,
+        containers: container ? { name: container.name } : undefined,
+        categories: category ? { name: category.name } : undefined,
+      };
+
       // Rediriger directement vers la page d'informations de l'article
-      console.log('Article trouvé, redirection vers la page d\'informations:', supabaseItem.id);
-      router.replace(`/item/${supabaseItem.id}/info`);
+      console.log('[Scanner] Redirection vers la page d\'informations:', itemWithRelations.id);
+      router.replace(`/item/${itemWithRelations.id}/info`);
 
     } catch (e: any) {
-      console.error('Erreur globale dans handleBarCodeScanned:', e);
+      console.error('[Scanner] Erreur globale dans handleBarCodeScanned:', e);
       setError(e.message || 'Une erreur est survenue.');
       setLoading(false);
       setIsScanning(true);
     }
-  }, [loading, router]);
+  }, [loading, router, allItems, allCategories, allContainers]);
 
   // Effet pour récupérer les articles similaires une fois que l'objectID est connu
   useEffect(() => {
@@ -553,16 +574,13 @@ export default function ScannerInfoScreen() {
     
     setIsUpdating(true);
     try {
-      const { error } = await supabase
-        .from('items')
-        .update({ 
-          status: 'sold',
-          selling_price: salePrice,
-          sold_at: new Date().toISOString() // Optionnel: enregistrer la date de vente
-        })
-        .eq('id', scannedItem.id);
-
-      if (error) throw error;
+      // Utiliser Redux thunk au lieu de Supabase direct
+      await dispatch(updateItem({
+        id: scannedItem.id,
+        status: 'sold',
+        sellingPrice: salePrice,
+        soldAt: new Date().toISOString() // Optionnel: enregistrer la date de vente
+      })).unwrap();
 
       // Mettre à jour l'état local
       setScannedItem(prev => prev ? { ...prev, status: 'sold', selling_price: salePrice } : null);

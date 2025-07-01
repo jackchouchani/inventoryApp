@@ -179,7 +179,6 @@ const handleItemPress = useCallback((item) => {
   ### Examples:
 
   **Single file analysis:**
-  ```bash
   gemini -p "@src/main.py Explain this file's purpose and structure"
 
   Multiple files:
@@ -259,7 +258,6 @@ const handleItemPress = useCallback((item) => {
 
 
   **Single file analysis:**
-  ```bash
   gemini -p "@src/main.py Explain this file's purpose and structure"
 
 

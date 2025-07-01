@@ -18,7 +18,6 @@ try {
   if (ALGOLIA_APP_ID && ALGOLIA_SEARCH_API_KEY) {
     searchClient = algoliasearch(ALGOLIA_APP_ID, ALGOLIA_SEARCH_API_KEY);
     itemsIndex = searchClient.initIndex(INDEX_NAME);
-    console.log('[Algolia] Client initialisé avec succès', { ALGOLIA_APP_ID, INDEX_NAME });
   }
 } catch (error) {
   console.error('Erreur initialisation client Algolia:', error);
@@ -117,8 +116,6 @@ export const useAlgoliaOptimizedSearch = (
         isLoadingMoreRef.current = true;
       }
 
-      console.log(`[Algolia] Recherche: "${query}" - Page: ${page} - Append: ${append}`);
-
       // Utiliser directement itemsIndex.search avec des options simples
       const searchOptions = {
         page,
@@ -145,16 +142,11 @@ export const useAlgoliaOptimizedSearch = (
         highlightPostTag: '</mark>'
       };
 
-      console.log('[Algolia] Options de recherche:', searchOptions);
-
       // Utiliser itemsIndex.search directement
       const response = await itemsIndex.search(query.trim(), searchOptions);
       
-      console.log('[Algolia] Réponse brute:', response);
-      
       // Vérifier que c'est bien la dernière recherche (éviter les race conditions)
       if (searchId !== searchCounterRef.current) {
-        console.log('[Algolia] Recherche obsolète, ignorée');
         return;
       }
 
@@ -162,8 +154,6 @@ export const useAlgoliaOptimizedSearch = (
       if (response && response.hits) {
         const newItems = response.hits.map(transformAlgoliaToItem);
         
-        console.log(`[Algolia] ${newItems.length} résultats trouvés (${response.nbHits} total)`);
-
         if (append) {
           setItems(prevItems => [...prevItems, ...newItems]);
         } else {
@@ -175,7 +165,6 @@ export const useAlgoliaOptimizedSearch = (
         setHasMore((page + 1) * hitsPerPage < (response.nbHits || 0));
         setCanLoadMore((page + 1) * hitsPerPage < (response.nbHits || 0));
       } else {
-        console.log('[Algolia] Aucun résultat trouvé');
         if (!append) {
           setItems([]);
           setTotalHits(0);
@@ -239,7 +228,6 @@ export const useAlgoliaOptimizedSearch = (
     
     // Log seulement si nécessaire (éviter les logs répétitifs)
     if (trimmedQuery.length === 0 || trimmedQuery.length === minQueryLength) {
-      console.log('[Algolia] Query effect:', { trimmedQuery, length: trimmedQuery.length, minQueryLength });
     }
 
     // Si la requête est trop courte, vider les résultats immédiatement
@@ -255,7 +243,6 @@ export const useAlgoliaOptimizedSearch = (
 
     // Débouncer la recherche
     debounceTimerRef.current = setTimeout(() => {
-      console.log('[Algolia] Déclenchement recherche après debounce pour:', trimmedQuery);
       performAlgoliaSearch(trimmedQuery, 0, false);
     }, debounceMs);
 

@@ -1,1 +1,251 @@
-when i click on an item in gerer les containers, dont remove the item from container unless i click on - and let me check the item info
+# TODO List - Évolutions Stratégiques de l'Application
+
+Ce document détaille les prochaines fonctionnalités à implémenter pour enrichir l'application de gestion de stock pour les revendeurs de mode vintage.
+
+---
+
+## Thème 1 : De "Stats" à "Intelligence d'Affaires"
+
+**Objectif :** Transformer la page de statistiques en un tableau de bord stratégique pour aider à la prise de décision.
+
+### 1.1. Enrichissement du Schéma de Données
+- [ ] **Table `items` :**
+    - [ ] Ajouter une colonne `brand` (type `text`, nullable).
+    - [ ] S'assurer que `created_at` et `sold_at` sont bien des `timestamptz` pour permettre des calculs de durée précis.
+
+### 1.2. Évolution de la Logique Backend & Redux
+- [ ] **Sélecteurs Redux (`src/store/selectors.ts`) :**
+    - [ ] Créer un sélecteur `selectItemStats` qui calcule :
+        - [ ] ROI par article : `(selling_price - purchase_price) / purchase_price`.
+        - [ ] Temps de vente par article : `sold_at - created_at`.
+    - [ ] Créer un sélecteur `selectAggregatedStats` qui utilise `selectItemStats` pour agréger les données :
+        - [ ] ROI moyen et Marge moyenne par `brand`.
+        - [ ] ROI moyen et Marge moyenne par `category_id`.
+        - [ ] Temps de vente moyen par `brand` et par `category_id`.
+        - [ ] Créer une liste de "Stock Dormant" (`stale_stock`): items non vendus (`status = 'available'`) dont `created_at` est plus vieux que X jours (ex: 90 jours).
+- [ ] **Hooks Optimisés (`src/hooks/useOptimizedSelectors.ts`) :**
+    - [ ] Créer un hook `useAdvancedDashboardData` qui expose les données de `selectAggregatedStats`.
+    - [ ] Ajouter des paramètres de filtrage à ce hook (ex: `dateRange: { from: Date, to: Date }`).
+
+### 1.3. Mise à Jour de l'Interface Utilisateur
+- [ ] **Page `app/(stack)/stats.tsx` :**
+    - [ ] Renommer la page en "Tableau de Bord" ou "Analyse".
+    - [ ] Ajouter un sélecteur de période (Cette semaine, Ce mois, Ce trimestre, Année, Personnalisé).
+    - [ ] **Nouvelle section : "Performance par Marque"**
+        - [ ] Tableau affichant : Marque | Articles vendus | ROI moyen | Marge moyenne | Temps de vente moyen.
+        - [ ] Ajouter la possibilité de trier les colonnes.
+    - [ ] **Nouvelle section : "Performance par Catégorie"**
+        - [ ] Tableau similaire pour les catégories.
+    - [ ] **Nouveau composant : "Graphique Croisé Interactif"**
+        - [ ] Utiliser une librairie de graphiques (si non déjà présente) pour créer un graphique à bulles :
+            - Axe X : Temps de vente moyen.
+            - Axe Y : ROI moyen.
+            - Taille de la bulle : Nombre d'articles vendus.
+            - Couleur : par Catégorie.
+    - [ ] **Nouvelle section : "Alerte Stock Dormant"**
+        - [ ] Afficher la liste des articles identifiés comme "dormants" avec un lien direct vers leur page d'édition.
+- [ ] **Formulaire d'item (`src/components/ItemForm.tsx`) :**
+    - [ ] Ajouter un champ de saisie pour la `brand`.
+
+---
+
+## Thème 2 : Gestion des "Sources" et Dépôts-Ventes
+
+**Objectif :** Tracer l'origine des articles pour identifier les meilleures sources d'approvisionnement et gérer les dépôts-ventes.
+
+### 2.1. Schéma de Données Supabase
+- [ ] **Nouvelle table `sources` :**
+    - [ ] `id`: `int8`, PK, auto-increment.
+    - [ ] `name`: `text`, not null.
+    - [ ] `type`: `text` (valeurs possibles : 'Marché', 'Boutique', 'En ligne', 'Particulier').
+    - [ ] `city`: `text`, nullable.
+    - [ ] `created_at`: `timestamptz`, default `now()`.
+    - [ ] `user_id`: `uuid`, FK vers `auth.users`.
+- [ ] **Table `items` :**
+    - [ ] Ajouter `source_id`: `int8`, nullable, FK vers `sources.id`.
+    - [ ] Ajouter `is_consignment`: `boolean`, default `false`.
+    - [ ] Ajouter `consignor_name`: `text`, nullable.
+    - [ ] Ajouter `consignment_split_percentage`: `numeric(5, 2)`, nullable.
+
+### 2.2. Couche de Données (Redux & Database)
+- [ ] **`src/database/database.ts` :**
+    - [ ] Ajouter les fonctions CRUD pour la table `sources`.
+- [ ] **Store Redux (`src/store/`) :**
+    - [ ] Créer `sourcesSlice.ts` et `sourcesThunks.ts` pour gérer l'état des sources.
+    - [ ] Mettre à jour `itemsThunks.ts` pour inclure les nouveaux champs (`source_id`, `is_consignment`, etc.) lors de la création/mise à jour d'items.
+- [ ] **Sélecteurs (`src/store/selectors.ts`) :**
+    - [ ] Créer un sélecteur `selectSourcePerformance` qui calcule le ROI moyen et la marge totale par `source_id`.
+    - [ ] Créer un sélecteur `selectConsignmentPayments` qui liste les articles vendus en dépôt-vente et calcule le montant à reverser (`selling_price * consignment_split_percentage / 100`).
+
+### 2.3. Interface Utilisateur
+- [ ] **Nouvelle section de l'app : `app/sources/`**
+    - [ ] `index.tsx` : Liste des sources avec recherche et bouton "Ajouter".
+    - [ ] `add.tsx` : Formulaire de création de source.
+    - [ ] `[id]/index.tsx` : Page de détail d'une source, affichant ses stats de performance et la liste des articles qui en proviennent.
+- [ ] **Formulaire d'item (`src/components/ItemForm.tsx`) :**
+    - [ ] Ajouter un sélecteur pour choisir une `source`.
+    - [ ] Ajouter une case à cocher "Article en dépôt-vente".
+    - [ ] Si coché, afficher les champs pour le nom du déposant et le pourcentage.
+- [ ] **Tableau de Bord (`app/(stack)/stats.tsx`) :**
+    - [ ] Ajouter une section "Performance par Source".
+    - [ ] Ajouter une section "Paiements Dépôts-Ventes à effectuer".
+
+---
+
+## Thème 3 : Carte d'Inventaire Visuelle
+
+**Objectif :** Offrir une représentation visuelle et interactive de l'inventaire au lieu de listes textuelles.
+
+### 3.1. Pré-requis
+- [ ] S'assurer que les entités `locations` et `containers` sont bien structurées et que la relation `container -> location` est solide.
+
+### 3.2. Développement du Composant
+- [ ] **Nouveau composant `src/components/InventoryMapView.tsx` :**
+    - [ ] Le composant prendra en props les listes de `locations`, `containers`, et `items`.
+    - [ ] **Layout principal :** Créer une grille ou un layout flexible qui représente l'espace de stockage.
+    - [ ] **Représentation des `locations` :** Chaque `location` est une "zone" cliquable.
+    - [ ] **Représentation des `containers` :** À l'intérieur d'une `location` active, afficher ses `containers` sous forme de rectangles.
+- [ ] **Nouveau hook `useInventoryMapData` (`src/hooks/`) :**
+    - [ ] Ce hook utilisera les sélecteurs Redux pour agréger les données nécessaires à la carte :
+        - [ ] Nombre d'articles par `container` et par `location`.
+        - [ ] Valeur totale (prix d'achat) par `container` et par `location`.
+        - [ ] Âge moyen des articles par `container` et par `location`.
+- [ ] **Intégration de la Data-visualisation :**
+    - [ ] Afficher les données (nb articles, valeur) directement sur les éléments visuels.
+    - [ ] **Implémenter la "Heatmap" :**
+        - [ ] Créer une fonction qui mappe une valeur (ex: valeur du stock) à une couleur (ex: de bleu à rouge).
+        - [ ] Appliquer cette couleur en fond des `containers` ou `locations`.
+        - [ ] Ajouter un bouton/switch pour basculer entre les vues : "Heatmap de Valeur" et "Heatmap d'Ancienneté".
+
+### 3.3. Intégration dans l'Application
+- [ ] **Nouvelle page `app/(tabs)/map.tsx` (ou similaire) :**
+    - [ ] Créer un nouvel onglet dans la navigation principale pour la carte.
+    - [ ] Intégrer le composant `InventoryMapView`.
+    - [ ] Rendre la carte interactive : un clic sur un conteneur navigue vers la page de détail de ce conteneur.
+
+---
+
+## Thème 4 : Rôles et Permissions Utilisateurs
+
+**Objectif :** Mettre en place un système de rôles pour sécuriser l'accès aux fonctionnalités sensibles.
+
+### 4.1. Configuration Supabase
+- [ ] **Nouvelle table `profiles` :**
+    - [ ] `id`: `uuid`, PK, FK vers `auth.users.id`.
+    - [ ] `role`: `text`, not null, default `'OPERATOR'`. (Valeurs possibles: `ADMIN`, `MANAGER`, `OPERATOR`).
+- [ ] **Mettre en place la Row Level Security (RLS) :**
+    - [ ] Activer la RLS sur les tables `items`, `categories`, `containers`, etc.
+    - [ ] **Exemple de politique pour `items` :**
+        - [ ] `ADMIN` peut tout faire (SELECT, INSERT, UPDATE, DELETE).
+        - [ ] `MANAGER` peut tout faire sauf DELETE.
+        - [ ] `OPERATOR` peut SELECT, INSERT, et UPDATE (mais pas les champs financiers comme `purchase_price`).
+    - [ ] Créer une fonction `get_user_role()` dans Supabase pour faciliter l'écriture des politiques.
+
+### 4.2. Modifications dans l'Application
+- [ ] **Contexte d'Authentification (`src/contexts/AuthContext.tsx` ou équivalent) :**
+    - [ ] Au login, récupérer et stocker le rôle de l'utilisateur dans l'état global (Redux ou Context).
+- [ ] **Créer un hook `useUserRole()` :**
+    - [ ] Ce hook retourne le rôle de l'utilisateur courant pour un accès facile.
+- [ ] **Adapter l'UI :**
+    - [ ] Dans les composants, utiliser `useUserRole()` pour conditionnellement afficher/masquer des éléments :
+        - [ ] Masquer le bouton "Supprimer" pour les non-Admins.
+        - [ ] Rendre les champs de prix non éditables pour les Opérateurs.
+        - [ ] Masquer l'accès à la page "Tableau de Bord" pour les Opérateurs.
+
+---
+
+## Thème 5 : Historique et Traçabilité (Audit Log)
+
+**Objectif :** Conserver un historique complet des actions sur chaque article pour une traçabilité parfaite.
+
+### 5.1. Schéma de Données Supabase
+- [ ] **Nouvelle table `item_history` :**
+    - [ ] `id`: `int8`, PK, auto-increment.
+    - [ ] `item_id`: `int8`, FK vers `items.id`.
+    - [ ] `user_id`: `uuid`, FK vers `auth.users.id`.
+    - [ ] `action`: `text` (ex: 'CREATED', 'STATUS_CHANGED', 'PRICE_UPDATED', 'MOVED').
+    - [ ] `details`: `jsonb`, pour stocker les changements (ex: `{ "from": "available", "to": "sold" }`).
+    - [ ] `created_at`: `timestamptz`, default `now()`.
+
+### 5.2. Implémentation Backend
+- [ ] **Supabase Database Functions (Triggers) :**
+    - [ ] Créer une fonction `log_item_change()` qui insère une nouvelle ligne dans `item_history`.
+    - [ ] Attacher cette fonction comme un trigger `AFTER UPDATE` sur la table `items`.
+    - [ ] Créer un trigger similaire `AFTER INSERT` pour l'action 'CREATED'.
+
+### 5.3. Interface Utilisateur
+- [ ] **Page de détail de l'article (`app/item/[id]/info.tsx`) :**
+    - [ ] Ajouter un nouvel onglet "Historique".
+    - [ ] Dans cet onglet, fetcher et afficher l'historique de l'article depuis la table `item_history`.
+    - [ ] Formater chaque entrée de manière lisible : "Le 30/06/2025, **Utilisateur A** a changé le statut de **disponible** à **vendu**."
+
+---
+
+## Thème 6 : Export et Intégration
+
+**Objectif :** Permettre aux utilisateurs d'exporter des données pour des besoins comptables ou d'analyse externe.
+
+### 6.1. Création d'un Worker Cloudflare pour la Génération de Fichiers
+- [ ] **Nouveau projet Worker (`report-generator-worker`) :**
+    - [ ] Mettre en place un nouveau worker Cloudflare sur le modèle de `r2-invoice-worker`.
+    - [ ] Ajouter les dépendances nécessaires pour la génération de CSV (ex: `papaparse`) et de PDF (ex: `pdf-lib` ou un service d'API comme `Puppeteer`).
+- [ ] **Développer le Worker :**
+    - [ ] Créer un endpoint POST qui accepte un payload JSON (contenant les données à exporter et le format désiré : 'csv' ou 'pdf').
+    - [ ] **Logique CSV :** Convertir le JSON en une chaîne de caractères CSV.
+    - [ ] **Logique PDF :** Créer une mise en page simple pour un rapport d'inventaire (logo, titre, date, tableau de données).
+    - [ ] Le worker doit sauvegarder le fichier généré sur R2 et retourner une URL de téléchargement sécurisée et à durée de vie limitée.
+
+### 6.2. Intégration dans l'Application Frontend
+- [ ] **Créer un service `ReportService.ts` (`src/services/`) :**
+    - [ ] Ce service contiendra une fonction `generateReport(data, format)` qui appelle le worker Cloudflare.
+- [ ] **Ajouter des boutons d'export dans l'UI :**
+    - [ ] **Page de Stock (`app/(tabs)/stock.tsx`) :**
+        - [ ] Ajouter un bouton "Exporter la vue en CSV".
+        - [ ] Ce bouton récupère les données actuellement filtrées, les envoie au `ReportService`, et déclenche le téléchargement du fichier via l'URL retournée.
+    - [ ] **Tableau de Bord (`app/(stack)/stats.tsx`) :**
+        - [ ] Ajouter un bouton "Exporter l'inventaire complet (PDF)".
+        - [ ] Ce bouton enverra la liste complète des articles au service pour générer un rapport PDF complet à la date du jour.
+- [ ] **Gestion de l'état de l'export :**
+    - [ ] Afficher une notification ou un indicateur de chargement pendant que le worker génère le fichier.
+    - [ ] Afficher un message de succès avec le lien de téléchargement, ou un message d'erreur en cas de problème.
+
+---
+
+## Thème 7 : Fiche Client (Mini-CRM)
+
+**Objectif :** Suivre les achats des clients pour identifier les clients VIP et personnaliser la relation commerciale.
+
+### 7.1. Schéma de Données Supabase
+- [ ] **Nouvelle table `clients` :**
+    - [ ] `id`: `int8`, PK, auto-increment.
+    - [ ] `name`: `text`, not null.
+    - [ ] `contact`: `text`, nullable (email ou @instagram).
+    - [ ] `notes`: `text`, nullable.
+    - [ ] `created_at`: `timestamptz`, default `now()`.
+    - [ ] `user_id`: `uuid`, FK vers `auth.users`.
+- [ ] **Table `items` :**
+    - [ ] Ajouter `sold_to_client_id`: `int8`, nullable, FK vers `clients.id`.
+
+### 7.2. Couche de Données (Redux & Database)
+- [ ] **`src/database/database.ts` :**
+    - [ ] Ajouter les fonctions CRUD pour la table `clients`.
+- [ ] **Store Redux (`src/store/`) :**
+    - [ ] Créer `clientsSlice.ts` et `clientsThunks.ts` pour gérer l'état des clients.
+- [ ] **Sélecteurs (`src/store/selectors.ts`) :**
+    - [ ] Créer un sélecteur `selectClientData` qui, pour chaque client, calcule :
+        - [ ] Le nombre total d'articles achetés.
+        - [ ] Le montant total dépensé.
+        - [ ] La liste des articles achetés.
+        - [ ] Les catégories et marques préférées (basé sur l'historique).
+
+### 7.3. Interface Utilisateur
+- [ ] **Nouvelle section de l'app : `app/clients/`**
+    - [ ] `index.tsx` : Liste des clients, triable par nom, total dépensé ou nombre d'achats. Bouton "Ajouter".
+    - [ ] `add.tsx` : Formulaire simple pour ajouter un nouveau client.
+    - [ ] `[id]/index.tsx` : Page de détail d'un client, affichant :
+        - [ ] Ses informations de contact et notes.
+        - [ ] Ses statistiques (total dépensé, etc.).
+        - [ ] La liste de ses achats passés.
+        - [ ] Un résumé de ses préférences (marques/catégories favorites).
+- [ ] **Processus de Vente :**
+    - [ ] Lorsque l'on marque un article comme "vendu", proposer une modale/un champ pour l'associer à un client (soit en sélectionnant un client existant, soit en en créant un à la volée).

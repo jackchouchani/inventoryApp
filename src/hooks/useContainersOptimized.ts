@@ -3,7 +3,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store/store';
 import { selectAllContainers } from '../store/containersSlice';
 import { fetchContainers, fetchContainerByQRCode, createContainer, updateContainer, deleteContainer } from '../store/containersThunks';
-import type { Container } from '../types/container';
 
 interface ContainerInput {
   name: string;
@@ -23,9 +22,7 @@ export const useContainersOptimized = () => {
 
   // Chargement automatique si nécessaire
   useEffect(() => {
-    console.log('[useContainersOptimized] Status:', status, 'Containers count:', containers.length);
     if (status === 'idle') {
-      console.log('[useContainersOptimized] Dispatching fetchContainers...');
       dispatch(fetchContainers());
     }
   }, [dispatch, status, containers.length]);

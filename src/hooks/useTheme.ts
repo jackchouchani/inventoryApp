@@ -9,4 +9,7 @@ export const useTheme = (): AppThemeType => {
   return activeTheme;
 };
 
+// Re-export useAppTheme for backward compatibility
+export { useAppTheme };
+
 export type { AppThemeType as Theme }; // Re-export for compatibility if needed
