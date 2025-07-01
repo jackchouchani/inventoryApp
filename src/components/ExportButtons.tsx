@@ -4,6 +4,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 import StyleFactory from '../styles/StyleFactory';
 import { ReportData, ReportService, CSVColumn } from '../services/ReportService';
 import { useExportData } from '../hooks/useExportData';
+import { Icon } from './Icon';
 
 interface ExportButtonsProps {
   data: ReportData;
@@ -23,9 +24,10 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
   const [showColumnsModal, setShowColumnsModal] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'available' | 'sold'>('all');
+  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [availableColumns] = useState<CSVColumn[]>(ReportService.getAvailableCSVColumns());
 
-  const handleExport = async (format: 'csv' | 'pdf' | 'html') => {
+  const handleExport = async (format: 'csv' | 'pdf') => {
     if (format === 'csv') {
       // Pour CSV, ouvrir d'abord la sélection de colonnes
       setShowExportModal(false);
@@ -67,7 +69,8 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
       await exportWithData('csv', data, {
         format: 'csv',
         csvColumns: selectedColumns,
-        csvStatusFilter: selectedStatus
+        csvStatusFilter: selectedStatus,
+        csvCategoryFilter: selectedCategories.length > 0 ? selectedCategories : undefined
       });
       
       Alert.alert(
@@ -92,6 +95,35 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
     );
   };
 
+  const toggleCategory = (categoryId: number) => {
+    setSelectedCategories(prev => 
+      prev.includes(categoryId) 
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const getFilteredItemsCount = () => {
+    let count = data.items.length;
+    
+    // Filtre par statut
+    if (selectedStatus !== 'all') {
+      count = data.items.filter(item => item.status === selectedStatus).length;
+    }
+    
+    // Filtre par catégories
+    if (selectedCategories.length > 0) {
+      const statusFilteredItems = selectedStatus !== 'all' 
+        ? data.items.filter(item => item.status === selectedStatus)
+        : data.items;
+      count = statusFilteredItems.filter(item => 
+        item.categoryId && selectedCategories.includes(item.categoryId)
+      ).length;
+    }
+    
+    return count;
+  };
+
   const getExportButtonStyle = (format: string) => {
     const baseStyle = [styles.exportButton];
     
@@ -100,8 +132,6 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
         return [...baseStyle, { backgroundColor: activeTheme.success + '20', borderColor: activeTheme.success }];
       case 'pdf':
         return [...baseStyle, { backgroundColor: activeTheme.error + '20', borderColor: activeTheme.error }];
-      case 'html':
-        return [...baseStyle, { backgroundColor: activeTheme.warning + '20', borderColor: activeTheme.warning }];
       default:
         return baseStyle;
     }
@@ -115,8 +145,6 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
         return [...baseStyle, { color: activeTheme.success }];
       case 'pdf':
         return [...baseStyle, { color: activeTheme.error }];
-      case 'html':
-        return [...baseStyle, { color: activeTheme.warning }];
       default:
         return baseStyle;
     }
@@ -185,17 +213,6 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={getExportButtonStyle('html')}
-                onPress={() => handleExport('html')}
-                disabled={isExporting}
-              >
-                <Text style={styles.formatIcon}>🌐</Text>
-                <Text style={getExportButtonTextStyle('html')}>HTML</Text>
-                <Text style={[styles.formatDescription, { color: activeTheme.text.secondary }]}>
-                  Page web
-                </Text>
-              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -218,176 +235,209 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
         onRequestClose={() => setShowColumnsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: activeTheme.surface, maxHeight: '80%' }]}>
+          <View style={[styles.modalContent, { backgroundColor: activeTheme.surface }]}>
             <Text style={[styles.modalTitle, { color: activeTheme.text.primary }]}>
-              Choisir les colonnes CSV
+              Options d'export CSV
             </Text>
             
-            <Text style={[styles.modalSubtitle, { color: activeTheme.text.secondary }]}>
-              Sélectionnez les colonnes à inclure dans votre export CSV
-            </Text>
-
-            {/* Sélection du statut des articles */}
-            <View style={styles.statusSectionContainer}>
-              <Text style={[styles.statusSectionTitle, { color: activeTheme.text.primary }]}>
-                Statut des articles
-              </Text>
-              <View style={styles.statusButtonsContainer}>
-                {[
-                  { key: 'all', label: 'Tous', count: data.items.length },
-                  { key: 'available', label: 'Disponibles', count: data.items.filter(i => i.status === 'available').length },
-                  { key: 'sold', label: 'Vendus', count: data.items.filter(i => i.status === 'sold').length }
-                ].map((statusOption) => (
-                  <TouchableOpacity
-                    key={statusOption.key}
-                    style={[
-                      styles.statusButton,
-                      {
-                        backgroundColor: selectedStatus === statusOption.key 
-                          ? activeTheme.primary + '15' 
-                          : 'transparent',
-                        borderColor: selectedStatus === statusOption.key 
-                          ? activeTheme.primary 
-                          : activeTheme.border,
-                        borderWidth: selectedStatus === statusOption.key ? 2 : 1,
-                      }
-                    ]}
-                    onPress={() => setSelectedStatus(statusOption.key as 'all' | 'available' | 'sold')}
-                  >
-                    <Text style={[
-                      styles.statusButtonText,
-                      { 
-                        color: selectedStatus === statusOption.key 
-                          ? activeTheme.primary 
-                          : activeTheme.text.primary,
-                        fontWeight: selectedStatus === statusOption.key ? '600' : '400'
-                      }
-                    ]}>
-                      {statusOption.label}
-                    </Text>
-                    <Text style={[
-                      styles.statusButtonCount,
-                      { 
-                        color: selectedStatus === statusOption.key 
-                          ? activeTheme.primary + '80' 
-                          : activeTheme.text.secondary
-                      }
-                    ]}>
-                      ({statusOption.count})
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Boutons de sélection rapide */}
-            <View style={styles.quickSelectContainer}>
-              <TouchableOpacity
-                style={[styles.quickSelectButton, { borderColor: activeTheme.primary }]}
-                onPress={() => {
-                  const defaultColumns = availableColumns.filter(col => col.defaultSelected).map(col => col.key);
-                  setSelectedColumns(defaultColumns);
-                }}
-              >
-                <Text style={[styles.quickSelectText, { color: activeTheme.primary }]}>
-                  Sélection par défaut
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Statut simple */}
+              <View style={styles.simpleSection}>
+                <Text style={[styles.simpleSectionTitle, { color: activeTheme.text.primary }]}>
+                  Statut des articles
                 </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.quickSelectButton, { borderColor: activeTheme.primary }]}
-                onPress={() => {
-                  const allColumns = availableColumns.map(col => col.key);
-                  setSelectedColumns(allColumns);
-                }}
-              >
-                <Text style={[styles.quickSelectText, { color: activeTheme.primary }]}>
-                  Tout sélectionner
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.quickSelectButton, { borderColor: activeTheme.error }]}
-                onPress={() => setSelectedColumns([])}
-              >
-                <Text style={[styles.quickSelectText, { color: activeTheme.error }]}>
-                  Tout désélectionner
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 350, marginVertical: 15 }}>
-              <View style={styles.columnsGrid}>
-                {availableColumns.map((column) => {
-                  const isSelected = selectedColumns.includes(column.key);
-                  return (
+                <View style={styles.simpleButtonRow}>
+                  {[
+                    { key: 'all', label: 'Tous', count: data.items.length },
+                    { key: 'available', label: 'Disponibles', count: data.items.filter(i => i.status === 'available').length },
+                    { key: 'sold', label: 'Vendus', count: data.items.filter(i => i.status === 'sold').length }
+                  ].map((option) => (
                     <TouchableOpacity
-                      key={column.key}
+                      key={option.key}
                       style={[
-                        styles.columnCard,
-                        { 
-                          backgroundColor: isSelected 
-                            ? activeTheme.primary + '15' 
-                            : activeTheme.surface,
-                          borderColor: isSelected 
-                            ? activeTheme.primary 
-                            : activeTheme.border,
-                          borderWidth: isSelected ? 2 : 1,
+                        styles.simpleButton,
+                        {
+                          backgroundColor: selectedStatus === option.key ? activeTheme.primary : activeTheme.surface,
+                          borderColor: selectedStatus === option.key ? activeTheme.primary : activeTheme.border,
                         }
                       ]}
-                      onPress={() => toggleColumn(column.key)}
-                      activeOpacity={0.7}
+                      onPress={() => setSelectedStatus(option.key as 'all' | 'available' | 'sold')}
                     >
-                      <View style={styles.columnCardHeader}>
-                        <View style={[
-                          styles.modernCheckbox,
-                          { 
-                            backgroundColor: isSelected 
-                              ? activeTheme.primary 
-                              : 'transparent',
-                            borderColor: isSelected 
-                              ? activeTheme.primary 
-                              : activeTheme.border,
-                          }
-                        ]}>
-                          {isSelected && (
-                            <Text style={{ 
-                              color: activeTheme.text.onPrimary, 
-                              fontSize: 10, 
-                              fontWeight: 'bold' 
-                            }}>
-                              ✓
-                            </Text>
-                          )}
-                        </View>
-                        
-                        {column.defaultSelected && (
-                          <View style={[styles.defaultBadge, { backgroundColor: activeTheme.warning + '30' }]}>
-                            <Text style={[styles.defaultBadgeText, { color: activeTheme.warning }]}>
-                              Recommandé
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      
                       <Text style={[
-                        styles.modernColumnLabel,
-                        { 
-                          color: isSelected 
-                            ? activeTheme.primary 
-                            : activeTheme.text.primary,
-                          fontWeight: isSelected ? '600' : '400'
-                        }
+                        styles.simpleButtonText,
+                        { color: selectedStatus === option.key ? activeTheme.text.onPrimary : activeTheme.text.primary }
                       ]}>
-                        {column.label}
+                        {option.label}
+                      </Text>
+                      <Text style={[
+                        styles.simpleButtonCount,
+                        { color: selectedStatus === option.key ? activeTheme.text.onPrimary + '80' : activeTheme.text.secondary }
+                      ]}>
+                        ({option.count})
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
+                  ))}
+                </View>
+              </View>
+
+              {/* Catégories simples */}
+              <View style={styles.simpleSection}>
+                <Text style={[styles.simpleSectionTitle, { color: activeTheme.text.primary }]}>
+                  Catégories
+                </Text>
+                
+                {/* Toutes les catégories */}
+                <TouchableOpacity
+                  style={[
+                    styles.allCategoriesSimple,
+                    {
+                      backgroundColor: selectedCategories.length === 0 ? activeTheme.primary : activeTheme.surface,
+                      borderColor: selectedCategories.length === 0 ? activeTheme.primary : activeTheme.border,
+                    }
+                  ]}
+                  onPress={() => setSelectedCategories([])}
+                >
+                  <Text style={[
+                    styles.allCategoriesSimpleText,
+                    { color: selectedCategories.length === 0 ? activeTheme.text.onPrimary : activeTheme.text.primary }
+                  ]}>
+                    📂 Toutes les catégories ({data.categories.length})
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Liste des catégories */}
+                <View style={styles.categoriesSimpleGrid}>
+                  {data.categories.map((category) => {
+                    const itemsInCategory = data.items.filter(item => item.categoryId === category.id).length;
+                    const isSelected = selectedCategories.includes(category.id);
+                    
+                    return (
+                      <TouchableOpacity
+                        key={category.id}
+                        style={[
+                          styles.categorySimpleCard,
+                          {
+                            backgroundColor: isSelected ? activeTheme.primary + '15' : activeTheme.surface,
+                            borderColor: isSelected ? activeTheme.primary : activeTheme.border,
+                          }
+                        ]}
+                        onPress={() => toggleCategory(category.id)}
+                      >
+                        <View style={styles.categorySimpleContent}>
+                          <Icon
+                            name={category.icon || 'folder'}
+                            size={18}
+                            color={isSelected ? activeTheme.primary : activeTheme.text.secondary}
+                          />
+                          <Text style={[
+                            styles.categorySimpleText,
+                            { color: isSelected ? activeTheme.primary : activeTheme.text.primary }
+                          ]}>
+                            {category.name}
+                          </Text>
+                        </View>
+                        <Text style={[
+                          styles.categorySimpleCount,
+                          { color: isSelected ? activeTheme.primary : activeTheme.text.secondary }
+                        ]}>
+                          ({itemsInCategory})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Résumé */}
+              {(selectedStatus !== 'all' || selectedCategories.length > 0) && (
+                <View style={[styles.summaryBox, { backgroundColor: activeTheme.primary + '10' }]}>
+                  <Text style={[styles.summaryText, { color: activeTheme.primary }]}>
+                    📊 {getFilteredItemsCount()} article{getFilteredItemsCount() > 1 ? 's' : ''} à exporter
+                  </Text>
+                </View>
+              )}
+
+              {/* Colonnes */}
+              <View style={styles.simpleSection}>
+                <Text style={[styles.simpleSectionTitle, { color: activeTheme.text.primary }]}>
+                  Colonnes à inclure
+                </Text>
+                
+                {/* Boutons rapides */}
+                <View style={styles.quickButtons}>
+                  <TouchableOpacity
+                    style={[styles.quickButton, { borderColor: activeTheme.primary }]}
+                    onPress={() => {
+                      const defaultColumns = availableColumns.filter(col => col.defaultSelected).map(col => col.key);
+                      setSelectedColumns(defaultColumns);
+                    }}
+                  >
+                    <Text style={[styles.quickButtonText, { color: activeTheme.primary }]}>Par défaut</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.quickButton, { borderColor: activeTheme.primary }]}
+                    onPress={() => {
+                      const allColumns = availableColumns.map(col => col.key);
+                      setSelectedColumns(allColumns);
+                    }}
+                  >
+                    <Text style={[styles.quickButtonText, { color: activeTheme.primary }]}>Tout</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.quickButton, { borderColor: activeTheme.error }]}
+                    onPress={() => setSelectedColumns([])}
+                  >
+                    <Text style={[styles.quickButtonText, { color: activeTheme.error }]}>Aucun</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Liste des colonnes */}
+                <View style={styles.columnsSimpleList}>
+                  {availableColumns.map((column) => {
+                    const isSelected = selectedColumns.includes(column.key);
+                    return (
+                      <TouchableOpacity
+                        key={column.key}
+                        style={[
+                          styles.columnSimpleItem,
+                          {
+                            backgroundColor: isSelected ? activeTheme.primary + '10' : 'transparent',
+                            borderColor: activeTheme.border,
+                          }
+                        ]}
+                        onPress={() => toggleColumn(column.key)}
+                      >
+                        <View style={[
+                          styles.checkbox,
+                          {
+                            backgroundColor: isSelected ? activeTheme.primary : 'transparent',
+                            borderColor: isSelected ? activeTheme.primary : activeTheme.border,
+                          }
+                        ]}>
+                          {isSelected && <Text style={{ color: activeTheme.text.onPrimary, fontSize: 12 }}>✓</Text>}
+                        </View>
+                        <Text style={[
+                          styles.columnSimpleLabel,
+                          { color: isSelected ? activeTheme.primary : activeTheme.text.primary }
+                        ]}>
+                          {column.label}
+                        </Text>
+                        {column.defaultSelected && (
+                          <View style={[styles.recommendedBadge, { backgroundColor: activeTheme.warning + '30' }]}>
+                            <Text style={[styles.recommendedText, { color: activeTheme.warning }]}>★</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             </ScrollView>
 
-            <View style={styles.formatButtonsContainer}>
+            {/* Boutons d'action */}
+            <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={[styles.cancelButton, { borderColor: activeTheme.border }]}
                 onPress={() => setShowColumnsModal(false)}
@@ -402,17 +452,13 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
                   styles.exportButton,
                   { 
                     backgroundColor: activeTheme.primary,
-                    borderColor: activeTheme.primary,
-                    minWidth: 100
+                    opacity: selectedColumns.length === 0 ? 0.5 : 1
                   }
                 ]}
                 onPress={handleCSVExport}
                 disabled={selectedColumns.length === 0}
               >
-                <Text style={[
-                  styles.exportButtonText,
-                  { color: activeTheme.text.onPrimary }
-                ]}>
+                <Text style={[styles.exportButtonText, { color: activeTheme.text.onPrimary }]}>
                   Exporter ({selectedColumns.length})
                 </Text>
               </TouchableOpacity>

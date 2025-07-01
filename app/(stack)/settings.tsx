@@ -41,6 +41,7 @@ const SettingsScreen = () => {
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showClearDataModal, setShowClearDataModal] = useState(false);
+  const [showOfflineInfoModal, setShowOfflineInfoModal] = useState(false);
   const [offlineStats, setOfflineStats] = useState<{
     itemsCount: number;
     categoriesCount: number;
@@ -299,44 +300,18 @@ const SettingsScreen = () => {
         </View>
       </View>
 
-      {/* Offline Settings Section */}
-      <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>Mode Hors Ligne</Text>
-        <View style={[styles.menuItem, { borderTopColor: activeTheme.border, borderTopWidth: 1 }]}>
-          <Icon name="wifi_off" size={24} color={activeTheme.primary} />
-          <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={styles.menuText}>Forcer le mode hors ligne</Text>
-            <Text style={[styles.sectionTitle, { marginBottom: 0, marginTop: 4, fontSize: 12 }]}>
-              {isOfflineModeForced 
-                ? `Mode forcé activé${pendingOperationsCount > 0 ? ` • ${pendingOperationsCount} modifications en attente` : ''}`
-                : isOnline 
-                  ? 'En ligne - données synchronisées'
-                  : `Hors ligne${pendingOperationsCount > 0 ? ` • ${pendingOperationsCount} modifications en attente` : ''}`
-              }
-            </Text>
-          </View>
-          <Switch
-            value={isOfflineModeForced}
-            onValueChange={async (value) => {
-              console.log('Toggle offline mode:', value);
-              if (value) {
-                // Activation directe avec simple confirmation si nécessaire
-                console.log('Activating offline mode...');
-                setOfflineModeForced(true);
-              } else {
-                console.log('Deactivating offline mode...');
-                setOfflineModeForced(false);
-              }
-            }}
-            trackColor={{ false: activeTheme.border, true: activeTheme.primary + '40' }}
-            thumbColor={isOfflineModeForced ? activeTheme.primary : activeTheme.text.secondary}
-          />
-        </View>
-      </View>
 
       {/* Offline Data Preparation Section */}
       <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>Préparation Hors Ligne</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={styles.sectionTitle}>Préparation Mode Hors Ligne</Text>
+          <TouchableOpacity 
+            style={{ marginLeft: 8, padding: 4 }}
+            onPress={() => setShowOfflineInfoModal(true)}
+          >
+            <Icon name="info" size={16} color={activeTheme.primary} />
+          </TouchableOpacity>
+        </View>
         
         {/* Stats section */}
         {offlineStats && (
@@ -460,79 +435,6 @@ const SettingsScreen = () => {
         </TouchableOpacity>
       )}
 
-      {/* Test Mode Section - Only in development */}
-      {__DEV__ && (
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Mode Test (Développement)</Text>
-          
-          {/* Toggle mode test */}
-          <View style={[styles.menuItem, { borderTopColor: activeTheme.border, borderTopWidth: 1 }]}>
-            <Icon name="bug_report" size={24} color={activeTheme.secondary} />
-            <View style={{ flex: 1, marginLeft: 16 }}>
-              <Text style={styles.menuText}>Mode test des conflits</Text>
-              <Text style={[styles.sectionTitle, { marginBottom: 0, marginTop: 4, fontSize: 12 }]}>
-                {isTestModeEnabled 
-                  ? `Activé • ${testDataCount.conflicts} conflits, ${testDataCount.events} événements`
-                  : 'Permet de tester les conflits sans affecter les vraies données'
-                }
-              </Text>
-            </View>
-            <Switch
-              value={isTestModeEnabled}
-              onValueChange={async (value) => {
-                console.log('Toggle test mode:', value);
-                if (value) {
-                  // Activation directe - c'est sécurisé car mode test uniquement
-                  console.log('Activating test mode...');
-                  await toggleTestMode(true);
-                } else {
-                  console.log('Deactivating test mode...');
-                  await toggleTestMode(false);
-                }
-              }}
-              trackColor={{ false: activeTheme.border, true: activeTheme.secondary + '40' }}
-              thumbColor={isTestModeEnabled ? activeTheme.secondary : activeTheme.text.secondary}
-            />
-          </View>
-
-          {/* Actions de test */}
-          {isTestModeEnabled && (
-            <>
-              <TouchableOpacity 
-                style={[styles.menuItem, { backgroundColor: activeTheme.primaryContainer + '20' }]}
-                onPress={handleCreateTestConflicts}
-                disabled={isCreatingTestData}
-              >
-                <Icon name="science" size={24} color={activeTheme.primary} />
-                <View style={{ flex: 1, marginLeft: 16 }}>
-                  <Text style={styles.menuText}>Créer des conflits de test</Text>
-                  <Text style={[styles.sectionTitle, { marginBottom: 0, marginTop: 4, fontSize: 12 }]}>
-                    Génère 4 scénarios : UPDATE_UPDATE, DELETE_UPDATE, CREATE_CREATE, MOVE_MOVE
-                  </Text>
-                </View>
-                {isCreatingTestData && <ActivityIndicator size="small" color={activeTheme.primary} />}
-                <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
-              </TouchableOpacity>
-
-              {(testDataCount.conflicts > 0 || testDataCount.events > 0) && (
-                <TouchableOpacity 
-                  style={[styles.menuItem, { backgroundColor: activeTheme.danger.background + '20' }]}
-                  onPress={handleCleanupTestData}
-                >
-                  <Icon name="delete_sweep" size={24} color={activeTheme.danger.main} />
-                  <View style={{ flex: 1, marginLeft: 16 }}>
-                    <Text style={[styles.menuText, { color: activeTheme.danger.main }]}>Nettoyer les données de test</Text>
-                    <Text style={[styles.sectionTitle, { marginBottom: 0, marginTop: 4, fontSize: 12, color: activeTheme.danger.main }]}>
-                      Supprime {testDataCount.conflicts} conflits et {testDataCount.events} événements de test
-                    </Text>
-                  </View>
-                  <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-      )}
 
       <TouchableOpacity 
         style={[styles.menuItem, { borderTopColor: activeTheme.border, borderTopWidth: 1 }]}
@@ -710,6 +612,78 @@ const SettingsScreen = () => {
               textColor={activeTheme.text.inverse}
             >
               Effacer
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Modal d'information sur le mode hors ligne */}
+      <Portal>
+        <Modal
+          visible={showOfflineInfoModal}
+          onDismiss={() => setShowOfflineInfoModal(false)}
+          contentContainerStyle={{
+            backgroundColor: activeTheme.surface,
+            margin: 20,
+            padding: 20,
+            borderRadius: 8,
+          }}
+        >
+          <View style={{ alignItems: 'center', marginBottom: 16 }}>
+            <Icon name="wifi_off" size={48} color={activeTheme.primary} />
+          </View>
+          
+          <Text style={[styles.menuText, { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }]}>
+            Mode Hors Ligne
+          </Text>
+          
+          <Text style={[styles.sectionTitle, { marginBottom: 16, fontSize: 16, lineHeight: 24 }]}>
+            Le mode hors ligne vous permet d'utiliser l'application sans connexion internet.
+          </Text>
+
+          <View style={{ marginBottom: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+              <Icon name="download" size={20} color={activeTheme.primary} style={{ marginRight: 12, marginTop: 2 }} />
+              <Text style={[styles.sectionTitle, { flex: 1, fontSize: 14 }]}>
+                <Text style={{ fontWeight: 'bold' }}>Téléchargez</Text> toutes vos données en avance
+              </Text>
+            </View>
+            
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+              <Icon name="work" size={20} color={activeTheme.primary} style={{ marginRight: 12, marginTop: 2 }} />
+              <Text style={[styles.sectionTitle, { flex: 1, fontSize: 14 }]}>
+                <Text style={{ fontWeight: 'bold' }}>Travaillez</Text> normalement sans internet
+              </Text>
+            </View>
+            
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+              <Icon name="sync" size={20} color={activeTheme.primary} style={{ marginRight: 12, marginTop: 2 }} />
+              <Text style={[styles.sectionTitle, { flex: 1, fontSize: 14 }]}>
+                <Text style={{ fontWeight: 'bold' }}>Synchronisation</Text> automatique au retour en ligne
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ backgroundColor: activeTheme.warning + '20', padding: 12, borderRadius: 8, marginBottom: 20, flexDirection: 'row', alignItems: 'flex-start' }}>
+            <Icon name="warning" size={20} color={activeTheme.warning} style={{ marginRight: 8, marginTop: 2 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { fontSize: 13, fontWeight: 'bold', color: activeTheme.warning, marginBottom: 4 }]}>
+                Important
+              </Text>
+              <Text style={[styles.sectionTitle, { fontSize: 13, color: activeTheme.warning }]}>
+                Téléchargez vos données avant de partir dans une zone sans connexion.
+              </Text>
+            </View>
+          </View>
+          
+          <View style={{ alignItems: 'center' }}>
+            <Button 
+              mode="contained" 
+              onPress={() => setShowOfflineInfoModal(false)}
+              buttonColor={activeTheme.primary}
+              textColor={activeTheme.text.inverse}
+            >
+              Compris
             </Button>
           </View>
         </Modal>

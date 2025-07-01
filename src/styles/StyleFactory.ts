@@ -4560,9 +4560,10 @@ class StyleFactory {
       modalContent: {
         backgroundColor: theme.surface,
         borderRadius: 16,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
+        padding: 20,
+        width: '95%',
+        maxWidth: 500,
+        maxHeight: '85%',
         elevation: 8,
         shadowColor: theme.backdrop,
         shadowOffset: { width: 0, height: 4 },
@@ -4587,7 +4588,8 @@ class StyleFactory {
       
       formatButtonsContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
+        justifyContent: 'space-between',
+        gap: 12,
         marginBottom: 24,
       },
       
@@ -4641,7 +4643,7 @@ class StyleFactory {
         marginBottom: 8,
       },
       
-      checkbox: {
+      oldCheckbox: {
         width: 20,
         height: 20,
         borderRadius: 4,
@@ -4656,63 +4658,6 @@ class StyleFactory {
         flex: 1,
       },
       
-      quickSelectContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginVertical: 15,
-        gap: 8,
-      },
-      
-      quickSelectButton: {
-        flex: 1,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderWidth: 1,
-        borderRadius: 8,
-        alignItems: 'center',
-      },
-      
-      quickSelectText: {
-        fontSize: 12,
-        fontWeight: '500',
-      },
-      
-      columnsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        gap: 10,
-      },
-      
-      columnCard: {
-        width: '48%',
-        borderRadius: 12,
-        padding: 15,
-        marginBottom: 10,
-        minHeight: 80,
-      },
-      
-      columnCardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-      },
-      
-      modernCheckbox: {
-        width: 18,
-        height: 18,
-        borderRadius: 4,
-        borderWidth: 1.5,
-        alignItems: 'center',
-        justifyContent: 'center',
-      },
-      
-      modernColumnLabel: {
-        fontSize: 13,
-        textAlign: 'left',
-        lineHeight: 18,
-      },
       
       defaultBadge: {
         paddingHorizontal: 6,
@@ -4726,46 +4671,168 @@ class StyleFactory {
         textTransform: 'uppercase',
       },
       
-      statusSectionContainer: {
-        marginVertical: 20,
-        paddingVertical: 15,
-        paddingHorizontal: 10,
-        backgroundColor: theme.surface + '50',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.border,
+      // Styles simples et efficaces
+      simpleSection: {
+        marginBottom: 24,
       },
       
-      statusSectionTitle: {
-        fontSize: 15,
+      simpleSectionTitle: {
+        fontSize: 16,
         fontWeight: '600',
         marginBottom: 12,
       },
       
-      statusButtonsContainer: {
+      // Statut simple
+      simpleButtonRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         gap: 8,
       },
       
-      statusButton: {
+      simpleButton: {
         flex: 1,
         paddingVertical: 12,
         paddingHorizontal: 8,
-        borderRadius: 10,
+        borderRadius: 8,
+        borderWidth: 1,
         alignItems: 'center',
-        justifyContent: 'center',
       },
       
-      statusButtonText: {
+      simpleButtonText: {
         fontSize: 13,
-        textAlign: 'center',
+        fontWeight: '500',
         marginBottom: 2,
       },
       
-      statusButtonCount: {
+      simpleButtonCount: {
         fontSize: 11,
-        textAlign: 'center',
+      },
+      
+      // Catégories simples
+      allCategoriesSimple: {
+        padding: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 12,
+        alignItems: 'center',
+      },
+      
+      allCategoriesSimpleText: {
+        fontSize: 14,
+        fontWeight: '500',
+      },
+      
+      categoriesSimpleGrid: {
+        gap: 8,
+      },
+      
+      categorySimpleCard: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 6,
+      },
+      
+      categorySimpleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 12,
+      },
+      
+      categorySimpleText: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '400',
+      },
+      
+      categorySimpleCount: {
+        fontSize: 12,
+      },
+      
+      // Résumé
+      summaryBox: {
+        padding: 12,
+        borderRadius: 8,
+        marginVertical: 16,
+        alignItems: 'center',
+      },
+      
+      summaryText: {
+        fontSize: 14,
+        fontWeight: '600',
+      },
+      
+      // Boutons rapides
+      quickButtons: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 16,
+      },
+      
+      quickButton: {
+        flex: 1,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+        borderWidth: 1,
+        alignItems: 'center',
+      },
+      
+      quickButtonText: {
+        fontSize: 12,
+        fontWeight: '500',
+      },
+      
+      // Liste des colonnes
+      columnsSimpleList: {
+        gap: 4,
+      },
+      
+      columnSimpleItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 6,
+        borderBottomWidth: 1,
+      },
+      
+      checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+      },
+      
+      columnSimpleLabel: {
+        flex: 1,
+        fontSize: 14,
+      },
+      
+      recommendedBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+      },
+      
+      recommendedText: {
+        fontSize: 10,
+        fontWeight: '600',
+      },
+      
+      // Boutons d'action
+      actionButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: theme.border,
       },
     });
   }
