@@ -103,6 +103,7 @@
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.11.6",
     "jspdf": "^2.5.2",
+    "jspdf-autotable": "^5.0.2",
     "jsqr": "^1.4.0",
     "jszip": "^3.10.1",
     "lingo.dev": "^0.93.3",

@@ -17,10 +17,10 @@ export const useCategoriesOptimized = () => {
 
   // Chargement automatique si nécessaire
   useEffect(() => {
-    if (status === 'idle') {
+    if (status === 'idle' || categories.length === 0) {
       dispatch(fetchCategories());
     }
-  }, [dispatch, status]);
+  }, [dispatch, status, categories.length]);
 
   // Actions optimisées
   const actions = {

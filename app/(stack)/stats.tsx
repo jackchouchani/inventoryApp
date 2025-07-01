@@ -8,9 +8,11 @@ import { fr } from 'date-fns/locale';
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
 import StyleFactory from '../../src/styles/StyleFactory';
 
-import { CommonHeader, SalesBarChart } from '../../src/components';
+import CommonHeader from '../../src/components/CommonHeader';
+import SalesBarChart from '../../src/components/SalesBarChart';
+import ExportButtons from '../../src/components/ExportButtons';
 import { useStats } from '../../src/hooks/useStats';
-import { useDashboardData } from '../../src/hooks/useOptimizedSelectors';
+import { useDashboardData, useStockPageData } from '../../src/hooks/useOptimizedSelectors';
 
 import { StatsChart } from '../../src/components/StatsChart';
 import CategoryPieChart from '../../src/components/CategoryPieChart';
@@ -46,6 +48,9 @@ const StatsScreen = () => {
 
   // Hook pour les données de containers
   const { itemsByContainer } = useDashboardData();
+  
+  // Hook pour les données d'export
+  const exportData = useStockPageData();
 
   // Reset tooltip function
   const resetTooltip = useCallback(() => {
@@ -126,6 +131,18 @@ const StatsScreen = () => {
         <CommonHeader 
           title="Statistiques"
           onBackPress={() => router.back()}
+        />
+
+        {/* Boutons d'export pour le rapport complet */}
+        <ExportButtons
+          data={{
+            items: exportData.items,
+            categories: exportData.categories,
+            containers: exportData.containers,
+            locations: exportData.locations,
+          }}
+          title="Exporter le rapport complet"
+          style={{ marginHorizontal: 16, marginVertical: 12 }}
         />
 
         <ScrollView style={styles.content}>
