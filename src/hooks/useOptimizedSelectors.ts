@@ -4,7 +4,6 @@ import { RootState } from '../store/store';
 import {
   selectFilteredItems,
   selectAllItems,
-  selectAllCategories,
   selectAllLocations,
   selectItemStats,
   selectItemsByCategory,
@@ -16,8 +15,10 @@ import {
   selectPaginationInfo,
   type ItemFilters
 } from '../store/selectors';
+import { selectAllCategories } from '../store/categorySlice';
 import { fetchItems } from '../store/itemsThunks';
 import { fetchLocations } from '../store/locationsThunks';
+import { fetchCategories } from '../store/categoriesThunks';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AppDispatch } from '../store/store';
 import { useContainersOptimized } from './useContainersOptimized';
@@ -81,7 +82,18 @@ export const useContainersByLocation = () => {
  * Hook pour récupérer toutes les catégories
  */
 export const useAllCategories = () => {
-  return useSelector(selectAllCategories);
+  const dispatch = useDispatch<AppDispatch>();
+  const categories = useSelector(selectAllCategories);
+  const status = useSelector((state: RootState) => state.categories.status);
+
+  // Chargement automatique si nécessaire
+  useEffect(() => {
+    if (status === 'idle' || categories.length === 0) {
+      dispatch(fetchCategories());
+    }
+  }, [dispatch, status, categories.length]);
+
+  return categories;
 };
 
 /**

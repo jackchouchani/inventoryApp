@@ -398,7 +398,6 @@ const SettingsScreen = () => {
           offlineStats.itemsCount > 0 || 
           offlineStats.categoriesCount > 0 || 
           offlineStats.containersCount > 0 || 
-          offlineStats.locationsCount > 0 || 
           offlineStats.imagesCount > 0 || 
           offlineStats.offlineEventsCount > 0
         ) && (

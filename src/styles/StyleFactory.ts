@@ -30,7 +30,8 @@ type ComponentName =
   | 'Labels'
   | 'MultiReceipt'
   | 'CommonHeader'
-  | 'Common';
+  | 'Common'
+  | 'ExportButtons';
 
 class StyleFactory {
   private static cache = new Map<string, any>();
@@ -110,6 +111,8 @@ class StyleFactory {
         return this.getMultiReceiptStyles(theme, commonStyles);
       case 'CommonHeader':
         return this.getCommonHeaderStyles(theme, commonStyles);
+      case 'ExportButtons':
+        return this.getExportButtonsStyles(theme, commonStyles);
       case 'Common':
         return commonStyles;
       default:
@@ -4507,6 +4510,262 @@ class StyleFactory {
       tabButtonTextActive: {
         color: theme.primary,
         fontWeight: '600' as const,
+      },
+    });
+  }
+
+  /**
+   * Styles pour ExportButtons - Boutons d'export de données
+   */
+  private static getExportButtonsStyles(theme: AppThemeType, _common: CommonStyles) {
+    return StyleSheet.create({
+      container: {
+        margin: 12,
+      },
+      
+      mainButton: {
+        backgroundColor: theme.primary,
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 2,
+        shadowColor: theme.backdrop,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      
+      mainButtonText: {
+        fontSize: 16,
+        fontWeight: '600' as const,
+        color: theme.text.onPrimary,
+        marginBottom: 2,
+      },
+      
+      mainButtonSubtext: {
+        fontSize: 12,
+        color: theme.text.onPrimary + '80',
+      },
+      
+      modalOverlay: {
+        flex: 1,
+        backgroundColor: theme.backdrop,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+      },
+      
+      modalContent: {
+        backgroundColor: theme.surface,
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        elevation: 8,
+        shadowColor: theme.backdrop,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+      },
+      
+      modalTitle: {
+        fontSize: 20,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        textAlign: 'center',
+        marginBottom: 8,
+      },
+      
+      modalSubtitle: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        textAlign: 'center',
+        marginBottom: 24,
+      },
+      
+      formatButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 24,
+      },
+      
+      exportButton: {
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        minWidth: 80,
+        backgroundColor: 'transparent',
+      },
+      
+      exportButtonText: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        marginTop: 8,
+        marginBottom: 4,
+      },
+      
+      formatIcon: {
+        fontSize: 24,
+        marginBottom: 4,
+      },
+      
+      formatDescription: {
+        fontSize: 11,
+        textAlign: 'center',
+      },
+      
+      cancelButton: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        backgroundColor: 'transparent',
+      },
+      
+      cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '500' as const,
+      },
+      
+      columnOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderRadius: 8,
+        marginBottom: 8,
+      },
+      
+      checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 2,
+        marginRight: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      
+      columnLabel: {
+        fontSize: 14,
+        flex: 1,
+      },
+      
+      quickSelectContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginVertical: 15,
+        gap: 8,
+      },
+      
+      quickSelectButton: {
+        flex: 1,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        alignItems: 'center',
+      },
+      
+      quickSelectText: {
+        fontSize: 12,
+        fontWeight: '500',
+      },
+      
+      columnsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        gap: 10,
+      },
+      
+      columnCard: {
+        width: '48%',
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 10,
+        minHeight: 80,
+      },
+      
+      columnCardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+      },
+      
+      modernCheckbox: {
+        width: 18,
+        height: 18,
+        borderRadius: 4,
+        borderWidth: 1.5,
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      
+      modernColumnLabel: {
+        fontSize: 13,
+        textAlign: 'left',
+        lineHeight: 18,
+      },
+      
+      defaultBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+      },
+      
+      defaultBadgeText: {
+        fontSize: 8,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+      },
+      
+      statusSectionContainer: {
+        marginVertical: 20,
+        paddingVertical: 15,
+        paddingHorizontal: 10,
+        backgroundColor: theme.surface + '50',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      
+      statusSectionTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 12,
+      },
+      
+      statusButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 8,
+      },
+      
+      statusButton: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      
+      statusButtonText: {
+        fontSize: 13,
+        textAlign: 'center',
+        marginBottom: 2,
+      },
+      
+      statusButtonCount: {
+        fontSize: 11,
+        textAlign: 'center',
       },
     });
   }
