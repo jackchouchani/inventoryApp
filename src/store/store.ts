@@ -2,9 +2,11 @@ import { configureStore } from '@reduxjs/toolkit';
 import itemsReducer from './itemsSlice';
 import categoriesReducer from './categorySlice';
 import containersReducer from './containersSlice';
+import locationsReducer from './locationsSlice';
 import { categoriesAdapter } from './categorySlice';
 import { itemsAdapter } from './itemsAdapter';
 import { containersAdapter } from './containersSlice';
+import { locationsAdapter } from './locationsSlice';
 import { Item } from '../types/item';
 import { errorMiddleware } from './middleware/errorMiddleware';
 
@@ -13,6 +15,7 @@ export const store = configureStore({
     items: itemsReducer,
     categories: categoriesReducer,
     containers: containersReducer,
+    locations: locationsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(errorMiddleware),
@@ -37,6 +40,11 @@ export const getInitialState = () => ({
     error: null as string | null,
   }),
   containers: containersAdapter.getInitialState({
+    status: 'idle' as const,
+    error: null as string | null,
+    loading: false,
+  }),
+  locations: locationsAdapter.getInitialState({
     status: 'idle' as const,
     error: null as string | null,
     loading: false,

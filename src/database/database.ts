@@ -1,6 +1,7 @@
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
+import type { Location, LocationInput } from '../types/location';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -30,6 +31,8 @@ const boundDatabase = {
   searchItems: supabaseDatabase.searchItems.bind(supabaseDatabase),
   getContainers: supabaseDatabase.getContainers.bind(supabaseDatabase),
   getCategories: supabaseDatabase.getCategories.bind(supabaseDatabase),
+  getLocations: supabaseDatabase.getLocations.bind(supabaseDatabase),
+  getLocationByQRCode: supabaseDatabase.getLocationByQRCode.bind(supabaseDatabase),
   getDatabase: supabaseDatabase.getDatabase.bind(supabaseDatabase),
   getItemByQRCode: supabaseDatabase.getItemByQRCode.bind(supabaseDatabase),
   getContainerByQRCode: supabaseDatabase.getContainerByQRCode.bind(supabaseDatabase),
@@ -44,6 +47,9 @@ const boundDatabase = {
   addContainer: supabaseDatabase.addContainer.bind(supabaseDatabase),
   updateContainer: supabaseDatabase.updateContainer.bind(supabaseDatabase),
   deleteContainer: supabaseDatabase.deleteContainer.bind(supabaseDatabase),
+  addLocation: supabaseDatabase.addLocation.bind(supabaseDatabase),
+  updateLocation: supabaseDatabase.updateLocation.bind(supabaseDatabase),
+  deleteLocation: supabaseDatabase.deleteLocation.bind(supabaseDatabase),
   addCategory: supabaseDatabase.addCategory.bind(supabaseDatabase),
   updateCategory: supabaseDatabase.updateCategory.bind(supabaseDatabase),
   deleteCategory: supabaseDatabase.deleteCategory.bind(supabaseDatabase),
@@ -63,6 +69,9 @@ export const databaseInterface: DatabaseInterface = {
   addContainer: withLogging(boundDatabase.addContainer, 'ADD_CONTAINER'),
   updateContainer: withLogging(boundDatabase.updateContainer, 'UPDATE_CONTAINER'),
   deleteContainer: withLogging(boundDatabase.deleteContainer, 'DELETE_CONTAINER'),
+  addLocation: withLogging(boundDatabase.addLocation, 'ADD_LOCATION'),
+  updateLocation: withLogging(boundDatabase.updateLocation, 'UPDATE_LOCATION'),
+  deleteLocation: withLogging(boundDatabase.deleteLocation, 'DELETE_LOCATION'),
   addCategory: withLogging(boundDatabase.addCategory, 'ADD_CATEGORY'),
   updateCategory: withLogging(boundDatabase.updateCategory, 'UPDATE_CATEGORY'),
   deleteCategory: withLogging(boundDatabase.deleteCategory, 'DELETE_CATEGORY'),
@@ -75,6 +84,8 @@ export const databaseInterface: DatabaseInterface = {
   searchItems: boundDatabase.searchItems,
   getContainers: boundDatabase.getContainers,
   getCategories: boundDatabase.getCategories,
+  getLocations: boundDatabase.getLocations,
+  getLocationByQRCode: boundDatabase.getLocationByQRCode,
   getDatabase: boundDatabase.getDatabase,
   getItemByQRCode: boundDatabase.getItemByQRCode,
   getContainerByQRCode: boundDatabase.getContainerByQRCode,
@@ -88,6 +99,7 @@ export const databaseInterface: DatabaseInterface = {
 export type { Item, ItemInput, ItemUpdate } from '../types/item';
 export type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 export type { Container, ContainerInput, ContainerUpdate } from '../types/container';
+export type { Location, LocationInput, LocationUpdate } from '../types/location';
 
 export interface DatabaseInterface {
     // Méthodes pour les items
@@ -114,9 +126,16 @@ export interface DatabaseInterface {
     getContainers: () => Promise<Container[]>;
     getContainerByQRCode: (qrCode: string) => Promise<Container | null>;
 
+    // Méthodes pour les emplacements
+    addLocation: (location: LocationInput) => Promise<number>;
+    updateLocation: (id: number, location: Partial<LocationInput>) => Promise<void>;
+    deleteLocation: (id: number) => Promise<void>;
+    getLocations: () => Promise<Location[]>;
+    getLocationByQRCode: (qrCode: string) => Promise<Location | null>;
+
     // Méthodes utilitaires
-    validateQRCode: (type: 'ITEM' | 'CONTAINER', qrCode: string) => Promise<boolean>;
-    getItemOrContainerByQRCode: (type: 'ITEM' | 'CONTAINER', qrCode: string) => Promise<boolean>;
+    validateQRCode: (type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string) => Promise<boolean>;
+    getItemOrContainerByQRCode: (type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string) => Promise<boolean>;
     storePhotoUri: (uri: string) => Promise<void>;
     getPhotoUris: () => Promise<string[]>;
     removePhotoUri: (uri: string) => Promise<void>;
@@ -130,6 +149,7 @@ export interface DatabaseInterface {
         items: Item[];
         containers: Container[];
         categories: Category[];
+        locations: Location[];
     }>;
 }
 

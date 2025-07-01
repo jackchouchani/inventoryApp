@@ -387,7 +387,7 @@ export const bulkUpdateItems = createAsyncThunk<
  */
 export const createItem = createAsyncThunk<
   Item,
-  { name: string; description?: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId?: number | null; qrCode: string; photo_storage_url?: string },
+  { name: string; description?: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId?: number | null; locationId?: number | null; qrCode: string; photo_storage_url?: string },
   { state: RootState; rejectValue: ThunkError }
 >('items/createItem', async (itemData, { rejectWithValue }) => {
   try {
@@ -408,6 +408,7 @@ export const createItem = createAsyncThunk<
         status: 'available',
         category_id: itemData.categoryId,
         container_id: itemData.containerId || null,
+        location_id: itemData.locationId || null,
         qr_code: itemData.qrCode,
         photo_storage_url: itemData.photo_storage_url || null,
         user_id: user.id, // ✅ AJOUT du user_id requis
@@ -447,7 +448,7 @@ export const createItem = createAsyncThunk<
  */
 export const updateItem = createAsyncThunk<
   Item,
-  { id: number; updates: Partial<{ name: string; description: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId: number | null; photo_storage_url: string | null }> },
+  { id: number; updates: Partial<{ name: string; description: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId: number | null; locationId: number | null; photo_storage_url: string | null }> },
   { state: RootState; rejectValue: ThunkError }
 >('items/updateItem', async ({ id, updates }, { rejectWithValue }) => {
   try {
@@ -461,6 +462,7 @@ export const updateItem = createAsyncThunk<
     if (updates.sellingPrice !== undefined) updateData.selling_price = updates.sellingPrice;
     if (updates.categoryId !== undefined) updateData.category_id = updates.categoryId;
     if (updates.containerId !== undefined) updateData.container_id = updates.containerId;
+    if (updates.locationId !== undefined) updateData.location_id = updates.locationId;
     if (updates.photo_storage_url !== undefined) updateData.photo_storage_url = updates.photo_storage_url;
 
     const { data, error } = await supabase

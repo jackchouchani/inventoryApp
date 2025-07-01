@@ -3,7 +3,8 @@ import 'react-native-get-random-values';
 // Définir les types d'IDs
 const ID_TYPES = {
   ITEM: 'ART',
-  CONTAINER: 'CONT'
+  CONTAINER: 'CONT',
+  LOCATION: 'LOC'
 } as const;
 
 // Caractères alphanumériques pour générer un ID court (sans les caractères ambigus 0/O, 1/I)
@@ -22,9 +23,9 @@ function generateShortCode(): string {
 }
 
 /**
- * Génère un identifiant pour un article ou un container
- * @param type Type d'ID à générer ('ITEM' ou 'CONTAINER')
- * @returns Un ID au format 'ART_XXXX' pour les articles ou 'CONT_XXXX' pour les containers
+ * Génère un identifiant pour un article, un container ou un emplacement
+ * @param type Type d'ID à générer ('ITEM', 'CONTAINER' ou 'LOCATION')
+ * @returns Un ID au format 'ART_XXXX' pour les articles, 'CONT_XXXX' pour les containers ou 'LOC_XXXX' pour les emplacements
  */
 export function generateId(type: keyof typeof ID_TYPES): string {
   const prefix = ID_TYPES[type];
@@ -54,6 +55,14 @@ export function parseId(id: string): { type: string; value: string } | null {
     };
   }
   
+  // Format QR code LOC_XXXX
+  if (id.startsWith(`${ID_TYPES.LOCATION}_`)) {
+    return {
+      type: 'LOCATION',
+      value: id.substring(4) // Longueur de 'LOC_'
+    };
+  }
+  
   console.warn(`Format d'identifiant non reconnu: ${id}`);
   return null;
 }
@@ -64,7 +73,7 @@ export function parseId(id: string): { type: string; value: string } | null {
  * @returns true si l'identifiant est valide, false sinon
  */
 export function isValidId(id: string): boolean {
-  return isItemQrCode(id) || isContainerQrCode(id);
+  return isItemQrCode(id) || isContainerQrCode(id) || isLocationQrCode(id);
 }
 
 /**
@@ -93,6 +102,21 @@ export function isContainerQrCode(id: string): boolean {
     console.log(`QR code container non reconnu: '${id}'`);
     console.log(`Vérification: commence par '${ID_TYPES.CONTAINER}_' = ${id.startsWith(`${ID_TYPES.CONTAINER}_`)}`);
     console.log(`Vérification: longueur >= 9 = ${id.length >= 9}`);
+  }
+  return result;
+}
+
+/**
+ * Vérifie si un identifiant correspond au format QR code d'un emplacement
+ * @param id L'identifiant à vérifier
+ * @returns true si l'identifiant est au format QR code d'emplacement, false sinon
+ */
+export function isLocationQrCode(id: string): boolean {
+  const result = id.startsWith(`${ID_TYPES.LOCATION}_`) && id.length >= 8; // LOC_ + au moins 4 caractères
+  if (!result && id) {
+    console.log(`QR code emplacement non reconnu: '${id}'`);
+    console.log(`Vérification: commence par '${ID_TYPES.LOCATION}_' = ${id.startsWith(`${ID_TYPES.LOCATION}_`)}`);
+    console.log(`Vérification: longueur >= 8 = ${id.length >= 8}`);
   }
   return result;
 }

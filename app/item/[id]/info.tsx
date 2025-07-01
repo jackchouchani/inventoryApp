@@ -9,6 +9,7 @@ import { ReceiptGenerator } from '../../../src/components/ReceiptGenerator';
 import { LabelGenerator } from '../../../src/components/LabelGenerator';
 import { useCategoriesOptimized as useCategories } from '../../../src/hooks/useCategoriesOptimized';
 import { useContainersOptimized as useContainers } from '../../../src/hooks/useContainersOptimized';
+import { useAllLocations } from '../../../src/hooks/useOptimizedSelectors';
 import { useItem } from '../../../src/hooks/useItem';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../../src/store/store';
@@ -34,6 +35,7 @@ export default function ItemInfoScreen() {
   const { item, isLoading, error, refetch } = useItem(id as string);
   const { categories } = useCategories();
   const { data: containers } = useContainers();
+  const locations = useAllLocations();
 
   const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
 
@@ -49,6 +51,23 @@ export default function ItemInfoScreen() {
     const found = containers.find(cont => cont.id === Number(item.containerId));
     return found;
   }, [item?.containerId, containers]);
+
+  // Récupérer l'emplacement (direct ou via container)
+  const location = useMemo(() => {
+    if (!item || !locations) return null;
+    
+    // Emplacement direct de l'article
+    if (item.locationId) {
+      return locations.find(loc => loc.id === item.locationId) || null;
+    }
+    
+    // Emplacement hérité du container
+    if (container?.locationId) {
+      return locations.find(loc => loc.id === container.locationId) || null;
+    }
+    
+    return null;
+  }, [item, locations, container]);
 
   // Charger l'image quand l'article est récupéré
   useEffect(() => {
@@ -206,6 +225,13 @@ export default function ItemInfoScreen() {
             <Text style={styles.infoLabel}>Container:</Text>
             <Text style={styles.infoValue}>
               {container ? `${container.name}#${container.number}` : 'Non spécifié'}
+            </Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Emplacement:</Text>
+            <Text style={styles.infoValue}>
+              {location ? location.name : 'Non spécifié'}
             </Text>
           </View>
           

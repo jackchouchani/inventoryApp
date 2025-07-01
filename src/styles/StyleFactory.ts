@@ -21,6 +21,7 @@ type ComponentName =
   | 'CategoryContent'
   | 'ContainerCard'
   | 'ContainerContents'
+  | 'LocationCard'
   | 'Scanner'
   | 'Stats'
   | 'SalesChart'
@@ -91,6 +92,8 @@ class StyleFactory {
         return this.getContainerCardStyles(theme, commonStyles);
       case 'ContainerContents':
         return this.getContainerContentsStyles(theme, commonStyles);
+      case 'LocationCard':
+        return this.getLocationCardStyles(theme, commonStyles);
       case 'Scanner':
         return this.getScannerStyles(theme, commonStyles);
       case 'Stats':
@@ -1042,6 +1045,263 @@ class StyleFactory {
   /**
    * Styles pour ContainerContents - Interface Container Details
    */
+  private static getLocationCardStyles(theme: AppThemeType, common: CommonStyles) {
+    return StyleSheet.create({
+      // Styles de base du container
+      container: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      loadingContainer: {
+        flex: 1,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        backgroundColor: theme.background,
+      },
+      loadingText: {
+        marginTop: 10,
+        color: theme.text.secondary,
+      },
+      
+      // Header et navigation
+      topBar: {
+        height: Platform.OS === 'ios' ? 44 : 56,
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 16,
+        backgroundColor: theme.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+      },
+      backButton: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+      },
+      backButtonText: {
+        fontSize: 17,
+        color: theme.primary,
+        marginLeft: -4,
+      },
+      
+      // Card de base (héritée)
+      card: common.card,
+      header: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        marginBottom: 8,
+      },
+      title: {
+        ...common.text.primary,
+        fontSize: 16,
+        fontWeight: '600' as const,
+      },
+      address: {
+        ...common.text.secondary,
+        fontSize: 13,
+        fontStyle: 'italic' as const,
+      },
+      description: {
+        ...common.text.secondary,
+        marginBottom: 12,
+      },
+      footer: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+      },
+      itemCount: {
+        ...common.text.primary,
+        fontWeight: '500' as const,
+      },
+      
+      // ===== LOCATION GRID =====
+      grid: {
+        padding: 8,
+        flexGrow: 1,
+      },
+      gridRow: {
+        justifyContent: 'space-between' as const,
+        marginBottom: 8,
+      },
+      locationCard: {
+        flex: 0.48, // 48% de largeur pour 2 colonnes avec espace
+        aspectRatio: 1.3, // Ratio légèrement rectangulaire pour plus de contenu
+        backgroundColor: theme.surface,
+        borderRadius: 12,
+        padding: 16,
+        marginVertical: 4,
+        borderWidth: 1,
+        borderColor: theme.border,
+        justifyContent: 'space-between' as const,
+        minHeight: 130,
+        ...Platform.select({
+          web: {
+            boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
+          },
+          default: {
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+          },
+        }),
+      },
+      locationName: {
+        fontSize: 16,
+        fontWeight: '700' as const,
+        marginBottom: 4,
+        color: theme.text.primary,
+      },
+      locationAddress: {
+        fontSize: 13,
+        color: theme.text.secondary,
+        marginBottom: 8,
+        fontStyle: 'italic' as const,
+      },
+      statsContainer: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        alignItems: 'center' as const,
+        marginTop: 'auto' as const,
+      },
+      statItem: {
+        alignItems: 'center' as const,
+      },
+      statNumber: {
+        fontSize: 16,
+        fontWeight: '700' as const,
+        color: theme.primary,
+      },
+      statLabel: {
+        fontSize: 11,
+        color: theme.text.secondary,
+        marginTop: 2,
+      },
+      
+      detailRow: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        marginBottom: 8,
+      },
+      detailLabel: {
+        fontSize: 16,
+        fontWeight: '500' as const,
+        color: theme.text.secondary,
+        width: 100,
+      },
+      detailValue: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+      },
+      
+      // Modal et formulaire
+      modalContent: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      scrollContainer: {
+        flexGrow: 1,
+        padding: 16,
+      },
+      modalHeader: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        padding: 16,
+        backgroundColor: theme.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+      },
+      modalTitle: {
+        fontSize: 18,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+      },
+      headerSpacer: {
+        width: 70,
+      },
+      headerActions: {
+        flexDirection: 'row' as const,
+        gap: 16,
+      },
+      cancelButton: {
+        padding: 8,
+      },
+      cancelButtonText: {
+        color: theme.primary,
+        fontSize: 16,
+      },
+      actionButton: {
+        padding: 8,
+      },
+      deleteButton: {
+        marginLeft: 8,
+      },
+      
+      // Styles pour l'assignation de containers
+      sectionHeader: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        marginBottom: 12,
+      },
+      addButton: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.primary,
+        backgroundColor: 'transparent',
+      },
+      addButtonText: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        marginLeft: 4,
+      },
+      emptyText: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        textAlign: 'center' as const,
+        paddingVertical: 16,
+        fontStyle: 'italic' as const,
+      },
+      section: {
+        marginBottom: 20,
+      },
+      sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        marginBottom: 12,
+      },
+      checkbox: {
+        width: 24,
+        height: 24,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: theme.border,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+      },
+      removeButton: {
+        padding: 4,
+        borderRadius: 4,
+      },
+      headerButton: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+      },
+    });
+  }
+
   private static getContainerContentsStyles(theme: AppThemeType, common: CommonStyles) {
     const { width } = Dimensions.get('window');
     const isSmallScreen = width < 768; // Responsive breakpoint

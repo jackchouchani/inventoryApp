@@ -8,6 +8,7 @@ import { AppDispatch } from '../store/store';
 import { fetchItems } from '../store/itemsThunks';
 import { fetchCategories } from '../store/categoriesThunks';
 import { fetchContainers } from '../store/containersThunks';
+import { fetchLocations } from '../store/locationsThunks';
 
 interface DataLoaderProps {
   children: React.ReactNode;
@@ -150,6 +151,7 @@ export const DataLoader: React.FC<DataLoaderProps> = memo(({
     try {
       dispatch(fetchCategories());
       dispatch(fetchContainers());
+      dispatch(fetchLocations());
       dispatch(fetchItems({ page: 0, limit: 50 }));
     } catch (error) {
       console.error('Erreur lors du refetch Redux:', error);

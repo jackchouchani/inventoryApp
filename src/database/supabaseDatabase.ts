@@ -3,6 +3,7 @@ import type { DatabaseInterface } from './database';
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
+import type { Location, LocationInput, LocationUpdate } from '../types/location';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -356,21 +357,37 @@ export class SupabaseDatabase implements DatabaseInterface {
     }
   }
 
-  async getDatabase(): Promise<{ items: Item[], containers: Container[], categories: Category[] }> {
-    const [items, containers, categories] = await Promise.all([
+  async getDatabase(): Promise<{ items: Item[], containers: Container[], categories: Category[], locations: Location[] }> {
+    const [items, containers, categories, locations] = await Promise.all([
       this.getItems(),
       this.getContainers(),
-      this.getCategories()
+      this.getCategories(),
+      this.getLocations()
     ]);
 
-    return { items, containers, categories };
+    return { items, containers, categories, locations };
   }
 
-  async validateQRCode(type: 'ITEM' | 'CONTAINER', qrCode: string): Promise<boolean> {
+  async validateQRCode(type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string): Promise<boolean> {
+    let tableName = '';
+    let columnName = 'qr_code';
+    
+    switch (type) {
+      case 'ITEM':
+        tableName = 'items';
+        break;
+      case 'CONTAINER':
+        tableName = 'containers';
+        break;
+      case 'LOCATION':
+        tableName = 'locations';
+        break;
+    }
+    
     const { data } = await supabase
-      .from(type === 'ITEM' ? 'items' : 'containers')
+      .from(tableName)
       .select('id')
-      .eq('qrCode', qrCode)
+      .eq(columnName, qrCode)
       .single();
     
     return !!data;
@@ -617,11 +634,25 @@ export class SupabaseDatabase implements DatabaseInterface {
     if (categoriesError) throw categoriesError;
   }
 
-  async getItemOrContainerByQRCode(type: 'ITEM' | 'CONTAINER', qrCode: string): Promise<boolean> {
+  async getItemOrContainerByQRCode(type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string): Promise<boolean> {
+    let tableName = '';
+    
+    switch (type) {
+      case 'ITEM':
+        tableName = 'items';
+        break;
+      case 'CONTAINER':
+        tableName = 'containers';
+        break;
+      case 'LOCATION':
+        tableName = 'locations';
+        break;
+    }
+    
     const { data } = await supabase
-      .from(type === 'ITEM' ? 'items' : 'containers')
+      .from(tableName)
       .select('id')
-      .eq('qrCode', qrCode)
+      .eq('qr_code', qrCode)
       .single();
     
     return !!data;
@@ -696,6 +727,163 @@ export class SupabaseDatabase implements DatabaseInterface {
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
       return [];
+    }
+  }
+
+  // ===== LOCATIONS =====
+  async getLocations(): Promise<Location[]> {
+    try {
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*')
+        .is('deleted', false)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      if (!data) return [];
+
+      return data.map(location => ({
+        id: location.id,
+        name: location.name,
+        address: location.address,
+        description: location.description,
+        qrCode: location.qr_code,
+        createdAt: location.created_at,
+        updatedAt: location.updated_at,
+        deleted: location.deleted,
+        userId: location.user_id
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return [];
+    }
+  }
+
+  async getLocationByQRCode(qrCode: string): Promise<Location | null> {
+    try {
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*')
+        .eq('qr_code', qrCode)
+        .is('deleted', false)
+        .single();
+      
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw error;
+      }
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        name: data.name,
+        address: data.address,
+        description: data.description,
+        qrCode: data.qr_code,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        deleted: data.deleted,
+        userId: data.user_id
+      };
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return null;
+    }
+  }
+
+  async addLocation(location: LocationInput): Promise<Location | null> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('Utilisateur non authentifié');
+
+      const { data, error } = await supabase
+        .from('locations')
+        .insert({
+          name: location.name,
+          address: location.address || null,
+          description: location.description || null,
+          qr_code: location.qrCode,
+          user_id: user.user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          deleted: false
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        name: data.name,
+        address: data.address,
+        description: data.description,
+        qrCode: data.qr_code,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        deleted: data.deleted,
+        userId: data.user_id
+      };
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return null;
+    }
+  }
+
+  async updateLocation(id: number, updates: LocationUpdate): Promise<Location | null> {
+    try {
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.address !== undefined) updateData.address = updates.address;
+      if (updates.description !== undefined) updateData.description = updates.description;
+
+      const { data, error } = await supabase
+        .from('locations')
+        .update(updateData)
+        .eq('id', id)
+        .is('deleted', false)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        name: data.name,
+        address: data.address,
+        description: data.description,
+        qrCode: data.qr_code,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        deleted: data.deleted,
+        userId: data.user_id
+      };
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return null;
+    }
+  }
+
+  async deleteLocation(id: number): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('locations')
+        .update({ 
+          deleted: true,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return false;
     }
   }
 }

@@ -6,6 +6,7 @@ import { updateItem, deleteItem } from '../store/itemsThunks';
 import { AppDispatch } from '../store/store';
 import type { Category } from '../types/category';
 import type { Container } from '../types/container';
+import type { Location } from '../types/location';
 import type { MaterialIconName } from '../types/icons';
 import type { Item } from '../types/item';
 import { validateItemName } from '../utils/validation';
@@ -16,12 +17,14 @@ import ConfirmationDialog from './ConfirmationDialog';
 import { useRouter } from 'expo-router';
 import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 import * as ExpoImagePicker from 'expo-image-picker';
+import { useAllLocations } from '../hooks/useOptimizedSelectors';
 
 
 interface ItemEditFormProps {
     item: Item;
     categories: Category[];
     containers: Container[];
+    locations?: Location[];
     onSuccess?: () => void;
     onCancel?: () => void;
 }
@@ -35,6 +38,7 @@ interface EditedItemForm {
     photo_storage_url?: string | null;
     containerId?: number | null;
     categoryId?: number;
+    locationId?: number | null;
 }
 
 const ContainerOption = memo(({ 
@@ -190,7 +194,7 @@ const arePropsEqual = (prevProps: ItemEditFormProps, nextProps: ItemEditFormProp
     );
 };
 
-export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, onSuccess, onCancel }) => {
+export const ItemEditForm = memo(({ item, containers: propContainers, categories: propCategories, locations: propLocations, onSuccess, onCancel }) => {
     const { activeTheme } = useAppTheme();
     const styles = useMemo(() => getThemedStyles(activeTheme), [activeTheme]);
     
@@ -202,6 +206,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             sellingPrice: item.sellingPrice ?? (item as any).selling_price ?? 0,
             containerId: item.containerId ?? (item as any).container_id ?? null,
             categoryId: item.categoryId ?? (item as any).category_id ?? null,
+            locationId: item.locationId ?? (item as any).location_id ?? null,
         };
         
         return adapted;
@@ -212,9 +217,19 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const categories = Array.isArray(propCategories) 
         ? [...propCategories].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
         : [];
+    
+    // Charger les emplacements disponibles
+    const allLocations = useAllLocations();
+    const locations = propLocations || allLocations;
+    
+    console.log('[ItemEditForm] Debug locations:', {
+        propLocations: propLocations?.length || 0,
+        allLocations: allLocations?.length || 0,
+        finalLocations: locations?.length || 0
+    });
 
     const dispatch = useDispatch<AppDispatch>();
-    const { uploadPhoto, deletePhoto, loadImage, state: photoHookState, validatePhoto } = usePhoto();
+    const { uploadPhoto, deletePhoto, loadImage, state: photoHookState } = usePhoto();
 
     const router = useRouter();
 
@@ -229,7 +244,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         status: adaptedItem.status,
         photo_storage_url: adaptedItem.photo_storage_url,
         containerId: adaptedItem.containerId,
-        categoryId: adaptedItem.categoryId
+        categoryId: adaptedItem.categoryId,
+        locationId: adaptedItem.locationId
     });
 
     const initialItemState = useMemo(() => {
@@ -241,7 +257,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             status: adaptedItem.status,
             photo_storage_url: adaptedItem.photo_storage_url,
             containerId: adaptedItem.containerId,
-            categoryId: adaptedItem.categoryId
+            categoryId: adaptedItem.categoryId,
+            locationId: adaptedItem.locationId
         };
         
         return result;
@@ -283,7 +300,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
              editedItem.sellingPrice !== initialItemState.sellingPrice ||
              editedItem.status !== initialItemState.status ||
              editedItem.containerId !== initialItemState.containerId ||
-             editedItem.categoryId !== initialItemState.categoryId;
+             editedItem.categoryId !== initialItemState.categoryId ||
+             editedItem.locationId !== initialItemState.locationId;
 
          const photoChanged =
              localImageNeedsUpload ||
@@ -407,7 +425,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 showAlert: true
             });
         }
-    }, [adaptedItem.id, validatePhoto]);
+    }, [adaptedItem.id]);
 
     const handleSubmit = useCallback(async () => {
         if (!hasFormChanged) {
@@ -479,7 +497,8 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             sellingPrice: parseFloat(editedItem.sellingPrice) || 0,
             status: editedItem.status,
             containerId: editedItem.containerId,
-            categoryId: editedItem.categoryId
+            categoryId: editedItem.categoryId,
+            locationId: editedItem.locationId
         };
 
         if (finalPhotoStorageUrl !== undefined) {
@@ -499,6 +518,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     sellingPrice: itemToUpdateToSendToDB.sellingPrice,
                     categoryId: itemToUpdateToSendToDB.categoryId,
                     containerId: itemToUpdateToSendToDB.containerId,
+                    locationId: itemToUpdateToSendToDB.locationId,
                     photo_storage_url: finalPhotoStorageUrl
                 }
             })).unwrap();
@@ -568,7 +588,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         } finally {
             setConfirmDialog({ visible: false, itemId: null });
         }
-    }, [confirmDialog.itemId, dispatch, adaptedItem, deletePhoto]);
+    }, [confirmDialog.itemId, dispatch, adaptedItem, deletePhoto, router]);
 
     const handleCancelDelete = useCallback(() => {
         console.log("[ItemEditForm] handleCancelDelete - Suppression annulée.");
@@ -613,7 +633,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 showAlert: true
             });
         }
-    }, [adaptedItem, deletePhoto, dispatch, setLocalImageUri, setLocalImageNeedsUpload, setEditedItem]);
+    }, [adaptedItem, deletePhoto, dispatch]);
 
     const navigateToAddContainer = useCallback(() => {
         // Naviguer vers la page d'ajout de container avec un paramètre de retour
@@ -630,6 +650,20 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             params: { returnTo: `/item/${adaptedItem.id}/edit` }
         });
     }, [router, adaptedItem.id]);
+
+    const handleContainerSelect = useCallback((containerId: number | undefined) => {
+        if (containerId) {
+            // Si on sélectionne un container, hériter de son emplacement
+            const selectedContainer = containers.find(c => c.id === containerId);
+            setEditedItem(prev => ({ 
+                ...prev, 
+                containerId,
+                locationId: selectedContainer?.locationId || null
+            }));
+        } else {
+            setEditedItem(prev => ({ ...prev, containerId: null }));
+        }
+    }, [containers]);
 
     const displayImageUri = localImageUri || photoHookState.uri;
     const isPhotoProcessing = photoHookState.loading;
@@ -764,11 +798,75 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     <ContainerList
                         containers={containers}
                         selectedId={editedItem.containerId}
-                        onSelect={(id) => setEditedItem(prev => ({ ...prev, containerId: id }))}
+                        onSelect={handleContainerSelect}
                         onAddNew={navigateToAddContainer}
                         theme={activeTheme}
                     />
                 </View>
+
+                {/* Section Emplacement - Affichage simple */}
+                {!editedItem.containerId && (
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionTitle}>
+                            Emplacement
+                        </Text>
+                        <Text style={styles.sectionDescription}>
+                            L'emplacement est assigné automatiquement lors de l'assignation à un container.
+                        </Text>
+                        <View style={[
+                            styles.inputContainer, 
+                            {
+                                backgroundColor: activeTheme.backgroundSecondary,
+                                borderWidth: 1,
+                                borderColor: activeTheme.border,
+                                borderRadius: 8,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 12,
+                                paddingHorizontal: 16
+                            }
+                        ]}>
+                            <Icon 
+                                name={editedItem.locationId ? "location_on" : "location_off"} 
+                                size={20} 
+                                color={editedItem.locationId ? activeTheme.primary : activeTheme.text.disabled} 
+                                style={{ marginRight: 12 }}
+                            />
+                            <Text style={[
+                                styles.inputText, 
+                                { 
+                                    color: editedItem.locationId ? activeTheme.text.primary : activeTheme.text.secondary,
+                                    flex: 1,
+                                    fontSize: 16
+                                }
+                            ]}>
+                                {editedItem.locationId 
+                                    ? locations.find(l => l.id === editedItem.locationId)?.name || 'Emplacement introuvable'
+                                    : 'Aucun emplacement assigné'}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Affichage de l'emplacement hérité du container */}
+                {editedItem.containerId && (() => {
+                    const selectedContainer = containers.find(c => c.id === editedItem.containerId);
+                    const containerLocation = selectedContainer?.locationId ? 
+                        locations.find(l => l.id === selectedContainer.locationId) : null;
+                    
+                    return containerLocation ? (
+                        <View style={styles.sectionContainer}>
+                            <Text style={styles.sectionTitle}>Emplacement (Hérité du container)</Text>
+                            <View style={styles.inheritedLocationDisplay}>
+                                <Icon name="location_on" size={16} color={activeTheme.primary} />
+                                <Text style={styles.inheritedLocationText}>
+                                    {containerLocation.name}
+                                    {containerLocation.address && ` - ${containerLocation.address}`}
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null;
+                })()}
 
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Catégorie</Text>
@@ -1301,6 +1399,41 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
         color: theme.danger.main,
         fontSize: 14,
         flexShrink: 1,
+    },
+    sectionDescription: {
+        fontSize: 13,
+        color: theme.text.secondary,
+        marginBottom: 12,
+        lineHeight: 18,
+        fontStyle: 'italic',
+    },
+    inheritedLocationDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.backgroundSecondary,
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    inheritedLocationText: {
+        marginLeft: 8,
+        color: theme.text.primary,
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
+    },
+    inputContainer: {
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+    },
+    inputText: {
+        fontSize: 16,
+        color: theme.text.primary,
     },
 
 });

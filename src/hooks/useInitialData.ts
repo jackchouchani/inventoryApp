@@ -1,5 +1,6 @@
 import { useCategoriesOptimized as useCategories } from './useCategoriesOptimized';
 import { useContainersOptimized as useContainers } from './useContainersOptimized';
+import { useLocationsOptimized as useLocations } from './useLocationsOptimized';
 import { useAuth } from '../contexts/AuthContext';
 import { useSegments } from 'expo-router';
 
@@ -10,6 +11,11 @@ interface UseInitialDataResult {
     error: string | null;
   };
   containers: {
+    data: any[];
+    isLoading: boolean;
+    error: string | null;
+  };
+  locations: {
     data: any[];
     isLoading: boolean;
     error: string | null;
@@ -37,8 +43,14 @@ export const useInitialData = (): UseInitialDataResult => {
     error: containersError 
   } = useContainers();
 
-  const isLoading = shouldFetch && (categoriesLoading || containersLoading);
-  const error = categoriesError || containersError;
+  const { 
+    data: locations, 
+    isLoading: locationsLoading, 
+    error: locationsError 
+  } = useLocations();
+
+  const isLoading = shouldFetch && (categoriesLoading || containersLoading || locationsLoading);
+  const error = categoriesError || containersError || locationsError;
 
   return {
     categories: {
@@ -50,6 +62,11 @@ export const useInitialData = (): UseInitialDataResult => {
       data: containers || [],
       isLoading: containersLoading,
       error: containersError
+    },
+    locations: {
+      data: locations || [],
+      isLoading: locationsLoading,
+      error: locationsError
     },
     isLoading,
     error

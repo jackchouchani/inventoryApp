@@ -8,6 +8,7 @@ export interface Item {
     photo_storage_url?: string;
     containerId?: number | null;
     categoryId?: number;
+    locationId?: number | null;
     createdAt: string;
     updatedAt: string;
     soldAt?: string;

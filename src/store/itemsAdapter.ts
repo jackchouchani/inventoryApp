@@ -8,8 +8,8 @@ export type ItemWithId = Item;
 // Création de l'adaptateur d'entités
 export const itemsAdapter = createEntityAdapter<ItemWithId>({
   sortComparer: (a: ItemWithId, b: ItemWithId) => {
-    const aDate = a.updatedAt || '';
-    const bDate = b.updatedAt || '';
+    const aDate = a.createdAt || '';
+    const bDate = b.createdAt || '';
     return bDate.localeCompare(aDate);
   }
 });

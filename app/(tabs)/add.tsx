@@ -6,8 +6,9 @@ import { useAppTheme } from '../../src/contexts/ThemeContext';
 import ItemForm from '../../src/components/ItemForm';
 
 // ✅ HOOKS OPTIMISÉS selon optimizations-hooks.mdc
-import { useAllCategories, useAllContainers } from '../../src/hooks/useOptimizedSelectors';
+import { useAllCategories, useAllContainers, useAllLocations } from '../../src/hooks/useOptimizedSelectors';
 import { useItems } from '../../src/hooks/useItems';
+import { useLocationsOptimized } from '../../src/hooks/useLocationsOptimized';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc  
 import StyleFactory from '../../src/styles/StyleFactory';
@@ -21,8 +22,10 @@ const AddScreenContent: React.FC = () => {
   const insets = useSafeAreaInsets();
   
   // ✅ HOOKS OPTIMISÉS - Utiliser les sélecteurs mémoïsés
+  useLocationsOptimized(); // Force le chargement des locations
   const containers = useAllContainers();
   const categories = useAllCategories();
+  const locations = useAllLocations();
   const { isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useItems();
 
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
@@ -76,6 +79,7 @@ const AddScreenContent: React.FC = () => {
       <ItemForm 
         containers={containers} 
         categories={categories}
+        locations={locations}
         onSuccess={handleSuccess}
       />
     </View>

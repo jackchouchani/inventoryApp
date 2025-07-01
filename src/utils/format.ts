@@ -67,4 +67,25 @@ export const formatPercentage = (
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);
+};
+
+/**
+ * Formate un nombre avec des espaces comme séparateurs de milliers et le symbole € 
+ * @param value - Valeur à formater
+ * @param locale - Locale à utiliser pour le formatage (fr-FR par défaut)
+ * @returns Nombre formaté avec espaces (ex: "339 079 €")
+ */
+export const formatNumberWithSpaces = (
+  value: number | string,
+  locale = 'fr-FR'
+): string => {
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  // Si la valeur n'est pas un nombre valide, retourner "0 €"
+  if (isNaN(numValue)) return '0 €';
+  
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(numValue) + ' €';
 }; 
