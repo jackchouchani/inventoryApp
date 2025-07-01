@@ -62,6 +62,32 @@ export function getImageUrl(filename: string): string {
   return `https://images.comptoirvintage.com/${filename}`;
 }
 
+// ✅ OFFLINE - Version qui essaie le cache local puis l'URL distante
+export async function getImageUrlWithOfflineSupport(filename: string): Promise<string> {
+  if (!filename) return '';
+  
+  try {
+    // En mode web, vérifier d'abord si l'image est dans le cache du service worker
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      const cache = await caches.open('image-cache');
+      const originalUrl = `https://images.comptoirvintage.com/${filename}`;
+      const cachedResponse = await cache.match(originalUrl);
+      
+      if (cachedResponse && cachedResponse.ok) {
+        console.log('[getImageUrlWithOfflineSupport] Image trouvée dans le cache SW:', filename);
+        return originalUrl; // Le service worker servira l'image depuis le cache
+      }
+    }
+    
+    // Fallback vers l'URL distante (qui peut être interceptée par le service worker)
+    return `https://images.comptoirvintage.com/${filename}`;
+  } catch (error) {
+    console.warn('[getImageUrlWithOfflineSupport] Erreur cache check:', error);
+    // Fallback vers l'URL distante
+    return `https://images.comptoirvintage.com/${filename}`;
+  }
+}
+
 export async function uploadInvoiceToR2(pdfBlob: Blob, filename: string): Promise<string> {
   const response = await fetch('https://r2-invoice-worker.jack-chouchani.workers.dev', {
     method: 'POST',

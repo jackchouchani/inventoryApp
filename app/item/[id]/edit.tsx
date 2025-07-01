@@ -24,17 +24,12 @@ export default function ItemEditScreen() {
   const containers = useAllContainers();
   const { item, isLoading: isLoadingItem, error: errorItem } = useItem(id ? Number(id) : null);
 
-  console.log('[ItemEditScreen] Categories loaded:', categories?.length);
-  console.log('[ItemEditScreen] Containers loaded:', containers?.length);
-
   const handleSuccess = () => {
-    console.log('[ItemEditScreen] Succès de la modification, retour vers la page info');
     // Après succès, retourner vers la page info de l'article
     router.replace(`/item/${id}/info`);
   };
 
   const handleCancel = () => {
-    console.log('[ItemEditScreen] Annulation, retour vers la page info');
     // Retourner vers la page info de l'article
     router.replace(`/item/${id}/info`);
   };

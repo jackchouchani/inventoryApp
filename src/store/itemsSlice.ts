@@ -41,6 +41,14 @@ const initialState = itemsAdapter.getInitialState({
   currentPage: 0,
   totalItems: 0,
   hasMore: false,
+  offline: {
+    isOffline: false,
+    lastSyncTime: null,
+    pendingEvents: 0,
+    syncInProgress: false,
+    syncErrors: []
+  },
+  localChanges: 0,
 });
 
 // Création du slice
@@ -78,6 +86,13 @@ const itemsSlice = createSlice({
         state.searchResults = [];
       })
       .addCase(resetState, () => initialState)
+      // Action pour reset la pagination quand on change de mode réseau
+      .addCase('items/resetPagination', (state) => {
+        state.currentPage = 0;
+        state.hasMore = true;
+        state.totalItems = 0;
+        itemsAdapter.removeAll(state);
+      })
       // Actions asynchrones
       .addCase(fetchItems.pending, (state) => {
         state.status = 'loading';
@@ -86,10 +101,30 @@ const itemsSlice = createSlice({
       .addCase(fetchItems.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.searchResults = action.payload.items;
-        state.totalItems = action.payload.total;
-        state.hasMore = action.payload.hasMore;
-        state.currentPage = state.currentPage + 1;
-        itemsAdapter.setMany(state, action.payload.items as ItemWithId[]);
+        
+        // En mode offline (IndexedDB), on charge tous les items d'un coup
+        // Donc on doit gérer différemment la pagination
+        const isOfflineData = typeof window !== 'undefined' && !navigator.onLine;
+        
+        if (isOfflineData) {
+          // Mode offline : tous les items sont chargés, pas de pagination
+          state.totalItems = action.payload.total;
+          state.hasMore = false;
+          state.currentPage = 0; // Reset la page en mode offline
+          itemsAdapter.setAll(state, action.payload.items as ItemWithId[]);
+        } else {
+          // Mode online : pagination normale
+          state.totalItems = action.payload.total;
+          state.hasMore = action.payload.hasMore;
+          state.currentPage = state.currentPage + 1;
+          
+          // En mode online, on ajoute les nouveaux items (addMany vs setMany)
+          if (state.currentPage === 1) {
+            itemsAdapter.setMany(state, action.payload.items as ItemWithId[]);
+          } else {
+            itemsAdapter.addMany(state, action.payload.items as ItemWithId[]);
+          }
+        }
       })
       .addCase(fetchItems.rejected, (state, action) => {
         state.status = 'failed';
@@ -133,7 +168,7 @@ const itemsSlice = createSlice({
       .addCase(bulkUpdateItems.fulfilled, (state, action) => {
         itemsAdapter.upsertMany(state, action.payload as ItemWithId[]);
       })
-      .addCase(clearContainer.fulfilled, (state, action) => {
+      .addCase(clearContainer.fulfilled, (state, _action) => {
         // Après vidage du container, rafraîchir tous les items
         // Le thunk ne retourne rien, mais on peut marquer qu'une invalidation est nécessaire
         state.status = 'idle'; // Forcer un refetch des items

@@ -14,7 +14,6 @@ export const useAlgoliaSearch = () => {
   // S'assurer que la recherche est toujours initialisée quand on monte le composant
   useEffect(() => {
     mountCount.current += 1;
-    console.log(`[Algolia Debug] Component mounted ${mountCount.current} times. Status: ${status}, Query: ${query}`);
     
     // if (!isInitialized) {
     //   console.log(`[Algolia Debug] Initializing search with empty query`);
@@ -26,7 +25,6 @@ export const useAlgoliaSearch = () => {
     // }
     
     return () => {
-      console.log(`[Algolia Debug] Component will unmount`);
     };
   }, [isInitialized, refineSearch, refresh, status, query, refinePage]);
   
@@ -34,11 +32,9 @@ export const useAlgoliaSearch = () => {
   useEffect(() => {
     if (results && results.hits) {
       const newItems = transformHitsToItems(results.hits);
-      console.log(`[Algolia Debug] Results updated. Page: ${currentPage}, New hits: ${newItems.length}, Total hits in Algolia: ${results.nbHits}`);
       
       // Si c'est la première page ou une nouvelle recherche, on remplace tout
       if (currentPage === 0) {
-        console.log('[Algolia Debug] Setting initial items:', newItems.length);
         setAllItems(newItems);
       } else {
         // Sinon on ajoute à ce qu'on a déjà
@@ -46,7 +42,6 @@ export const useAlgoliaSearch = () => {
           // Éviter les doublons en filtrant par ID
           const existingIds = new Set(prev.map(item => item.id));
           const uniqueNewItems = newItems.filter(item => !existingIds.has(item.id));
-          console.log('[Algolia Debug] Adding more items:', uniqueNewItems.length);
           return [...prev, ...uniqueNewItems];
         });
       }
@@ -73,7 +68,6 @@ export const useAlgoliaSearch = () => {
   const debouncedSearch = useCallback(
     debounce((searchTerm: string) => {
       // Réinitialiser à la page 0 quand on fait une nouvelle recherche
-      console.log('[Algolia Debug] New search, resetting to page 0');
       setAllItems([]); // Vider les résultats existants
       refinePage(0);
       refineSearch(searchTerm);
@@ -85,12 +79,10 @@ export const useAlgoliaSearch = () => {
   const loadMore = useCallback(() => {
     // Vérifier si on est déjà en train de charger ou si on est à la dernière page
     if (loadingPageRef.current || isLastPage || status === 'loading' || status === 'stalled') {
-      console.log(`[Algolia Debug] Skip loadMore: loading=${loadingPageRef.current}, isLastPage=${isLastPage}, status=${status}`);
       return;
     }
     
     const nextPage = currentPage + 1;
-    console.log(`[Algolia Debug] Loading more results. Current page: ${currentPage}, Next page: ${nextPage}`);
     
     // Marquer qu'on est en train de charger
     loadingPageRef.current = true;
@@ -102,7 +94,6 @@ export const useAlgoliaSearch = () => {
   // Transforme les hits en objets Item typés
   const transformHitsToItems = useCallback((hits: any[]): Item[] => {
     const validHits = hits.filter(hit => hit.doc_type === 'item');
-    console.log(`[Algolia Debug] Transforming hits: ${hits.length} total, ${validHits.length} valid items`);
     
     return validHits
       .map((hit: any) => {
@@ -112,7 +103,6 @@ export const useAlgoliaSearch = () => {
           try {
             return new Date(dateString).toISOString();
           } catch (error) {
-            console.log("DEBUG - Erreur de parsing de date:", dateString);
             return new Date().toISOString();
           }
         };
@@ -134,11 +124,6 @@ export const useAlgoliaSearch = () => {
         return item;
       });
   }, []);
-
-  // Pour le débogage, vérifier quand les items changent
-  useEffect(() => {
-    console.log(`[Algolia Debug] Total items in state: ${allItems.length}`);
-  }, [allItems]);
 
   return {
     query,

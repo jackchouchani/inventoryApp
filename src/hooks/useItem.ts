@@ -17,10 +17,8 @@ export const useItem = (itemId: number | string | null) => {
 
   useEffect(() => {
     if (itemId && !cachedItem) {
-      console.log('[useItem] Fetching item from DB:', itemId);
       dispatch(fetchItemById(Number(itemId)));
     } else if (cachedItem) {
-      console.log('[useItem] Using cached item from Redux:', cachedItem.id, 'sellingPrice:', cachedItem.sellingPrice);
     }
   }, [itemId, cachedItem, dispatch]);
 
@@ -30,7 +28,6 @@ export const useItem = (itemId: number | string | null) => {
     error,
     refetch: () => {
       if (itemId) {
-        console.log('[useItem] Manual refetch pour:', itemId);
         dispatch(fetchItemById(Number(itemId)));
       }
     }

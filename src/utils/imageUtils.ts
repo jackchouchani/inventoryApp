@@ -16,7 +16,7 @@ export const extractFilenameFromSignedUrl = (signedUrl: string): string => {
   
   if (isSignedUrl) {
     // Extrait le nom du fichier d'une URL signée (tout ce qui est entre le dernier / avant le ? et le ?)
-    const filenameMatch = signedUrl.match(/\/([^\/]+)\?/);
+    const filenameMatch = signedUrl.match(/\/([^/]+)\?/);
     if (filenameMatch && filenameMatch[1]) {
       return filenameMatch[1];
     }

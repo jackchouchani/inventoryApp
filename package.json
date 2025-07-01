@@ -35,7 +35,8 @@
     "prebuild:web": "npm run sync-version",
     "build:web": "expo export -p web && cp -r public/* dist/",
     "prebuild:cloudflare": "npm run sync-version",
-    "build:cloudflare": "expo export -p web && node scripts/prepare-cloudflare.js && cp public/_headers public/_redirects public/manifest.json public/service-worker.js public/offline.html dist/"
+    "build:cloudflare": "expo export -p web && node scripts/prepare-cloudflare.js && cp public/_headers public/_redirects public/manifest.json public/service-worker.js public/offline.html dist/",
+    "lint": "expo lint"
   },
   "dependencies": {
     "@0no-co/graphql.web": "^1.0.13",
@@ -68,6 +69,7 @@
     "bwip-js": "^4.5.1",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
+    "dexie": "^4.0.11",
     "env": "^0.0.2",
     "eslint-plugin-react-hooks": "^5.1.0",
     "expo": "^53.0.11",
@@ -96,6 +98,7 @@
     "expo-sqlite": "~15.1.1",
     "expo-status-bar": "~2.0.1",
     "expo-system-ui": "^4.0.8",
+    "fuse.js": "^7.1.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.11.6",
@@ -143,6 +146,7 @@
     "react-zlib-js": "^1.0.5",
     "redux": "^5.0.1",
     "supabase": "^2.22.12",
+    "use-debounce": "^10.0.5",
     "uuid": "^11.0.5",
     "zod": "^3.24.2",
     "zustand": "^5.0.3"
@@ -150,6 +154,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.7",
     "@babel/plugin-transform-class-static-block": "^7.27.1",
+    "@eslint/js": "^9.30.0",
     "@expo/metro-config": "^0.20.14",
     "@tsconfig/react-native": "^3.0.5",
     "@types/jest": "^29.5.14",
@@ -170,6 +175,7 @@
     "node-polyfill-webpack-plugin": "^4.1.0",
     "stream-browserify": "^3.0.0",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.35.0",
     "util": "^0.12.5",
     "watchpack-chokidar2": "^2.0.1",
     "webpack-dev-server": "^5.2.0",

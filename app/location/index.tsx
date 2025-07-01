@@ -21,7 +21,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../src/store/store';
 import { removeLocation } from '../../src/store/locationsSlice';
 import { fetchItems } from '../../src/store/itemsThunks';
-import { supabase } from '../../src/config/supabase';
+import { deleteLocation } from '../../src/store/locationsThunks';
 
 // Hooks personnalisés
 import { useAppTheme } from '../../src/contexts/ThemeContext';
@@ -87,17 +87,10 @@ const LocationIndexScreen = () => {
     if (!locationId) return;
 
     try {
-      // Soft delete dans Supabase
-      const { error: softDeleteLocationError } = await supabase
-        .from('locations')
-        .update({ deleted: true, updated_at: new Date().toISOString() })
-        .eq('id', locationId);
+      // ✅ REDUX - Utiliser le thunk Redux pour la suppression (marche offline et online)
+      await dispatch(deleteLocation(locationId)).unwrap();
 
-      if (softDeleteLocationError) {
-        throw new Error(`Impossible de supprimer l'emplacement : ${softDeleteLocationError.message}`);
-      }
-
-      // Mettre à jour Redux
+      // Mettre à jour Redux store localement
       dispatch(removeLocation(locationId));
 
       // Fermer la boîte de dialogue et rafraîchir

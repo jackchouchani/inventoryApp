@@ -13,12 +13,12 @@ import { ErrorBoundary } from '../../../src/components/ErrorBoundary';
 import ConfirmationDialog from '../../../src/components/ConfirmationDialog';
 
 // Hooks et Redux
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '../../../src/store/store';
 import { updateLocation as updateLocationThunk, deleteLocation } from '../../../src/store/locationsThunks';
 import { useAllLocations } from '../../../src/hooks/useOptimizedSelectors';
+import { selectAllItems, selectAllContainers } from '../../../src/store/selectors';
 import { useAppTheme } from '../../../src/contexts/ThemeContext';
-import { supabase } from '../../../src/config/supabase';
 
 const EditLocationScreen = () => {
   const router = useRouter();
@@ -29,6 +29,8 @@ const EditLocationScreen = () => {
   const insets = useSafeAreaInsets();
   
   const locations = useAllLocations();
+  const allItems = useSelector(selectAllItems);
+  const allContainers = useSelector(selectAllContainers);
   const location = locations.find(l => l.id === parseInt(id || '0', 10));
   
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
@@ -88,27 +90,14 @@ const EditLocationScreen = () => {
     if (!location) return;
 
     try {
-      // Vérifier s'il y a des containers ou items dans cet emplacement
-      const { data: containers, error: containersError } = await supabase
-        .from('containers')
-        .select('id')
-        .eq('location_id', location.id)
-        .eq('deleted', false);
+      // ✅ REDUX - Vérifier s'il y a des containers ou items dans cet emplacement depuis Redux (marche offline et online)
+      const containers = allContainers.filter(container => container.locationId === location.id);
+      const items = allItems.filter(item => item.locationId === location.id);
 
-      const { data: items, error: itemsError } = await supabase
-        .from('items')
-        .select('id')
-        .eq('location_id', location.id)
-        .eq('deleted', false);
-
-      if (containersError || itemsError) {
-        throw new Error('Erreur lors de la vérification des dépendances');
-      }
-
-      if ((containers && containers.length > 0) || (items && items.length > 0)) {
+      if (containers.length > 0 || items.length > 0) {
         Alert.alert(
           'Impossible de supprimer',
-          `Cet emplacement contient ${containers?.length || 0} container(s) et ${items?.length || 0} article(s). Veuillez d'abord les déplacer ou les supprimer.`
+          `Cet emplacement contient ${containers.length} container(s) et ${items.length} article(s). Veuillez d'abord les déplacer ou les supprimer.`
         );
         return;
       }

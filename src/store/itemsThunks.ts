@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
+import { isOfflineMode } from '../utils/offlineUtils';
 
 // Types pour les réponses et erreurs
 interface FetchItemsResponse {
@@ -40,8 +41,48 @@ export const fetchItems = createAsyncThunk<
   FetchItemsResponse,
   { page: number; limit: number },
   { state: RootState; rejectValue: ThunkError }
->('items/fetchItems', async ({ page, limit }, { rejectWithValue }) => {
+>('items/fetchItems', async ({ page, limit }, { getState, rejectWithValue }) => {
   try {
+    const state = getState();
+    
+    // Vérifier si nous sommes en mode hors ligne (réseau OU forcé)
+    if (isOfflineMode()) {
+      console.log('[fetchItems] Mode hors ligne détecté, récupération depuis IndexedDB');
+      const { localDB } = await import('../database/localDatabase');
+      
+      // Récupérer les items depuis IndexedDB avec pagination
+      const allLocalItems = await localDB.items
+        .orderBy('createdAt')
+        .reverse()
+        .toArray();
+      
+      console.log(`[fetchItems] Récupéré ${allLocalItems.length} items depuis IndexedDB`);
+      
+      // ✅ OFFLINE - Si on demande la page 0 et qu'on n'a aucun item en mémoire, retourner TOUS les items
+      // pour éviter la perte de données après suspension
+      const state = getState();
+      const itemsInMemory = Object.keys(state.items.entities).length;
+      
+      if (page === 0 && itemsInMemory === 0 && allLocalItems.length > 0) {
+        console.log(`[fetchItems] RÉCUPÉRATION COMPLÈTE: ${itemsInMemory} items en mémoire, ${allLocalItems.length} dans IndexedDB`);
+        return {
+          items: allLocalItems, // Retourner TOUS les items pour restaurer l'état complet
+          total: allLocalItems.length,
+          hasMore: false // Pas de pagination nécessaire car on retourne tout
+        };
+      }
+      
+      // Pagination normale sinon
+      const start = page * limit;
+      const paginatedItems = allLocalItems.slice(start, start + limit);
+      
+      return {
+        items: paginatedItems,
+        total: allLocalItems.length,
+        hasMore: allLocalItems.length > (page + 1) * limit
+      };
+    }
+
     const start = page * limit;
     const end = start + limit - 1;
 
@@ -76,6 +117,54 @@ export const fetchItems = createAsyncThunk<
       hasMore: (count || 0) > (page + 1) * limit
     };
   } catch (error) {
+    // Si c'est une erreur réseau, essayer IndexedDB comme fallback
+    if (error instanceof Error && 
+        (error.message.includes('Failed to fetch') || 
+         error.message.includes('NetworkError') ||
+         error.message.includes('network error'))) {
+      console.log('[fetchItems] Erreur réseau, fallback vers IndexedDB');
+      try {
+        const { localDB } = await import('../database/localDatabase');
+        
+        // Récupérer les items depuis IndexedDB avec pagination
+        const allLocalItems = await localDB.items
+          .orderBy('createdAt')
+          .reverse()
+          .toArray();
+        
+        console.log(`[fetchItems] Récupéré ${allLocalItems.length} items depuis IndexedDB (fallback réseau)`);
+        
+        // ✅ OFFLINE - Si on demande la page 0 et qu'on n'a aucun item en mémoire, retourner TOUS les items
+        const state = getState();
+        const itemsInMemory = Object.keys(state.items.entities).length;
+        
+        if (page === 0 && itemsInMemory === 0 && allLocalItems.length > 0) {
+          console.log(`[fetchItems] RÉCUPÉRATION COMPLÈTE (fallback): ${itemsInMemory} items en mémoire, ${allLocalItems.length} dans IndexedDB`);
+          return {
+            items: allLocalItems, // Retourner TOUS les items pour restaurer l'état complet
+            total: allLocalItems.length,
+            hasMore: false // Pas de pagination nécessaire car on retourne tout
+          };
+        }
+        
+        // Pagination normale sinon
+        const start = page * limit;
+        const paginatedItems = allLocalItems.slice(start, start + limit);
+        
+        return {
+          items: paginatedItems,
+          total: allLocalItems.length,
+          hasMore: allLocalItems.length > (page + 1) * limit
+        };
+      } catch (fallbackError) {
+        console.error('[fetchItems] Erreur IndexedDB fallback:', fallbackError);
+        return {
+          items: [],
+          total: 0,
+          hasMore: false
+        };
+      }
+    }
     return rejectWithValue(handleThunkError(error));
   }
 });

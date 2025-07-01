@@ -21,10 +21,12 @@ import { ReceiptGenerator } from '../../src/components/ReceiptGenerator';
 import CommonHeader from '../../src/components/CommonHeader';
 
 // Services et utilitaires
-import { searchItems, SearchFilters } from '../../src/services/searchService';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectAllItems } from '../../src/store/selectors';
+import { updateItem } from '../../src/store/itemsThunks';
+import { AppDispatch } from '../../src/store/store';
 import { getImageUrl } from '../../src/utils/r2Client';
 import { formatCurrency } from '../../src/utils/formatters';
-import { supabase } from '../../src/config/supabase';
 
 // Contextes et types
 import { useAppTheme, type AppThemeType } from '../../src/contexts/ThemeContext';
@@ -66,6 +68,11 @@ const SearchBox = ({ query, setQuery, theme }: { query: string; setQuery: (q: st
 const MultiReceiptScreen = () => {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
+  const dispatch = useDispatch<AppDispatch>();
+  
+  // ✅ REDUX - Récupération des données depuis le store Redux
+  const allItems = useSelector(selectAllItems);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState<Map<number, ReceiptItem>>(new Map());
   const [searchResults, setSearchResults] = useState<ReceiptItem[]>([]);
@@ -80,8 +87,8 @@ const MultiReceiptScreen = () => {
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'MultiReceipt');
   
-  // Function to search for items using Supabase
-  const searchItemsCallback = useCallback(async (query: string) => {
+  // ✅ REDUX - Fonction de recherche utilisant les données Redux (marche offline et online)
+  const searchItemsCallback = useCallback((query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -89,17 +96,19 @@ const MultiReceiptScreen = () => {
     
     setIsLoading(true);
     try {
-      // Utiliser le service de recherche Supabase
-      const filters: SearchFilters = {
-        search: query,
-        status: 'available', // Afficher uniquement les articles disponibles
-        pageSize: 20
-      };
-      
-      const result = await searchItems(filters);
+      // Filtrer les items depuis le store Redux
+      const searchLower = query.toLowerCase();
+      const filteredItems = allItems
+        .filter(item => item.status === 'available') // Afficher uniquement les articles disponibles
+        .filter(item => 
+          item.name.toLowerCase().includes(searchLower) ||
+          (item.description && item.description.toLowerCase().includes(searchLower)) ||
+          (item.qrCode && item.qrCode.toLowerCase().includes(searchLower))
+        )
+        .slice(0, 20); // Limiter à 20 résultats
       
       // Convertir les résultats au format ReceiptItem
-      const formattedResults = result.items.map(item => ({
+      const formattedResults = filteredItems.map(item => ({
         ...item,
         actualSellingPrice: item.sellingPrice
       })) as ReceiptItem[];
@@ -111,7 +120,7 @@ const MultiReceiptScreen = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [allItems]);
 
   // Search when query changes
   useEffect(() => {
@@ -212,7 +221,7 @@ const MultiReceiptScreen = () => {
     setShowReceiptGenerator(false);
   };
   
-  // Marquer les articles comme vendus dans Supabase
+  // ✅ REDUX - Marquer les articles comme vendus via Redux thunks (marche offline et online)
   const markItemsAsSold = async () => {
     if (itemsForReceipt.length === 0) return;
     
@@ -223,20 +232,14 @@ const MultiReceiptScreen = () => {
         // Obtenir le prix de vente réel (possiblement modifié par l'utilisateur)
         const actualSalePrice = item.actualSellingPrice ?? item.sellingPrice ?? 0;
         
-        // Mettre à jour l'article dans Supabase
-        const { error } = await supabase
-          .from('items')
-          .update({
-            status: 'sold',
-            selling_price: actualSalePrice,
-            sold_at: new Date().toISOString() // Enregistrer la date de vente
-          })
-          .eq('id', item.id);
-          
-        if (error) {
-          console.error(`Erreur lors de la mise à jour de l'article ${item.id}:`, error);
-          throw error;
-        }
+        // ✅ REDUX - Utiliser le thunk Redux pour la mise à jour
+        const updateData = {
+          status: 'sold' as const,
+          sellingPrice: actualSalePrice,
+          soldAt: new Date().toISOString() // Enregistrer la date de vente
+        };
+        
+        await dispatch(updateItem({ id: item.id, updates: updateData })).unwrap();
       });
       
       // Attendre que toutes les mises à jour soient terminées

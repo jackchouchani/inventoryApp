@@ -2,6 +2,8 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { handleLabelGenerationError, handleLabelPrintingError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/networkUtils';
+import { useNetwork } from '../contexts/NetworkContext';
+import { isOfflineMode } from '../utils/offlineUtils';
 import { useRouter } from 'expo-router';
 import { captureException } from '@sentry/react-native';
 import { useAppTheme } from '../contexts/ThemeContext';
@@ -39,6 +41,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
   compact = false
 }) => {
   const { activeTheme } = useAppTheme();
+  const { isOfflineModeForced } = useNetwork();
+  const isOffline = useMemo(() => isOfflineMode(), []); // Détecter le mode offline complet (réseau + forcé)
   const styles = useMemo(() => getThemedStyles(activeTheme, compact), [activeTheme, compact]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -120,10 +124,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       setLoading(true);
       console.log('[LabelGenerator] Starting container PDF generation for', validItems.length, 'items');
 
-      const isConnected = await checkNetworkConnection();
-      if (!isConnected) {
-        throw new Error('Pas de connexion réseau');
-      }
+      // ✅ OFFLINE - Suppression de la vérification réseau (la génération PDF fonctionne hors ligne)
 
       // Dimensions pour les containers (en mm)
       const labelWidth = 100;
@@ -251,10 +252,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       setLoading(true);
       console.log('[LabelGenerator] Starting items PDF generation for', validItems.length, 'items');
 
-      const isConnected = await checkNetworkConnection();
-      if (!isConnected) {
-        throw new Error('Pas de connexion réseau');
-      }
+      // ✅ OFFLINE - Suppression de la vérification réseau (la génération PDF fonctionne hors ligne)
 
       // Dimensions de la page A4 en mm
       const labelWidth = 48.5;
@@ -431,8 +429,13 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       )}
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, isOffline && styles.buttonDisabled]}
         onPress={() => {
+          if (isOffline) {
+            onError(new Error('La génération d\'étiquettes n\'est pas disponible en mode hors ligne car les QR codes ne peuvent pas être générés sans connexion internet.'));
+            return;
+          }
+          
           console.log('[LabelGenerator] Button pressed, mode:', mode);
           console.log('[LabelGenerator] validItems.length:', validItems.length);
           console.log('[LabelGenerator] loading:', loading);
@@ -444,18 +447,23 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
             generateItemsPDF();
           }
         }}
-        disabled={loading || validItems.length === 0}
+        disabled={loading || validItems.length === 0 || isOffline}
       >
         <Text style={styles.buttonText}>
-          {loading 
-            ? 'Génération...' 
-            : `Générer ${validItems.length} étiquette${validItems.length > 1 ? 's' : ''}`
+          {isOffline 
+            ? 'Non disponible hors ligne'
+            : loading 
+              ? 'Génération...' 
+              : `Générer ${validItems.length} étiquette${validItems.length > 1 ? 's' : ''}`
           }
         </Text>
       </TouchableOpacity>
 
       <Text style={styles.infoText}>
-        {validItems.length} étiquette{validItems.length > 1 ? 's' : ''} à générer
+        {isOffline 
+          ? 'Les étiquettes avec QR codes nécessitent une connexion internet'
+          : `${validItems.length} étiquette${validItems.length > 1 ? 's' : ''} à générer`
+        }
       </Text>
     </View>
   );
@@ -491,6 +499,10 @@ const getThemedStyles = (theme: ReturnType<typeof useAppTheme>['activeTheme'], c
     borderRadius: compact ? 6 : 8,
     alignItems: 'center',
     opacity: 1,
+  },
+  buttonDisabled: {
+    backgroundColor: theme.text.secondary,
+    opacity: 0.6,
   },
   buttonText: {
     color: theme.text.onPrimary,

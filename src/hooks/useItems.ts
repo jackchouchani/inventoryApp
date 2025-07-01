@@ -30,14 +30,28 @@ export const useItems = (options: UseItemsOptions = {}) => {
       
       // Si loadAll est true, charger tous les items d'un coup
       if (loadAll) {
-        console.log('[useItems] Chargement de TOUS les items');
         await dispatch(fetchItems({ page: 0, limit: 10000 })).unwrap(); // Grande limite pour tout charger
       } else {
-        // Chargement intelligent : 50 items initialement, plus au besoin
-        const limit = initialLoad ? 50 : 20;
-        const page = initialLoad ? 0 : Math.ceil(items.length / 20);
+        // ✅ OFFLINE - Chargement intelligent avec détection de perte de données
+        // Si c'est un chargement initial et qu'on n'a aucun item, charger une grande quantité
+        // pour restaurer toutes les données depuis IndexedDB
+        let limit, page;
         
-        console.log(`[useItems] Chargement ${initialLoad ? 'initial' : 'supplémentaire'}: page ${page}, limit ${limit}`);
+        if (initialLoad && items.length === 0) {
+          // Premier chargement sans données = charger tous les items (probablement après perte de données)
+          console.log('[useItems] Chargement initial sans données, récupération complète');
+          limit = 50000; // Grande limite pour tout récupérer
+          page = 0;
+        } else if (initialLoad) {
+          // Premier chargement avec des données = chargement normal
+          limit = 50;
+          page = 0;
+        } else {
+          // Chargement de plus d'items = pagination normale
+          limit = 20;
+          page = Math.ceil(items.length / 20);
+        }
+        
         await dispatch(fetchItems({ page, limit })).unwrap();
       }
     } catch (error) {

@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
+import { isOfflineMode } from '../utils/offlineUtils';
 import { generateUniqueLocationQRCode } from '../utils/qrCodeGenerator';
 
 // Types pour les réponses et erreurs
@@ -46,15 +47,30 @@ export const fetchLocations = createAsyncThunk<
   { state: RootState; rejectValue: ThunkError }
 >('locations/fetchLocations', async (_, { rejectWithValue }) => {
   try {
-    console.log('[fetchLocations] Début du chargement des emplacements...');
+    // Vérifier si nous sommes en mode hors ligne (réseau OU forcé)
+    if (isOfflineMode()) {
+      console.log('[fetchLocations] Mode hors ligne détecté, récupération depuis IndexedDB');
+      const { localDB } = await import('../database/localDatabase');
+      
+      // Récupérer les locations depuis IndexedDB
+      const allLocalLocations = await localDB.locations
+        .orderBy('name')
+        .toArray();
+      
+      console.log(`[fetchLocations] Récupéré ${allLocalLocations.length} locations depuis IndexedDB`);
+      
+      // Conversion des types locaux vers les types standards
+      return allLocalLocations.map(location => ({
+        ...location,
+        id: typeof location.id === 'string' ? parseInt(location.id) : location.id
+      })) as Location[];
+    }
 
     const { data, error } = await supabase
       .from('locations')
       .select('*')
       .eq('deleted', false)
       .order('name', { ascending: true });
-
-    console.log('[fetchLocations] Résultat query:', { data: data?.length, error });
 
     if (error) throw error;
 
@@ -70,6 +86,30 @@ export const fetchLocations = createAsyncThunk<
       userId: location.user_id
     }));
   } catch (error) {
+    // Si c'est une erreur réseau, fallback vers IndexedDB
+    if (error instanceof Error && 
+        (error.message.includes('Failed to fetch') || 
+         error.message.includes('NetworkError') ||
+         error.message.includes('network error'))) {
+      console.log('[fetchLocations] Erreur réseau, fallback vers IndexedDB');
+      try {
+        const { localDB } = await import('../database/localDatabase');
+        
+        const allLocalLocations = await localDB.locations
+          .orderBy('name')
+          .toArray();
+        
+        console.log(`[fetchLocations] Récupéré ${allLocalLocations.length} locations depuis IndexedDB (fallback réseau)`);
+        // Conversion des types locaux vers les types standards pour le fallback aussi
+        return allLocalLocations.map(location => ({
+          ...location,
+          id: typeof location.id === 'string' ? parseInt(location.id) : location.id
+        })) as Location[];
+      } catch (fallbackError) {
+        console.error('[fetchLocations] Erreur IndexedDB fallback:', fallbackError);
+        return [];
+      }
+    }
     return rejectWithValue(handleThunkError(error));
   }
 });

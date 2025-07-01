@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
+import { isOfflineMode } from '../utils/offlineUtils';
 
 // Types pour les réponses et erreurs
 interface ThunkError {
@@ -39,6 +40,20 @@ export const fetchCategories = createAsyncThunk<
   { state: RootState; rejectValue: ThunkError }
 >('categories/fetchCategories', async (_, { rejectWithValue }) => {
   try {
+    // Vérifier si nous sommes en mode hors ligne (réseau OU forcé)
+    if (isOfflineMode()) {
+      console.log('[fetchCategories] Mode hors ligne détecté, récupération depuis IndexedDB');
+      const { localDB } = await import('../database/localDatabase');
+      
+      // Récupérer les categories depuis IndexedDB
+      const localCategories = await localDB.categories
+        .orderBy('createdAt')
+        .toArray();
+      
+      console.log(`[fetchCategories] Récupéré ${localCategories.length} categories depuis IndexedDB`);
+      return localCategories;
+    }
+
     const { data, error } = await supabase
       .from('categories')
       .select('*')
@@ -58,6 +73,27 @@ export const fetchCategories = createAsyncThunk<
       icon: category.icon || ''
     }));
   } catch (error) {
+    // Si c'est une erreur réseau, essayer IndexedDB comme fallback
+    if (error instanceof Error && 
+        (error.message.includes('Failed to fetch') || 
+         error.message.includes('NetworkError') ||
+         error.message.includes('network error'))) {
+      console.log('[fetchCategories] Erreur réseau, fallback vers IndexedDB');
+      try {
+        const { localDB } = await import('../database/localDatabase');
+        
+        // Récupérer les categories depuis IndexedDB
+        const localCategories = await localDB.categories
+          .orderBy('createdAt')
+          .toArray();
+        
+        console.log(`[fetchCategories] Récupéré ${localCategories.length} categories depuis IndexedDB`);
+        return localCategories;
+      } catch (fallbackError) {
+        console.error('[fetchCategories] Erreur IndexedDB fallback:', fallbackError);
+        return [];
+      }
+    }
     return rejectWithValue(handleThunkError(error));
   }
 });

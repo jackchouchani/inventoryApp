@@ -10,6 +10,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 export type ThemeColors = {
   primary: string;
   primaryLight: string;
+  primaryContainer: string;
   secondary: string;
   background: string;
   backgroundSecondary: string;
@@ -44,6 +45,7 @@ export type AppThemeType = ThemeColors & Pick<BaseThemeType, 'spacing' | 'typogr
 const lightTheme: AppThemeType = {
   primary: '#007AFF',        // Blue
   primaryLight: '#E8F4FD',   // Light blue for backgrounds or highlights
+  primaryContainer: '#E8F4FD', // Container variant of primary
   secondary: '#FF9500',      // Orange
   background: '#F2F2F7',    // Very light gray (almost white)
   backgroundSecondary: '#FFFFFF', // White for elements on top of background
@@ -79,6 +81,7 @@ const darkTheme: AppThemeType = {
   ...lightTheme, // Start with light theme and override
   primary: '#0A84FF',        // Brighter Blue for dark mode
   primaryLight: '#1C3A5E',   // Darker blue variant
+  primaryContainer: '#1C3A5E', // Container variant of primary for dark mode
   secondary: '#FF9F0A',      // Brighter Orange
   background: '#000000',    // Black
   backgroundSecondary: '#1C1C1E', // Very dark gray (near black)

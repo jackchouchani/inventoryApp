@@ -6,6 +6,7 @@ import { handleDatabaseError } from '../utils/errorHandler';
 import { ErrorTypeEnum, ErrorDetails } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 import { generateUniqueContainerQRCode } from '../utils/qrCodeGenerator';
+import { isOfflineMode } from '../utils/offlineUtils';
 
 // Types pour les réponses et erreurs
 interface ThunkError {
@@ -47,15 +48,29 @@ export const fetchContainers = createAsyncThunk<
   { state: RootState; rejectValue: ThunkError }
 >('containers/fetchContainers', async (_, { rejectWithValue }) => {
   try {
-    console.log('[fetchContainers] Début du chargement des containers...');
+    // Vérifier si nous sommes en mode hors ligne (réseau OU forcé)
+    if (isOfflineMode()) {
+      console.log('[fetchContainers] Mode hors ligne détecté, récupération depuis IndexedDB');
+      const { localDB } = await import('../database/localDatabase');
+      
+      // Récupérer les containers depuis IndexedDB
+      const localContainers = await localDB.containers
+        .orderBy('number')
+        .toArray();
+      
+      console.log(`[fetchContainers] Récupéré ${localContainers.length} containers depuis IndexedDB`);
+      // Conversion des types locaux vers les types standards
+      return localContainers.map(container => ({
+        ...container,
+        id: typeof container.id === 'string' ? parseInt(container.id) : container.id
+      })) as Container[];
+    }
 
     const { data, error } = await supabase
       .from('containers')
       .select('*')
       .eq('deleted', false)
       .order('number', { ascending: true });
-
-    console.log('[fetchContainers] Résultat query:', { data: data?.length, error });
 
     if (error) throw error;
 
@@ -72,6 +87,31 @@ export const fetchContainers = createAsyncThunk<
       userId: container.user_id
     }));
   } catch (error) {
+    // Si c'est une erreur réseau, essayer IndexedDB comme fallback
+    if (error instanceof Error && 
+        (error.message.includes('Failed to fetch') || 
+         error.message.includes('NetworkError') ||
+         error.message.includes('network error'))) {
+      console.log('[fetchContainers] Erreur réseau, fallback vers IndexedDB');
+      try {
+        const { localDB } = await import('../database/localDatabase');
+        
+        // Récupérer les containers depuis IndexedDB
+        const localContainers = await localDB.containers
+          .orderBy('number')
+          .toArray();
+        
+        console.log(`[fetchContainers] Récupéré ${localContainers.length} containers depuis IndexedDB`);
+        // Conversion des types locaux vers les types standards pour le fallback aussi
+        return localContainers.map(container => ({
+          ...container,
+          id: typeof container.id === 'string' ? parseInt(container.id) : container.id
+        })) as Container[];
+      } catch (fallbackError) {
+        console.error('[fetchContainers] Erreur IndexedDB fallback:', fallbackError);
+        return [];
+      }
+    }
     return rejectWithValue(handleThunkError(error));
   }
 });

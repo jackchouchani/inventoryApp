@@ -1,6 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, TextInput, ScrollView } from 'react-native';
 import logoAsset from '../../assets/Logo.png';
+
+// Logo en base64 pour usage offline - version simplifiée pour éviter les problèmes de chargement
+const LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='; // Transparent pixel fallback
 import { uploadInvoiceToR2 } from '../utils/r2Client';
 
 import getJsPDF from '../utils/jspdf-polyfill';
@@ -144,12 +147,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       setLoading(true);
       setProgress(10);
 
-      const isConnected = await checkNetworkConnection();
-      if (!isConnected) {
-        onError(new Error('Pas de connexion réseau'));
-        setLoading(false);
-        return;
-      }
+      // ✅ OFFLINE - Suppression de la vérification réseau (la génération PDF fonctionne hors ligne)
 
       const receiptWidth = 105; // mm (A6 width)
       const margin = 6; // mm
@@ -164,36 +162,56 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       setProgress(20);
 
-      let logoData: string | undefined;
+      // ✅ OFFLINE - Utilisation du logo base64 pour éviter les problèmes de chargement en mode offline
+      let logoData: string | undefined = LOGO_BASE64;
+      
+      // Essayer de charger le vrai logo seulement si on est en ligne et que logoAsset existe
       if (Platform.OS === 'web' && typeof logoAsset !== 'undefined' && logoAsset) {
         try {
+          // Vérifier si on peut charger le logo depuis les assets
           const logoImg = new window.Image();
           logoImg.crossOrigin = 'Anonymous';
-          const logoLoadPromise = new Promise<void>((resolve, reject) => {
-            logoImg.onload = () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = logoImg.naturalWidth;
-              canvas.height = logoImg.naturalHeight;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(logoImg, 0, 0);
-                logoData = canvas.toDataURL('image/png');
-                resolve();
-              } else {
-                reject(new Error('Impossible d\'obtenir le contexte 2D du canvas pour le logo.'));
-              }
-            };
-            logoImg.onerror = (e) => {
-              console.error("Erreur de chargement de l'image du logo:", e);
-              reject(new Error('Erreur de chargement du logo via new Image()'));
-            };
-            const sourceUri = (typeof logoAsset === 'object' && (logoAsset as any).uri) ? (logoAsset as any).uri : logoAsset;
-            logoImg.src = sourceUri;
-          });
+          
+          // Promise avec timeout pour éviter de bloquer
+          const logoLoadPromise = Promise.race([
+            new Promise<void>((resolve, reject) => {
+              logoImg.onload = () => {
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = logoImg.naturalWidth;
+                  canvas.height = logoImg.naturalHeight;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(logoImg, 0, 0);
+                    logoData = canvas.toDataURL('image/png');
+                    console.log('[ReceiptGenerator] Logo chargé avec succès depuis assets');
+                    resolve();
+                  } else {
+                    reject(new Error('Canvas context unavailable'));
+                  }
+                } catch (error) {
+                  console.warn('[ReceiptGenerator] Erreur canvas, utilisation fallback');
+                  reject(error);
+                }
+              };
+              logoImg.onerror = (e) => {
+                console.warn('[ReceiptGenerator] Erreur chargement logo, utilisation fallback');
+                reject(new Error('Logo load failed'));
+              };
+              
+              const sourceUri = (typeof logoAsset === 'object' && (logoAsset as any).uri) ? (logoAsset as any).uri : logoAsset;
+              logoImg.src = sourceUri;
+            }),
+            // Timeout après 2 secondes
+            new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Logo load timeout')), 2000);
+            })
+          ]);
+          
           await logoLoadPromise;
         } catch (logoError) {
-          console.error("Erreur lors du préchargement du logo:", logoError);
-          logoData = undefined;
+          console.warn('[ReceiptGenerator] Utilisation du logo fallback:', logoError);
+          // logoData reste sur LOGO_BASE64
         }
       }
 
