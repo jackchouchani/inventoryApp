@@ -399,16 +399,19 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
             });
         }
         
-        if (isNaN(sellingPrice) || sellingPrice < FORM_VALIDATION.MIN_PRICE) {
-            errors.push({ 
-                field: 'sellingPrice', 
-                message: 'Le prix de vente doit être un nombre positif' 
-            });
-        } else if (sellingPrice > FORM_VALIDATION.MAX_PRICE) {
-            errors.push({ 
-                field: 'sellingPrice', 
-                message: `Le prix de vente ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
-            });
+        // Validation du prix de vente - seulement pour les articles normaux (pas en consignation)
+        if (!item.isConsignment) {
+            if (isNaN(sellingPrice) || sellingPrice < FORM_VALIDATION.MIN_PRICE) {
+                errors.push({ 
+                    field: 'sellingPrice', 
+                    message: 'Le prix de vente doit être un nombre positif' 
+                });
+            } else if (sellingPrice > FORM_VALIDATION.MAX_PRICE) {
+                errors.push({ 
+                    field: 'sellingPrice', 
+                    message: `Le prix de vente ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
+                });
+            }
         }
         
         // Validation de la catégorie
@@ -532,9 +535,17 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
             
             if (errors.length > 0) {
                 console.log("[ItemForm] handleSubmit - Validation échouée:", errors);
+                console.log("[ItemForm] handleSubmit - État item pour debug:", {
+                    name: item.name,
+                    categoryId: item.categoryId,
+                    isConsignment: item.isConsignment,
+                    consignorName: item.consignorName,
+                    consignorAmount: item.consignorAmount,
+                    consignmentCommission: item.consignmentCommission
+                });
                 Alert.alert(
                     'Erreurs de validation',
-                    errors.map(error => error.message).join('\n')
+                    errors.map(error => `${error.field}: ${error.message}`).join('\n')
                 );
                 return;
             }
@@ -816,12 +827,26 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                     )}
                 </View>
 
-                {/* Section Dépôt-vente */}
+                {/* Section Nom du déposant - uniquement en mode dépôt-vente */}
+                {item.isConsignment && (
+                    <View style={styles.formSection}>
+                        <Text style={styles.sectionTitle}>Déposant</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Nom du déposant"
+                            value={item.consignorName}
+                            onChangeText={(text) => setItem(prev => ({ ...prev, consignorName: text }))}
+                            placeholderTextColor={activeTheme.text.secondary}
+                        />
+                    </View>
+                )}
+
                 <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Dépôt-vente</Text>
-                    <View style={styles.consignmentContainer}>
+                    {/* Header avec toggle dépôt-vente */}
+                    <View style={styles.priceHeaderContainer}>
+                        <Text style={styles.sectionTitle}>Prix</Text>
                         <TouchableOpacity
-                            style={[styles.switchContainer, item.isConsignment && styles.switchContainerActive]}
+                            style={[styles.consignmentToggleCompact, item.isConsignment && styles.consignmentToggleCompactActive]}
                             onPress={() => setItem(prev => ({ 
                                 ...prev, 
                                 isConsignment: !prev.isConsignment,
@@ -830,74 +855,62 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                                 consignmentCommission: !prev.isConsignment ? prev.consignmentCommission : '',
                             }))}
                         >
-                            <View style={[styles.switch, item.isConsignment && styles.switchActive]}>
-                                <View style={[styles.switchThumb, item.isConsignment && styles.switchThumbActive]} />
+                            <View style={[styles.switchCompact, item.isConsignment && styles.switchCompactActive]}>
+                                <View style={[styles.switchThumbCompact, item.isConsignment && styles.switchThumbCompactActive]} />
                             </View>
-                            <Text style={styles.switchLabel}>
-                                Article en dépôt-vente
+                            <Text style={styles.consignmentToggleText}>
+                                Dépôt-vente
                             </Text>
                         </TouchableOpacity>
-
-                        {item.isConsignment && (
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Nom du déposant"
-                                value={item.consignorName}
-                                onChangeText={(text) => setItem(prev => ({ ...prev, consignorName: text }))}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
-                        )}
                     </View>
-                </View>
 
-                <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Prix</Text>
-                    <View style={styles.priceContainer}>
-                        {/* Prix d'achat - optionnel en mode dépôt-vente */}
-                        {!item.isConsignment && (
-                            <View style={styles.priceWrapper}>
-                                <Text style={styles.priceLabel}>Prix d'achat</Text>
+                    {/* Champs prix - mode normal */}
+                    {!item.isConsignment && (
+                        <View style={styles.priceFieldsContainer}>
+                            <View style={styles.priceFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
                                 <TextInput
                                     style={[styles.input, styles.priceInput]}
-                                    placeholder="0.00"
+                                    placeholder="100"
                                     value={item.purchasePrice}
-                                    keyboardType="numeric"
+                                    keyboardType="decimal-pad"
                                     onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
                                     placeholderTextColor={activeTheme.text.secondary}
                                 />
                             </View>
-                        )}
-                        
-                        {item.isConsignment ? (
-                            <View style={styles.priceWrapper}>
-                                <Text style={styles.priceLabel}>Prix déposant</Text>
+                            <View style={styles.priceFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix de vente (€)</Text>
                                 <TextInput
                                     style={[styles.input, styles.priceInput]}
-                                    placeholder="0.00"
-                                    value={item.consignorAmount}
-                                    keyboardType="numeric"
-                                    onChangeText={(text) => setItem(prev => ({ ...prev, consignorAmount: text }))}
-                                    placeholderTextColor={activeTheme.text.secondary}
-                                />
-                            </View>
-                        ) : (
-                            <View style={styles.priceWrapper}>
-                                <Text style={styles.priceLabel}>Prix de vente</Text>
-                                <TextInput
-                                    style={[styles.input, styles.priceInput]}
-                                    placeholder="0.00"
+                                    placeholder="200"
                                     value={item.sellingPrice}
-                                    keyboardType="numeric"
+                                    keyboardType="decimal-pad"
                                     onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
                                     placeholderTextColor={activeTheme.text.secondary}
                                 />
                             </View>
-                        )}
+                        </View>
+                    )}
 
-                        {/* Section Commission - uniquement en mode dépôt-vente */}
-                        {item.isConsignment && (
-                            <View style={styles.priceWrapper}>
-                                <View style={styles.commissionHeader}>
+                    {/* Champs prix - mode dépôt-vente */}
+                    {item.isConsignment && (
+                        <View style={styles.consignmentFieldsContainer}>
+                            {/* Prix déposant */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix déposant (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="150"
+                                    value={item.consignorAmount}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setItem(prev => ({ ...prev, consignorAmount: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+
+                            {/* Commission avec toggle */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <View style={styles.commissionLabelContainer}>
                                     <Text style={styles.priceLabel}>Commission</Text>
                                     <View style={styles.commissionToggle}>
                                         <TouchableOpacity
@@ -930,24 +943,25 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                                     style={[styles.input, styles.priceInput]}
                                     placeholder={item.consignmentCommissionType === 'percentage' ? '10' : '5.00'}
                                     value={item.consignmentCommission}
-                                    keyboardType="numeric"
+                                    keyboardType="decimal-pad"
                                     onChangeText={(text) => setItem(prev => ({ ...prev, consignmentCommission: text }))}
                                     placeholderTextColor={activeTheme.text.secondary}
                                 />
                             </View>
-                        )}
-                        {/* Prix final calculé - uniquement en mode dépôt-vente */}
-                        {item.isConsignment && item.consignorAmount && item.consignmentCommission && (
-                            <View style={styles.priceWrapper}>
-                                <View style={styles.finalPriceContainer}>
-                                    <Text style={styles.finalPriceLabel}>Prix final client</Text>
-                                    <Text style={styles.finalPriceValue}>
-                                        {`${calculateFinalPrice(item.consignorAmount, item.consignmentCommission, item.consignmentCommissionType).toFixed(2)} €`}
-                                    </Text>
+
+                            {/* Prix final calculé */}
+                            {item.consignorAmount && item.consignorAmount.trim() && item.consignmentCommission && item.consignmentCommission.trim() && (
+                                <View style={styles.consignmentFieldWrapper}>
+                                    <Text style={styles.priceLabel}>Prix final client</Text>
+                                    <View style={styles.finalPriceDisplayContainer}>
+                                        <Text style={styles.finalPriceDisplayValue}>
+                                            {`${(calculateFinalPrice(item.consignorAmount, item.consignmentCommission, item.consignmentCommissionType) || 0).toFixed(2)} €`}
+                                        </Text>
+                                    </View>
                                 </View>
-                            </View>
-                        )}
-                    </View>
+                            )}
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.formSection}>
@@ -1462,17 +1476,100 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
         color: theme.primary,
         fontWeight: '600',
     },
-    commissionHeader: {
+    priceHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    consignmentToggleCompact: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: theme.backgroundSecondary,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    consignmentToggleCompactActive: {
+        backgroundColor: theme.primaryLight,
+        borderColor: theme.primary,
+    },
+    switchCompact: {
+        width: 36,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: theme.border,
+        padding: 2,
+        marginRight: 8,
+    },
+    switchCompactActive: {
+        backgroundColor: theme.primary,
+    },
+    switchThumbCompact: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: theme.text.onPrimary,
+        transform: [{ translateX: 0 }],
+    },
+    switchThumbCompactActive: {
+        transform: [{ translateX: 16 }],
+    },
+    consignmentToggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+    },
+    priceFieldsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        ...Platform.select({
+            default: {
+                flexWrap: 'wrap',
+            },
+        }),
+    },
+    priceFieldWrapper: {
+        flex: 1,
+        minWidth: 140,
+    },
+    consignmentFieldsContainer: {
+        gap: 16,
+    },
+    consignmentFieldWrapper: {
+        width: '100%',
+    },
+    commissionLabelContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 8,
+    },
+    finalPriceDisplayContainer: {
+        backgroundColor: theme.primaryContainer + '20',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.primary + '30',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 48,
+    },
+    finalPriceDisplayValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.primary,
+        textAlign: 'center',
     },
     commissionToggle: {
         flexDirection: 'row',
         backgroundColor: theme.border,
         borderRadius: 6,
         padding: 2,
+        flexShrink: 0,
     },
     toggleButton: {
         paddingHorizontal: 12,
@@ -1490,27 +1587,6 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     },
     toggleButtonTextActive: {
         color: theme.text.onPrimary,
-    },
-    finalPriceContainer: {
-        backgroundColor: theme.primaryContainer + '20',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: theme.primary + '30',
-        marginTop: 8,
-    },
-    finalPriceLabel: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: theme.primary,
-        marginBottom: 4,
-    },
-    finalPriceValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.primary,
-        textAlign: 'center',
     },
     disabledButton: {
         opacity: 0.5,

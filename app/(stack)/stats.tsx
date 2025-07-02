@@ -405,7 +405,10 @@ const StatsScreen = () => {
                           Déposant: {payment.consignorName}
                         </Text>
                         <Text style={styles.consignmentDetails}>
-                          {formatCurrency(payment.sellingPrice)} × {payment.splitPercentage}%
+                          {payment.commissionType === 'amount' 
+                            ? `Commission: ${formatCurrency(payment.commission)} (fixe)`
+                            : `Commission: ${payment.commission}% (sur ${formatCurrency(payment.sellingPrice)})`
+                          }
                         </Text>
                       </View>
                       <View style={styles.consignmentAmount}>

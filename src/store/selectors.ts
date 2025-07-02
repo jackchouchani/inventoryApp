@@ -377,7 +377,12 @@ export const selectSourcePerformance = createSelector(
       if (item.status === 'sold') {
         performance.soldItems++;
         performance.totalRevenue += item.sellingPrice;
-        performance.totalProfit += (item.sellingPrice - item.purchasePrice);
+        // 🆕 NOUVELLE LOGIQUE PROFIT pour sources
+        if (item.isConsignment) {
+          performance.totalProfit += (item.consignmentCommission || 0);
+        } else {
+          performance.totalProfit += (item.sellingPrice - item.purchasePrice);
+        }
       } else {
         performance.availableItems++;
       }
@@ -418,7 +423,9 @@ export interface ConsignmentPayment {
   itemName: string;
   consignorName: string;
   sellingPrice: number;
-  splitPercentage: number;
+  splitPercentage: number; // Obsolète mais gardé pour compatibilité
+  commission: number; // Nouveau : montant ou pourcentage de commission
+  commissionType: 'amount' | 'percentage'; // Nouveau : type de commission
   paymentAmount: number;
   soldAt: string;
   sourceId?: number;
@@ -436,7 +443,7 @@ export const selectConsignmentPayments = createSelector(
         item.isConsignment && 
         item.status === 'sold' && 
         item.consignorName && 
-        item.consignmentSplitPercentage && 
+        item.consignorAmount && 
         item.soldAt
       )
       .map(item => ({
@@ -444,8 +451,10 @@ export const selectConsignmentPayments = createSelector(
         itemName: item.name,
         consignorName: item.consignorName!,
         sellingPrice: item.sellingPrice,
-        splitPercentage: item.consignmentSplitPercentage!,
-        paymentAmount: (item.sellingPrice * item.consignmentSplitPercentage!) / 100,
+        splitPercentage: 0, // Obsolète avec la nouvelle logique
+        commission: item.consignmentCommission || 0, // Montant ou pourcentage de commission
+        commissionType: item.consignmentCommissionType || 'amount', // 'amount' ou 'percentage'
+        paymentAmount: item.consignorAmount!, // Montant que doit recevoir le déposant
         soldAt: item.soldAt!,
         sourceId: item.sourceId || undefined,
         sourceName: item.sourceId ? sourceMap.get(item.sourceId)?.name : undefined,

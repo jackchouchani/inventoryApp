@@ -329,7 +329,10 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
              editedItem.sourceId !== initialItemState.sourceId ||
              editedItem.isConsignment !== initialItemState.isConsignment ||
              editedItem.consignorName !== initialItemState.consignorName ||
-             editedItem.consignmentSplitPercentage !== initialItemState.consignmentSplitPercentage;
+             editedItem.consignmentSplitPercentage !== initialItemState.consignmentSplitPercentage ||
+             editedItem.consignorAmount !== initialItemState.consignorAmount ||
+             editedItem.consignmentCommission !== initialItemState.consignmentCommission ||
+             editedItem.consignmentCommissionType !== initialItemState.consignmentCommissionType;
 
          const photoChanged =
              localImageNeedsUpload ||
@@ -510,7 +513,11 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             sourceId: editedItem.sourceId,
             isConsignment: editedItem.isConsignment,
             consignorName: editedItem.consignorName,
-            consignmentSplitPercentage: editedItem.consignmentSplitPercentage
+            consignmentSplitPercentage: editedItem.consignmentSplitPercentage,
+            // Nouveaux champs pour le système de commission
+            consignmentCommission: editedItem.isConsignment ? parseFloat(editedItem.consignmentCommission || '0') || 0 : undefined,
+            consignmentCommissionType: editedItem.isConsignment ? editedItem.consignmentCommissionType : undefined,
+            consignorAmount: editedItem.isConsignment ? parseFloat(editedItem.consignorAmount || '0') || 0 : undefined
         };
 
         if (finalPhotoStorageUrl !== undefined) {
@@ -535,12 +542,12 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     consignorName: itemToUpdateToSendToDB.consignorName,
                     consignmentSplitPercentage: itemToUpdateToSendToDB.consignmentSplitPercentage,
                     // Nouveaux champs pour le système de commission
-                    consignmentCommission: itemToUpdateToSendToDB.isConsignment ? 
-                        parseFloat(itemToUpdateToSendToDB.consignmentCommission || '0') || 0 : undefined,
-                    consignmentCommissionType: itemToUpdateToSendToDB.isConsignment ? 
-                        itemToUpdateToSendToDB.consignmentCommissionType : undefined,
-                    consignorAmount: itemToUpdateToSendToDB.isConsignment ? 
-                        parseFloat(itemToUpdateToSendToDB.consignorAmount || '0') || 0 : undefined,
+                    consignmentCommission: editedItem.isConsignment ? 
+                        parseFloat(editedItem.consignmentCommission || '0') || 0 : undefined,
+                    consignmentCommissionType: editedItem.isConsignment ? 
+                        editedItem.consignmentCommissionType : undefined,
+                    consignorAmount: editedItem.isConsignment ? 
+                        parseFloat(editedItem.consignorAmount || '0') || 0 : undefined,
                     photo_storage_url: finalPhotoStorageUrl
                 }
             })).unwrap();
@@ -716,104 +723,124 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 />
 
                 <View style={styles.priceContainer}>
-                    {/* Prix d'achat - optionnel en mode dépôt-vente */}
+                    {/* Header avec toggle dépôt-vente */}
+                    <View style={styles.priceHeaderContainer}>
+                        <Text style={styles.sectionTitle}>Prix</Text>
+                        <TouchableOpacity
+                            style={[styles.consignmentToggleCompact, editedItem.isConsignment && styles.consignmentToggleCompactActive]}
+                            onPress={() => setEditedItem(prev => ({ 
+                                ...prev, 
+                                isConsignment: !prev.isConsignment,
+                                consignorName: !prev.isConsignment ? prev.consignorName : '',
+                                consignorAmount: !prev.isConsignment ? prev.consignorAmount : '',
+                                consignmentCommission: !prev.isConsignment ? prev.consignmentCommission : '',
+                            }))}
+                        >
+                            <View style={[styles.switchCompact, editedItem.isConsignment && styles.switchCompactActive]}>
+                                <View style={[styles.switchThumbCompact, editedItem.isConsignment && styles.switchThumbCompactActive]} />
+                            </View>
+                            <Text style={styles.consignmentToggleText}>
+                                Dépôt-vente
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Champs prix - mode normal */}
                     {!editedItem.isConsignment && (
-                        <View style={styles.priceInputWrapper}>
-                            <View style={styles.priceLabelContainer}>
+                        <View style={styles.priceFieldsContainer}>
+                            <View style={styles.priceFieldWrapper}>
                                 <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="100"
+                                    value={editedItem.purchasePrice}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => handlePriceChange('purchasePrice', text)}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
                             </View>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="100"
-                                value={editedItem.purchasePrice}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => handlePriceChange('purchasePrice', text)}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
-                        </View>
-                    )}
-                    
-                    {editedItem.isConsignment ? (
-                        <View style={styles.priceInputWrapper}>
-                            <View style={styles.priceLabelContainer}>
-                                <Text style={styles.priceLabel}>Prix déposant (€)</Text>
-                            </View>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="150"
-                                value={editedItem.consignorAmount}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorAmount: text }))}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
-                        </View>
-                    ) : (
-                        <View style={styles.priceInputWrapper}>
-                            <View style={styles.priceLabelContainer}>
+                            <View style={styles.priceFieldWrapper}>
                                 <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="200"
+                                    value={editedItem.sellingPrice}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => handlePriceChange('sellingPrice', text)}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
                             </View>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="200"
-                                value={editedItem.sellingPrice}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => handlePriceChange('sellingPrice', text)}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
                         </View>
                     )}
 
-                    {/* Section Commission - uniquement en mode dépôt-vente */}
+                    {/* Champs prix - mode dépôt-vente */}
                     {editedItem.isConsignment && (
-                        <View style={styles.priceInputWrapper}>
-                            <View style={styles.commissionHeader}>
-                                <Text style={styles.priceLabel}>Commission</Text>
-                                <View style={styles.commissionToggle}>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.toggleButton,
-                                            editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonActive
-                                        ]}
-                                        onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'amount' }))}
-                                    >
-                                        <Text style={[
-                                            styles.toggleButtonText,
-                                            editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonTextActive
-                                        ]}>€</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.toggleButton,
-                                            editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonActive
-                                        ]}
-                                        onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'percentage' }))}
-                                    >
-                                        <Text style={[
-                                            styles.toggleButtonText,
-                                            editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonTextActive
-                                        ]}>%</Text>
-                                    </TouchableOpacity>
+                        <View style={styles.consignmentFieldsContainer}>
+                            {/* Prix déposant */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix déposant (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="150"
+                                    value={editedItem.consignorAmount}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorAmount: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+
+                            {/* Commission avec toggle */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <View style={styles.commissionLabelContainer}>
+                                    <Text style={styles.priceLabel}>Commission</Text>
+                                    <View style={styles.commissionToggle}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.toggleButton,
+                                                editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonActive
+                                            ]}
+                                            onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'amount' }))}
+                                        >
+                                            <Text style={[
+                                                styles.toggleButtonText,
+                                                editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonTextActive
+                                            ]}>€</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.toggleButton,
+                                                editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonActive
+                                            ]}
+                                            onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'percentage' }))}
+                                        >
+                                            <Text style={[
+                                                styles.toggleButtonText,
+                                                editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonTextActive
+                                            ]}>%</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder={editedItem.consignmentCommissionType === 'percentage' ? '10' : '5.00'}
+                                    value={editedItem.consignmentCommission || ''}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignmentCommission: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
                             </View>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder={editedItem.consignmentCommissionType === 'percentage' ? '10' : '5.00'}
-                                value={editedItem.consignmentCommission || ''}
-                                keyboardType="decimal-pad"
-                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignmentCommission: text }))}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
-                        </View>
-                    )}
-                    {/* Prix final calculé - uniquement en mode dépôt-vente */}
-                    {editedItem.isConsignment && editedItem.consignorAmount && editedItem.consignmentCommission && (
-                        <View style={styles.priceInputWrapper}>
-                            <View style={styles.finalPriceContainer}>
-                                <Text style={styles.finalPriceLabel}>Prix final client</Text>
-                                <Text style={styles.finalPriceValue}>
-                                    {`${calculateFinalPrice(editedItem.consignorAmount, editedItem.consignmentCommission, editedItem.consignmentCommissionType || 'amount').toFixed(2)} €`}
-                                </Text>
-                            </View>
+
+                            {/* Prix final calculé */}
+                            {editedItem.consignorAmount && editedItem.consignorAmount.trim() && editedItem.consignmentCommission && editedItem.consignmentCommission.trim() && (
+                                <View style={styles.consignmentFieldWrapper}>
+                                    <Text style={styles.priceLabel}>Prix final client</Text>
+                                    <View style={styles.finalPriceDisplayContainer}>
+                                        <Text style={styles.finalPriceDisplayValue}>
+                                            {`${(calculateFinalPrice(editedItem.consignorAmount || '0', editedItem.consignmentCommission || '0', editedItem.consignmentCommissionType || 'amount') || 0).toFixed(2)} €`}
+                                        </Text>
+                                    </View>
+                                </View>
+                            )}
                         </View>
                     )}
                 </View>
@@ -965,6 +992,20 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     ) : null;
                 })()}
 
+                {/* Section Nom du déposant - uniquement en mode dépôt-vente */}
+                {editedItem.isConsignment && (
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionTitle}>Déposant</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Nom du déposant"
+                            value={editedItem.consignorName}
+                            onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorName: text }))}
+                            placeholderTextColor={activeTheme.text.secondary}
+                        />
+                    </View>
+                )}
+
                 {/* Section Source */}
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Source</Text>
@@ -1033,63 +1074,6 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                     {editedItem.sourceId === option.value && <Icon name="check" size={16} color={activeTheme.primary} />}
                                 </TouchableOpacity>
                             ))}
-                        </View>
-                    )}
-                    
-                    {/* Section Dépôt-vente */}
-                    {editedItem.sourceId && (
-                        <View style={{ marginTop: 16 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                <TouchableOpacity
-                                    style={{
-                                        flexDirection: 'row',
-                                        alignItems: 'center',
-                                        backgroundColor: editedItem.isConsignment ? activeTheme.primary : activeTheme.surface,
-                                        paddingHorizontal: 16,
-                                        paddingVertical: 8,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: editedItem.isConsignment ? activeTheme.primary : activeTheme.border
-                                    }}
-                                    onPress={() => setEditedItem(prev => ({ ...prev, isConsignment: !prev.isConsignment }))}
-                                >
-                                    <Icon 
-                                        name={editedItem.isConsignment ? "check_box" : "check_box_outline_blank"} 
-                                        size={20} 
-                                        color={editedItem.isConsignment ? activeTheme.text.onPrimary : activeTheme.text.primary}
-                                        style={{ marginRight: 8 }}
-                                    />
-                                    <Text style={{
-                                        color: editedItem.isConsignment ? activeTheme.text.onPrimary : activeTheme.text.primary,
-                                        fontWeight: '500'
-                                    }}>
-                                        Dépôt-vente
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {editedItem.isConsignment && (
-                                <View>
-                                    <TextInput
-                                        style={[styles.input, { marginBottom: 12 }]}
-                                        placeholder="Nom du déposant"
-                                        value={editedItem.consignorName || ''}
-                                        onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorName: text }))}
-                                        placeholderTextColor={activeTheme.text.secondary}
-                                    />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Pourcentage déposant (ex: 70)"
-                                        value={editedItem.consignmentSplitPercentage?.toString() || '50'}
-                                        onChangeText={(text) => {
-                                            const num = parseInt(text) || 50;
-                                            setEditedItem(prev => ({ ...prev, consignmentSplitPercentage: Math.min(100, Math.max(0, num)) }));
-                                        }}
-                                        keyboardType="number-pad"
-                                        placeholderTextColor={activeTheme.text.secondary}
-                                    />
-                                </View>
-                            )}
                         </View>
                     )}
                 </View>
@@ -1222,6 +1206,13 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     priceInputWrapper: {
         flexDirection: 'column',
         gap: 8,
+        flex: 1,
+        minWidth: 0,
+        ...Platform.select({
+            web: {
+                maxWidth: '100%',
+            },
+        }),
     },
     priceLabelContainer: {
         marginBottom: 4,
@@ -1607,17 +1598,100 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
         color: theme.primary,
         fontWeight: '600',
     },
-    commissionHeader: {
+    priceHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    consignmentToggleCompact: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: theme.backgroundSecondary,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    consignmentToggleCompactActive: {
+        backgroundColor: theme.primaryLight,
+        borderColor: theme.primary,
+    },
+    switchCompact: {
+        width: 36,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: theme.border,
+        padding: 2,
+        marginRight: 8,
+    },
+    switchCompactActive: {
+        backgroundColor: theme.primary,
+    },
+    switchThumbCompact: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: theme.text.onPrimary,
+        transform: [{ translateX: 0 }],
+    },
+    switchThumbCompactActive: {
+        transform: [{ translateX: 16 }],
+    },
+    consignmentToggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+    },
+    priceFieldsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        ...Platform.select({
+            default: {
+                flexWrap: 'wrap',
+            },
+        }),
+    },
+    priceFieldWrapper: {
+        flex: 1,
+        minWidth: 140,
+    },
+    consignmentFieldsContainer: {
+        gap: 16,
+    },
+    consignmentFieldWrapper: {
+        width: '100%',
+    },
+    commissionLabelContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 8,
+    },
+    finalPriceDisplayContainer: {
+        backgroundColor: theme.primaryContainer + '20',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.primary + '30',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 48,
+    },
+    finalPriceDisplayValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.primary,
+        textAlign: 'center',
     },
     commissionToggle: {
         flexDirection: 'row',
         backgroundColor: theme.border,
         borderRadius: 6,
         padding: 2,
+        flexShrink: 0,
     },
     toggleButton: {
         paddingHorizontal: 12,
@@ -1639,23 +1713,26 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     finalPriceContainer: {
         backgroundColor: theme.primaryContainer + '20',
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 6,
+        paddingVertical: 12,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: theme.primary + '30',
-        marginTop: 8,
+        marginTop: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     finalPriceLabel: {
-        fontSize: 12,
-        fontWeight: '500',
+        fontSize: 14,
+        fontWeight: '600',
         color: theme.primary,
-        marginBottom: 4,
+        flex: 1,
     },
     finalPriceValue: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: theme.primary,
-        textAlign: 'center',
+        textAlign: 'right',
     },
     iconSelectorLabel: {
         marginTop: 16,
@@ -1758,6 +1835,50 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     inputText: {
         fontSize: 16,
         color: theme.text.primary,
+    },
+    consignmentContainer: {
+        gap: 12,
+    },
+    switchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: theme.backgroundSecondary,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: theme.border,
+    },
+    switchContainerActive: {
+        backgroundColor: theme.primaryLight,
+        borderColor: theme.primary,
+    },
+    switch: {
+        width: 50,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: theme.border,
+        padding: 2,
+        marginRight: 12,
+    },
+    switchActive: {
+        backgroundColor: theme.primary,
+    },
+    switchThumb: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: theme.text.onPrimary,
+        transform: [{ translateX: 0 }],
+    },
+    switchThumbActive: {
+        transform: [{ translateX: 24 }],
+    },
+    switchLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.text.primary,
+        flex: 1,
     },
 
 });
