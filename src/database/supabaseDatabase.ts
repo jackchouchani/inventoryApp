@@ -4,6 +4,7 @@ import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import type { Location, LocationInput, LocationUpdate } from '../types/location';
+import type { Source, SourceInput, SourceUpdate } from '../types/source';
 import type { ItemHistory } from '../types/itemHistory';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
@@ -22,7 +23,11 @@ const ITEM_LIST_FIELDS = `
   created_at,
   updated_at,
   sold_at,
-  purchase_price
+  purchase_price,
+  source_id,
+  is_consignment,
+  consignor_name,
+  consignment_split_percentage
 `;
 
 const ITEM_DETAIL_FIELDS = `
@@ -38,7 +43,11 @@ const ITEM_DETAIL_FIELDS = `
   qr_code,
   created_at,
   updated_at,
-  sold_at
+  sold_at,
+  source_id,
+  is_consignment,
+  consignor_name,
+  consignment_split_percentage
 `;
 
 export class SupabaseDatabase implements DatabaseInterface {
@@ -129,7 +138,11 @@ export class SupabaseDatabase implements DatabaseInterface {
         qrCode: item.qr_code,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
-        soldAt: item.sold_at
+        soldAt: item.sold_at,
+        sourceId: item.source_id,
+        isConsignment: item.is_consignment || false,
+        consignorName: item.consignor_name,
+        consignmentSplitPercentage: item.consignment_split_percentage
       }));
       
       return mappedItems;
@@ -209,6 +222,10 @@ export class SupabaseDatabase implements DatabaseInterface {
         container_id: item.containerId || null,
         category_id: item.categoryId || null,
         qr_code: item.qrCode,  // Utilisation explicite du code QR de l'objet item
+        source_id: item.sourceId || null,
+        is_consignment: item.isConsignment || false,
+        consignor_name: item.consignorName || null,
+        consignment_split_percentage: item.consignmentSplitPercentage || null,
         user_id: userId,
         deleted: false,
         created_at: new Date().toISOString(),
@@ -418,7 +435,11 @@ export class SupabaseDatabase implements DatabaseInterface {
         qrCode: data.qr_code,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
-        soldAt: data.sold_at
+        soldAt: data.sold_at,
+        sourceId: data.source_id,
+        isConsignment: data.is_consignment || false,
+        consignorName: data.consignor_name,
+        consignmentSplitPercentage: data.consignment_split_percentage
       };
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
@@ -692,7 +713,11 @@ export class SupabaseDatabase implements DatabaseInterface {
         qrCode: data.qr_code,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
-        soldAt: data.sold_at
+        soldAt: data.sold_at,
+        sourceId: data.source_id,
+        isConsignment: data.is_consignment || false,
+        consignorName: data.consignor_name,
+        consignmentSplitPercentage: data.consignment_split_percentage
       };
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
@@ -723,7 +748,11 @@ export class SupabaseDatabase implements DatabaseInterface {
         categoryId: item.category_id,
         qrCode: item.qr_code,
         createdAt: item.created_at,
-        updatedAt: item.updated_at
+        updatedAt: item.updated_at,
+        sourceId: item.source_id,
+        isConsignment: item.is_consignment || false,
+        consignorName: item.consignor_name,
+        consignmentSplitPercentage: item.consignment_split_percentage
       }));
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
@@ -862,6 +891,24 @@ export class SupabaseDatabase implements DatabaseInterface {
     }
   }
 
+  // ===== SOURCES =====
+  async getSources(): Promise<Source[]> {
+    try {
+      const { data, error } = await supabase
+        .from('sources')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      if (!data) return [];
+
+      return data.map(source => ({
+        id: source.id,
+        name: source.name,
+        type: source.type,
+        city: source.city,
+        createdAt: source.created_at,
+        userId: source.user_id
   async getItemHistory(itemId: number): Promise<ItemHistory[]> {
     try {
       const { data, error } = await supabase
@@ -887,6 +934,92 @@ export class SupabaseDatabase implements DatabaseInterface {
     }
   }
 
+  async getSource(id: number): Promise<Source | null> {
+    try {
+      const { data, error } = await supabase
+        .from('sources')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw error;
+      }
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        name: data.name,
+        type: data.type,
+        city: data.city,
+        createdAt: data.created_at,
+        userId: data.user_id
+      };
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return null;
+    }
+  }
+
+  async addSource(source: SourceInput): Promise<number> {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('Utilisateur non authentifié');
+
+      const { data, error } = await supabase
+        .from('sources')
+        .insert({
+          name: source.name,
+          type: source.type,
+          city: source.city || null,
+          user_id: user.user.id,
+          created_at: new Date().toISOString()
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error('Failed to create source');
+
+      return data.id;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async updateSource(id: number, source: SourceUpdate): Promise<void> {
+    try {
+      const updateData: any = {};
+
+      if (source.name !== undefined) updateData.name = source.name;
+      if (source.type !== undefined) updateData.type = source.type;
+      if (source.city !== undefined) updateData.city = source.city;
+
+      const { error } = await supabase
+        .from('sources')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async deleteSource(id: number): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('sources')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      throw error;
   async getGlobalHistory(page: number, limit: number): Promise<{ history: ItemHistory[], total: number }> {
     try {
       const from = page * limit;

@@ -31,7 +31,10 @@ type ComponentName =
   | 'MultiReceipt'
   | 'CommonHeader'
   | 'Common'
-  | 'ExportButtons';
+  | 'ExportButtons'
+  | 'SourcesScreen'
+  | 'AddSourceScreen'
+  | 'SourceDetailScreen';
 
 class StyleFactory {
   private static cache = new Map<string, any>();
@@ -113,6 +116,12 @@ class StyleFactory {
         return this.getCommonHeaderStyles(theme, commonStyles);
       case 'ExportButtons':
         return this.getExportButtonsStyles(theme, commonStyles);
+      case 'SourcesScreen':
+        return this.getSourcesScreenStyles(theme, commonStyles);
+      case 'AddSourceScreen':
+        return this.getAddSourceScreenStyles(theme, commonStyles);
+      case 'SourceDetailScreen':
+        return this.getSourceDetailScreenStyles(theme, commonStyles);
       case 'Common':
         return commonStyles;
       default:
@@ -2843,6 +2852,142 @@ class StyleFactory {
       actualProfitValue: {
         color: theme.success,
       },
+      
+      // Styles pour la section Performance des Sources
+      sourcePerformanceContainer: {
+        gap: 12,
+      },
+      sourceCard: {
+        backgroundColor: theme.surface,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3.84,
+        elevation: 5,
+      },
+      sourceHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+      },
+      sourceName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.text.primary,
+        flex: 1,
+      },
+      sourceRank: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.primary,
+        backgroundColor: theme.primaryContainer,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+      },
+      sourceStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 8,
+      },
+      sourceStat: {
+        flex: 1,
+        alignItems: 'center',
+      },
+      sourceStatLabel: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        marginBottom: 2,
+        textAlign: 'center',
+      },
+      sourceStatValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+        textAlign: 'center',
+      },
+      
+      // Styles pour la section Paiements Dépôt-Vente
+      consignmentContainer: {
+        gap: 16,
+      },
+      consignmentSummary: {
+        backgroundColor: theme.primaryContainer,
+        borderRadius: 12,
+        padding: 16,
+        alignItems: 'center',
+        marginBottom: 16,
+      },
+      consignmentTotalLabel: {
+        fontSize: 14,
+        color: theme.onPrimaryContainer,
+        marginBottom: 4,
+      },
+      consignmentTotalValue: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: theme.onPrimaryContainer,
+      },
+      consignmentList: {
+        gap: 8,
+      },
+      consignmentItem: {
+        backgroundColor: theme.surface,
+        borderRadius: 8,
+        padding: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+      consignmentInfo: {
+        flex: 1,
+        marginRight: 12,
+      },
+      consignmentItemName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+        marginBottom: 2,
+      },
+      consignmentConsignor: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        marginBottom: 2,
+      },
+      consignmentDetails: {
+        fontSize: 12,
+        color: theme.text.secondary,
+      },
+      consignmentAmount: {
+        alignItems: 'flex-end',
+      },
+      consignmentPayment: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.primary,
+        marginBottom: 2,
+      },
+      consignmentDate: {
+        fontSize: 11,
+        color: theme.text.secondary,
+      },
+      
+      moreItemsText: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+        textAlign: 'center',
+        marginTop: 8,
+      },
     });
   }
 
@@ -4833,6 +4978,209 @@ class StyleFactory {
         paddingTop: 16,
         borderTopWidth: 1,
         borderTopColor: theme.border,
+      },
+    });
+  }
+
+  /**
+   * Styles pour SourcesScreen
+   */
+  private static getSourcesScreenStyles(theme: AppThemeType, commonStyles: any): any {
+    return StyleSheet.create({
+      ...commonStyles,
+      container: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        gap: 8,
+      },
+      searchbar: {
+        flex: 1,
+      },
+      listContainer: {
+        padding: 16,
+        paddingTop: 0,
+        paddingBottom: 100,
+      },
+      sourceCard: {
+        marginBottom: 12,
+      },
+      sourceHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      },
+      sourceInfo: {
+        flex: 1,
+      },
+      sourceName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 4,
+        color: theme.text.primary,
+      },
+      sourceDetails: {
+        color: theme.text.secondary,
+        fontSize: 14,
+      },
+      sourceMetrics: {
+        flexDirection: 'row',
+        marginTop: 12,
+        gap: 8,
+      },
+      typeChip: {
+        backgroundColor: theme.surface,
+      },
+      emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+      },
+      emptyTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        color: theme.text.primary,
+      },
+      emptySubtitle: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        textAlign: 'center',
+      },
+      loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+      },
+      fab: {
+        position: 'absolute',
+        right: 16,
+        bottom: 16,
+      },
+    });
+  }
+
+  /**
+   * Styles pour AddSourceScreen
+   */
+  private static getAddSourceScreenStyles(theme: AppThemeType, commonStyles: any): any {
+    return StyleSheet.create({
+      ...commonStyles,
+      container: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      content: {
+        padding: 16,
+      },
+      card: {
+        marginBottom: 24,
+      },
+      title: {
+        marginBottom: 24,
+        color: theme.text.primary,
+      },
+      form: {
+        gap: 16,
+      },
+      input: {
+        backgroundColor: theme.surface,
+      },
+      typeSection: {
+        gap: 8,
+      },
+      typeLabel: {
+        color: theme.text.primary,
+      },
+      segmentedButtons: {
+        marginVertical: 8,
+      },
+      errorText: {
+        color: theme.error,
+        fontSize: 12,
+        marginTop: 4,
+      },
+      actions: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+      },
+      cancelButton: {
+        flex: 1,
+      },
+      submitButton: {
+        flex: 1,
+      },
+    });
+  }
+
+  /**
+   * Styles pour SourceDetailScreen
+   */
+  private static getSourceDetailScreenStyles(theme: AppThemeType, commonStyles: any): any {
+    return StyleSheet.create({
+      ...commonStyles,
+      container: {
+        flex: 1,
+        backgroundColor: theme.background,
+      },
+      content: {
+        padding: 16,
+      },
+      headerCard: {
+        marginBottom: 16,
+      },
+      header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+      },
+      sourceInfo: {
+        flex: 1,
+      },
+      sourceName: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        color: theme.text.primary,
+      },
+      sourceDetails: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+      },
+      cityText: {
+        color: theme.text.secondary,
+        fontSize: 14,
+      },
+      statsCard: {
+        marginBottom: 16,
+      },
+      itemsCard: {
+        marginBottom: 16,
+      },
+      itemsList: {
+        marginTop: 8,
+      },
+      statusChip: {
+        alignSelf: 'center',
+        marginRight: 8,
+      },
+      emptyText: {
+        textAlign: 'center',
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+        marginTop: 16,
+      },
+      moreItemsText: {
+        textAlign: 'center',
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+        marginTop: 8,
       },
     });
   }

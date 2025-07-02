@@ -74,14 +74,32 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
       const totalPurchaseValue = items.reduce((sum, item) => sum + item.purchasePrice, 0);
       const totalSellingValue = items.reduce((sum, item) => sum + item.sellingPrice, 0);
-      const totalProfit = totalSellingValue - totalPurchaseValue;
+      
+      // 🆕 NOUVELLE LOGIQUE PROFIT - différencier consignation vs achat/vente
+      const totalProfit = items.reduce((sum, item) => {
+        if (item.isConsignment) {
+          // Pour les consignations : profit = commission de l'app
+          return sum + (item.consignmentCommission || 0);
+        } else {
+          // Pour les achats/ventes normaux : profit = marge classique
+          return sum + (item.sellingPrice - item.purchasePrice);
+        }
+      }, 0);
 
       // 🆕 CALCUL STATS ARTICLES DISPONIBLES
       const availableItemsStats = {
         count: availableItems.length,
         totalPurchaseValue: availableItems.reduce((sum, item) => sum + item.purchasePrice, 0),
         totalSellingValue: availableItems.reduce((sum, item) => sum + item.sellingPrice, 0),
-        potentialProfit: availableItems.reduce((sum, item) => sum + (item.sellingPrice - item.purchasePrice), 0),
+        potentialProfit: availableItems.reduce((sum, item) => {
+          if (item.isConsignment) {
+            // Pour les consignations : profit potentiel = commission de l'app
+            return sum + (item.consignmentCommission || 0);
+          } else {
+            // Pour les achats/ventes normaux : profit potentiel = marge classique
+            return sum + (item.sellingPrice - item.purchasePrice);
+          }
+        }, 0),
       };
 
       // 🆕 CALCUL STATS ARTICLES VENDUS
@@ -89,18 +107,39 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
         count: soldItems.length,
         totalPurchaseValue: soldItems.reduce((sum, item) => sum + item.purchasePrice, 0),
         totalSellingValue: soldItems.reduce((sum, item) => sum + item.sellingPrice, 0),
-        actualProfit: soldItems.reduce((sum, item) => sum + (item.sellingPrice - item.purchasePrice), 0),
+        actualProfit: soldItems.reduce((sum, item) => {
+          if (item.isConsignment) {
+            // Pour les consignations : profit réel = commission de l'app
+            return sum + (item.consignmentCommission || 0);
+          } else {
+            // Pour les achats/ventes normaux : profit réel = marge classique
+            return sum + (item.sellingPrice - item.purchasePrice);
+          }
+        }, 0),
       };
 
       // Calcul du profit réel sur les articles vendus uniquement
-      const soldItemsProfit = soldItems.reduce((sum, item) => 
-        sum + (item.sellingPrice - item.purchasePrice), 0);
+      const soldItemsProfit = soldItems.reduce((sum, item) => {
+        if (item.isConsignment) {
+          return sum + (item.consignmentCommission || 0);
+        } else {
+          return sum + (item.sellingPrice - item.purchasePrice);
+        }
+      }, 0);
 
-      const itemsWithMargins = soldItems.map(item => ({
-        ...item,
-        profit: item.sellingPrice - item.purchasePrice,
-        margin: item.sellingPrice > 0 ? ((item.sellingPrice - item.purchasePrice) / item.sellingPrice) * 100 : 0
-      }));
+      const itemsWithMargins = soldItems.map(item => {
+        const profit = item.isConsignment 
+          ? (item.consignmentCommission || 0)
+          : (item.sellingPrice - item.purchasePrice);
+        
+        const margin = item.sellingPrice > 0 ? (profit / item.sellingPrice) * 100 : 0;
+        
+        return {
+          ...item,
+          profit,
+          margin
+        };
+      });
 
       const bestSellingItem = itemsWithMargins.length > 0
         ? itemsWithMargins.reduce((best, current) => 
@@ -116,8 +155,13 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
       const categoryStats = categories.map(category => {
         const categoryItems = items.filter(item => item.categoryId === category.id);
-        const categoryProfit = categoryItems.reduce((sum, item) => 
-          sum + (item.sellingPrice - item.purchasePrice), 0);
+        const categoryProfit = categoryItems.reduce((sum, item) => {
+          if (item.isConsignment) {
+            return sum + (item.consignmentCommission || 0);
+          } else {
+            return sum + (item.sellingPrice - item.purchasePrice);
+          }
+        }, 0);
         const categoryRevenue = categoryItems.reduce((sum, item) => 
           sum + item.sellingPrice, 0);
 
@@ -219,8 +263,13 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
       // 🔧 CORRECTION MAJEURE : Calculer les totaux réels de la période (pas cumulatifs)
       const totalRevenueForPeriod = soldItemsInPeriod.reduce((sum, item) => sum + (item.sellingPrice || 0), 0);
-      const totalProfitForPeriod = soldItemsInPeriod.reduce((sum, item) => 
-        sum + ((item.sellingPrice || 0) - (item.purchasePrice || 0)), 0);
+      const totalProfitForPeriod = soldItemsInPeriod.reduce((sum, item) => {
+        if (item.isConsignment) {
+          return sum + (item.consignmentCommission || 0);
+        } else {
+          return sum + ((item.sellingPrice || 0) - (item.purchasePrice || 0));
+        }
+      }, 0);
 
       console.log(`[useStats] Période ${selectedPeriod}:`, {
         startDate: startDate.toISOString(),
@@ -274,7 +323,9 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
         itemsThisPeriod.forEach(item => {
           const revenue = item.sellingPrice || 0;
-          const profit = revenue - (item.purchasePrice || 0);
+          const profit = item.isConsignment 
+            ? (item.consignmentCommission || 0)
+            : (revenue - (item.purchasePrice || 0));
           periodRevenue += revenue;
           periodProfit += profit;
         });

@@ -105,10 +105,19 @@ export const fetchItems = createAsyncThunk<
       photo_storage_url: item.photo_storage_url,
       containerId: item.container_id,
       categoryId: item.category_id,
+      locationId: item.location_id,
       qrCode: item.qr_code,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
-      soldAt: item.sold_at
+      soldAt: item.sold_at,
+      sourceId: item.source_id,
+      isConsignment: item.is_consignment || false,
+      consignorName: item.consignor_name,
+      consignmentSplitPercentage: item.consignment_split_percentage,
+      // Nouveaux champs pour le système de commission
+      consignmentCommission: item.consignment_commission,
+      consignmentCommissionType: item.consignment_commission_type,
+      consignorAmount: item.consignor_amount
     }));
 
     return {
@@ -476,7 +485,7 @@ export const bulkUpdateItems = createAsyncThunk<
  */
 export const createItem = createAsyncThunk<
   Item,
-  { name: string; description?: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId?: number | null; locationId?: number | null; qrCode: string; photo_storage_url?: string },
+  { name: string; description?: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId?: number | null; locationId?: number | null; qrCode: string; photo_storage_url?: string; sourceId?: number | null; isConsignment?: boolean; consignorName?: string; consignmentSplitPercentage?: number; consignmentCommission?: number; consignmentCommissionType?: 'amount' | 'percentage'; consignorAmount?: number },
   { state: RootState; rejectValue: ThunkError }
 >('items/createItem', async (itemData, { rejectWithValue }) => {
   try {
@@ -500,6 +509,14 @@ export const createItem = createAsyncThunk<
         location_id: itemData.locationId || null,
         qr_code: itemData.qrCode,
         photo_storage_url: itemData.photo_storage_url || null,
+        source_id: itemData.sourceId || null,
+        is_consignment: itemData.isConsignment || false,
+        consignor_name: itemData.consignorName || null,
+        consignment_split_percentage: itemData.consignmentSplitPercentage || null,
+        // Nouveaux champs pour le système de commission
+        consignment_commission: itemData.consignmentCommission || null,
+        consignment_commission_type: itemData.consignmentCommissionType || null,
+        consignor_amount: itemData.consignorAmount || null,
         user_id: user.id, // ✅ AJOUT du user_id requis
         created_by: user.id, // ✅ AJOUT du created_by requis
         created_at: new Date().toISOString(),
@@ -525,7 +542,15 @@ export const createItem = createAsyncThunk<
       qrCode: data.qr_code,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      soldAt: data.sold_at
+      soldAt: data.sold_at,
+      sourceId: data.source_id,
+      isConsignment: data.is_consignment || false,
+      consignorName: data.consignor_name,
+      consignmentSplitPercentage: data.consignment_split_percentage,
+      // Nouveaux champs pour le système de commission
+      consignmentCommission: data.consignment_commission,
+      consignmentCommissionType: data.consignment_commission_type,
+      consignorAmount: data.consignor_amount
     };
   } catch (error) {
     return rejectWithValue(handleThunkError(error));
@@ -537,7 +562,7 @@ export const createItem = createAsyncThunk<
  */
 export const updateItem = createAsyncThunk<
   Item,
-  { id: number; updates: Partial<{ name: string; description: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId: number | null; locationId: number | null; photo_storage_url: string | null }> },
+  { id: number; updates: Partial<{ name: string; description: string; purchasePrice: number; sellingPrice: number; categoryId: number; containerId: number | null; locationId: number | null; photo_storage_url: string | null; sourceId: number | null; isConsignment: boolean; consignorName: string; consignmentSplitPercentage: number; consignmentCommission: number; consignmentCommissionType: 'amount' | 'percentage'; consignorAmount: number }> },
   { state: RootState; rejectValue: ThunkError }
 >('items/updateItem', async ({ id, updates }, { rejectWithValue }) => {
   try {
@@ -553,6 +578,14 @@ export const updateItem = createAsyncThunk<
     if (updates.containerId !== undefined) updateData.container_id = updates.containerId;
     if (updates.locationId !== undefined) updateData.location_id = updates.locationId;
     if (updates.photo_storage_url !== undefined) updateData.photo_storage_url = updates.photo_storage_url;
+    if (updates.sourceId !== undefined) updateData.source_id = updates.sourceId;
+    if (updates.isConsignment !== undefined) updateData.is_consignment = updates.isConsignment;
+    if (updates.consignorName !== undefined) updateData.consignor_name = updates.consignorName;
+    if (updates.consignmentSplitPercentage !== undefined) updateData.consignment_split_percentage = updates.consignmentSplitPercentage;
+    // Nouveaux champs pour le système de commission
+    if (updates.consignmentCommission !== undefined) updateData.consignment_commission = updates.consignmentCommission;
+    if (updates.consignmentCommissionType !== undefined) updateData.consignment_commission_type = updates.consignmentCommissionType;
+    if (updates.consignorAmount !== undefined) updateData.consignor_amount = updates.consignorAmount;
 
     const { data, error } = await supabase
       .from('items')
@@ -577,7 +610,15 @@ export const updateItem = createAsyncThunk<
       qrCode: data.qr_code,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      soldAt: data.sold_at
+      soldAt: data.sold_at,
+      sourceId: data.source_id,
+      isConsignment: data.is_consignment || false,
+      consignorName: data.consignor_name,
+      consignmentSplitPercentage: data.consignment_split_percentage,
+      // Nouveaux champs pour le système de commission
+      consignmentCommission: data.consignment_commission,
+      consignmentCommissionType: data.consignment_commission_type,
+      consignorAmount: data.consignor_amount
     };
   } catch (error) {
     return rejectWithValue(handleThunkError(error));

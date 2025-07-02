@@ -12,7 +12,7 @@ import CommonHeader from '../../src/components/CommonHeader';
 import SalesBarChart from '../../src/components/SalesBarChart';
 import ExportButtons from '../../src/components/ExportButtons';
 import { useStats } from '../../src/hooks/useStats';
-import { useDashboardData, useStockPageData } from '../../src/hooks/useOptimizedSelectors';
+import { useDashboardData, useStockPageData, useSourcesDashboardData } from '../../src/hooks/useOptimizedSelectors';
 
 import { StatsChart } from '../../src/components/StatsChart';
 import CategoryPieChart from '../../src/components/CategoryPieChart';
@@ -51,6 +51,9 @@ const StatsScreen = () => {
   
   // Hook pour les données d'export
   const exportData = useStockPageData();
+  
+  // Hook pour les données de sources et dépôt-vente
+  const { sourcePerformance, consignmentPayments, totalConsignmentPayments } = useSourcesDashboardData();
 
   // Reset tooltip function
   const resetTooltip = useCallback(() => {
@@ -326,6 +329,107 @@ const StatsScreen = () => {
               <ContainerBarChart data={itemsByContainer} height={280} />
             ) : (
               <Text style={styles.noDataText}>Aucune donnée de container disponible</Text>
+            )}
+          </View>
+
+          {/* Performance des Sources */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Performance des Sources</Text>
+            {sourcePerformance && sourcePerformance.length > 0 ? (
+              <View style={styles.sourcePerformanceContainer}>
+                {sourcePerformance.slice(0, 5).map((source, index) => (
+                  <View key={source.sourceId} style={styles.sourceCard}>
+                    <View style={styles.sourceHeader}>
+                      <Text style={styles.sourceName}>{source.sourceName}</Text>
+                      <Text style={styles.sourceRank}>#{index + 1}</Text>
+                    </View>
+                    <View style={styles.sourceStats}>
+                      <View style={styles.sourceStat}>
+                        <Text style={styles.sourceStatLabel}>Articles</Text>
+                        <Text style={styles.sourceStatValue}>{source.totalItems}</Text>
+                      </View>
+                      <View style={styles.sourceStat}>
+                        <Text style={styles.sourceStatLabel}>Vendus</Text>
+                        <Text style={styles.sourceStatValue}>{source.soldItems}</Text>
+                      </View>
+                      <View style={styles.sourceStat}>
+                        <Text style={styles.sourceStatLabel}>Profit</Text>
+                        <Text style={[
+                          styles.sourceStatValue, 
+                          { color: source.totalProfit >= 0 ? activeTheme.success : activeTheme.error }
+                        ]}>
+                          {formatCurrency(source.totalProfit)}
+                        </Text>
+                      </View>
+                      <View style={styles.sourceStat}>
+                        <Text style={styles.sourceStatLabel}>ROI</Text>
+                        <Text style={[
+                          styles.sourceStatValue,
+                          { color: source.averageRoi >= 0 ? activeTheme.success : activeTheme.error }
+                        ]}>
+                          {source.averageRoi.toFixed(1)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+                {sourcePerformance.length > 5 && (
+                  <Text style={styles.moreItemsText}>
+                    et {sourcePerformance.length - 5} source(s) de plus...
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.noDataText}>Aucune donnée de source disponible</Text>
+            )}
+          </View>
+
+          {/* Paiements Dépôt-Vente */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Paiements Dépôt-Vente</Text>
+            {consignmentPayments && consignmentPayments.length > 0 ? (
+              <View style={styles.consignmentContainer}>
+                <View style={styles.consignmentSummary}>
+                  <Text style={styles.consignmentTotalLabel}>Total à payer</Text>
+                  <Text style={styles.consignmentTotalValue}>
+                    {formatCurrency(totalConsignmentPayments)}
+                  </Text>
+                </View>
+                
+                <View style={styles.consignmentList}>
+                  {consignmentPayments.slice(0, 10).map((payment) => (
+                    <View key={payment.itemId} style={styles.consignmentItem}>
+                      <View style={styles.consignmentInfo}>
+                        <Text style={styles.consignmentItemName}>{payment.itemName}</Text>
+                        <Text style={styles.consignmentConsignor}>
+                          Déposant: {payment.consignorName}
+                        </Text>
+                        <Text style={styles.consignmentDetails}>
+                          {payment.commissionType === 'amount' 
+                            ? `Commission: ${formatCurrency(payment.commission)} (fixe)`
+                            : `Commission: ${payment.commission}% (sur ${formatCurrency(payment.sellingPrice)})`
+                          }
+                        </Text>
+                      </View>
+                      <View style={styles.consignmentAmount}>
+                        <Text style={styles.consignmentPayment}>
+                          {formatCurrency(payment.paymentAmount)}
+                        </Text>
+                        <Text style={styles.consignmentDate}>
+                          {format(new Date(payment.soldAt), 'dd/MM/yyyy', { locale: fr })}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                  {consignmentPayments.length > 10 && (
+                    <Text style={styles.moreItemsText}>
+                      et {consignmentPayments.length - 10} paiement(s) de plus...
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.noDataText}>Aucun paiement de dépôt-vente en attente</Text>
             )}
           </View>
 

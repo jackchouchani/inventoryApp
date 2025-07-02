@@ -171,6 +171,7 @@ Ce document détaille les prochaines fonctionnalités à implémenter pour enric
 
 ### 5.1. Schéma de Données Supabase
 
+
 - [x] **Nouvelle table `item_history` :**
   - [x] `id`: `int8`, PK, auto-increment.
   - [x] `item_id`: `int8`, FK vers `items.id`.

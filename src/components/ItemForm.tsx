@@ -19,6 +19,7 @@ import { checkPhotoPermissions } from '../utils/permissions';
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '../contexts/ThemeContext';
 import { useAllLocations } from '../hooks/useOptimizedSelectors';
+import { useSourceSelector } from '../hooks/useSourcesOptimized';
 
 const FORM_VALIDATION = {
     NAME_MAX_LENGTH: 100,
@@ -71,6 +72,14 @@ interface ItemFormState {
     containerId?: number | null;
     categoryId?: number | null;
     locationId?: number | null;
+    sourceId?: number | null;
+    isConsignment: boolean;
+    consignorName: string;
+    consignmentSplitPercentage: string;
+    // Nouveaux champs pour le système de commission
+    consignorAmount: string; // Prix que reçoit le déposant
+    consignmentCommission: string;
+    consignmentCommissionType: 'amount' | 'percentage';
 }
 
 const INITIAL_STATE: ItemFormState = {
@@ -83,6 +92,13 @@ const INITIAL_STATE: ItemFormState = {
     containerId: null, // Aucun container sélectionné par défaut
     categoryId: null,
     locationId: null,
+    sourceId: null,
+    isConsignment: false,
+    consignorName: '',
+    consignmentSplitPercentage: '',
+    consignorAmount: '', // Prix que reçoit le déposant
+    consignmentCommission: '',
+    consignmentCommissionType: 'amount', // Par défaut en numérique
 };
 
 /**
@@ -326,9 +342,11 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
     
     const dispatch = useDispatch<AppDispatch>();
     const [item, setItem] = useState<ItemFormState>(INITIAL_STATE);
+    const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
     const { uploadPhoto } = usePhoto();
     const router = useRouter();
     const { activeTheme } = useAppTheme();
+    const { sourceOptions, isLoading: sourcesLoading } = useSourceSelector();
     
     // État pour suivre l'upload en cours
     const [isUploading, setIsUploading] = useState(false);
@@ -368,33 +386,65 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
         const purchasePrice = parseFloat(item.purchasePrice);
         const sellingPrice = parseFloat(item.sellingPrice);
         
-        if (isNaN(purchasePrice) || purchasePrice < FORM_VALIDATION.MIN_PRICE) {
+        // Prix d'achat optionnel en mode dépôt-vente
+        if (!item.isConsignment && (isNaN(purchasePrice) || purchasePrice < FORM_VALIDATION.MIN_PRICE)) {
             errors.push({ 
                 field: 'purchasePrice', 
                 message: 'Le prix d\'achat doit être un nombre positif' 
             });
-        } else if (purchasePrice > FORM_VALIDATION.MAX_PRICE) {
+        } else if (!item.isConsignment && purchasePrice > FORM_VALIDATION.MAX_PRICE) {
             errors.push({ 
                 field: 'purchasePrice', 
                 message: `Le prix d'achat ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
             });
         }
         
-        if (isNaN(sellingPrice) || sellingPrice < FORM_VALIDATION.MIN_PRICE) {
-            errors.push({ 
-                field: 'sellingPrice', 
-                message: 'Le prix de vente doit être un nombre positif' 
-            });
-        } else if (sellingPrice > FORM_VALIDATION.MAX_PRICE) {
-            errors.push({ 
-                field: 'sellingPrice', 
-                message: `Le prix de vente ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
-            });
+        // Validation du prix de vente - seulement pour les articles normaux (pas en consignation)
+        if (!item.isConsignment) {
+            if (isNaN(sellingPrice) || sellingPrice < FORM_VALIDATION.MIN_PRICE) {
+                errors.push({ 
+                    field: 'sellingPrice', 
+                    message: 'Le prix de vente doit être un nombre positif' 
+                });
+            } else if (sellingPrice > FORM_VALIDATION.MAX_PRICE) {
+                errors.push({ 
+                    field: 'sellingPrice', 
+                    message: `Le prix de vente ne peut pas dépasser ${FORM_VALIDATION.MAX_PRICE}` 
+                });
+            }
         }
         
         // Validation de la catégorie
         if (!item.categoryId) {
             errors.push({ field: 'categoryId', message: 'La catégorie est requise' });
+        }
+        
+        // Validation des champs dépôt-vente
+        if (item.isConsignment) {
+            if (!item.consignorName.trim()) {
+                errors.push({ field: 'consignorName', message: 'Le nom du déposant est requis' });
+            }
+            
+            if (!item.consignorAmount.trim()) {
+                errors.push({ field: 'consignorAmount', message: 'Le prix déposant est requis' });
+            } else {
+                const consignorPrice = parseFloat(item.consignorAmount);
+                if (isNaN(consignorPrice) || consignorPrice < 0) {
+                    errors.push({ field: 'consignorAmount', message: 'Le prix déposant doit être un nombre positif' });
+                }
+            }
+            
+            if (!item.consignmentCommission.trim()) {
+                errors.push({ field: 'consignmentCommission', message: 'La commission est requise' });
+            } else {
+                const commission = parseFloat(item.consignmentCommission);
+                if (isNaN(commission) || commission < 0) {
+                    errors.push({ field: 'consignmentCommission', message: 'La commission doit être un nombre positif' });
+                }
+                if (item.consignmentCommissionType === 'percentage' && commission > 100) {
+                    errors.push({ field: 'consignmentCommission', message: 'Le pourcentage ne peut pas dépasser 100%' });
+                }
+            }
         }
         
         return errors;
@@ -476,12 +526,26 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
     // Modifier la fonction handleSubmit pour éviter les doubles uploads
     const handleSubmit = async () => {
+        console.log("[ItemForm] handleSubmit - Début de la soumission");
+        console.log("[ItemForm] handleSubmit - État du formulaire:", item);
+        
         try {
             const errors = validateForm();
+            console.log("[ItemForm] handleSubmit - Erreurs de validation:", errors);
+            
             if (errors.length > 0) {
+                console.log("[ItemForm] handleSubmit - Validation échouée:", errors);
+                console.log("[ItemForm] handleSubmit - État item pour debug:", {
+                    name: item.name,
+                    categoryId: item.categoryId,
+                    isConsignment: item.isConsignment,
+                    consignorName: item.consignorName,
+                    consignorAmount: item.consignorAmount,
+                    consignmentCommission: item.consignmentCommission
+                });
                 Alert.alert(
                     'Erreurs de validation',
-                    errors.map(error => error.message).join('\n')
+                    errors.map(error => `${error.field}: ${error.message}`).join('\n')
                 );
                 return;
             }
@@ -522,25 +586,50 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
             }
 
             console.log("[ItemForm] handleSubmit - Préparation des données pour l'ajout à la base de données");
-            const purchasePrice = parseFloat(item.purchasePrice);
-            const sellingPrice = parseFloat(item.sellingPrice);
+            const purchasePrice = parseFloat(item.purchasePrice) || 0;
+            const sellingPrice = parseFloat(item.sellingPrice) || 0;
+            
+            console.log("[ItemForm] handleSubmit - Prix parsés:", { purchasePrice, sellingPrice });
+            console.log("[ItemForm] handleSubmit - Mode dépôt-vente:", item.isConsignment);
 
             // Assurer que categoryId n'est pas null (mais peut être undefined)
             const categoryId = item.categoryId || 1; // Fallback vers une catégorie par défaut
+
+            console.log("[ItemForm] handleSubmit - Appel de createItem avec les données:", {
+                name: item.name.trim(),
+                categoryId,
+                isConsignment: item.isConsignment,
+                sellingPrice,
+                purchasePrice: item.isConsignment ? 0 : purchasePrice,
+            });
 
             // ✅ UTILISER REDUX THUNK directement
             await dispatch(createItem({
                 name: item.name.trim(),
                 description: item.description.trim(),
-                purchasePrice: isNaN(purchasePrice) ? 0 : purchasePrice,
-                sellingPrice: isNaN(sellingPrice) ? 0 : sellingPrice,
+                purchasePrice: item.isConsignment ? 0 : (isNaN(purchasePrice) ? 0 : purchasePrice), // 0 en mode dépôt-vente
+                sellingPrice: item.isConsignment ? 
+                    calculateFinalPrice(item.consignorAmount, item.consignmentCommission, item.consignmentCommissionType) : 
+                    (isNaN(sellingPrice) ? 0 : sellingPrice), // Prix final en mode dépôt-vente
                 categoryId,
                 containerId: item.containerId || null,
                 locationId: item.locationId || null,
+                sourceId: item.sourceId || null,
+                isConsignment: item.isConsignment,
+                consignorName: item.isConsignment ? item.consignorName.trim() : undefined,
+                consignmentSplitPercentage: item.isConsignment ? 
+                    parseFloat(item.consignmentSplitPercentage) || 0 : undefined,
+                // Nouveaux champs pour le système de commission
+                consignmentCommission: item.isConsignment ? 
+                    parseFloat(item.consignmentCommission) || 0 : undefined,
+                consignmentCommissionType: item.isConsignment ? item.consignmentCommissionType : undefined,
+                consignorAmount: item.isConsignment ? 
+                    parseFloat(item.consignorAmount) || 0 : undefined,
                 qrCode: await generateUniqueItemQRCode(),
                 photo_storage_url: photoStorageUrl
             })).unwrap();
 
+            console.log("[ItemForm] handleSubmit - Article créé avec succès");
             resetForm();
             onSuccess?.();
 
@@ -570,6 +659,18 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
     const handleCategorySelect = useCallback((categoryId: number | undefined) => {
         if (categoryId) {
             setItem(prev => ({ ...prev, categoryId }));
+        }
+    }, []);
+
+    // Fonction pour calculer le prix final en mode dépôt-vente
+    const calculateFinalPrice = useCallback((consignorAmount: string, commission: string, commissionType: 'amount' | 'percentage') => {
+        const deposantPrice = parseFloat(consignorAmount) || 0;
+        const comm = parseFloat(commission) || 0;
+        
+        if (commissionType === 'percentage') {
+            return deposantPrice + (deposantPrice * comm / 100);
+        } else {
+            return deposantPrice + comm;
         }
     }, []);
 
@@ -649,32 +750,218 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                     />
                 </View>
 
+                {/* Section Source */}
                 <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Prix</Text>
-                    <View style={styles.priceContainer}>
-                        <View style={styles.priceWrapper}>
-                            <Text style={styles.priceLabel}>Prix d'achat</Text>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="0.00"
-                                value={item.purchasePrice}
-                                keyboardType="numeric"
-                                onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
+                    <Text style={styles.sectionTitle}>Source</Text>
+                    {sourcesLoading ? (
+                        <Text style={styles.loadingText}>Chargement des sources...</Text>
+                    ) : (
+                        <View style={styles.sourceContainer}>
+                            <Text style={styles.inputLabel}>Source d'approvisionnement</Text>
+                            
+                            {/* Bouton principal de la dropdown */}
+                            <TouchableOpacity
+                                style={[
+                                    styles.sourceDropdownHeader,
+                                    sourceDropdownOpen && styles.sourceDropdownHeaderOpen
+                                ]}
+                                onPress={() => setSourceDropdownOpen(!sourceDropdownOpen)}
+                            >
+                                <Text style={[
+                                    styles.sourceDropdownHeaderText,
+                                    !item.sourceId && styles.sourceDropdownPlaceholder
+                                ]}>
+                                    {item.sourceId 
+                                        ? sourceOptions.find(s => s.value === item.sourceId)?.label || 'Source inconnue'
+                                        : 'Sélectionner une source (optionnel)'
+                                    }
+                                </Text>
+                                <Icon 
+                                    name={sourceDropdownOpen ? "expand_less" : "expand_more"} 
+                                    size={20} 
+                                    color={activeTheme.text.secondary} 
+                                />
+                            </TouchableOpacity>
+                            
+                            {/* Options de la dropdown */}
+                            {sourceDropdownOpen && (
+                                <View style={styles.sourceDropdownOptions}>
+                                    <TouchableOpacity
+                                        style={styles.sourceDropdownOption}
+                                        onPress={() => {
+                                            setItem(prev => ({ ...prev, sourceId: null }));
+                                            setSourceDropdownOpen(false);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.sourceDropdownOptionText,
+                                            !item.sourceId && styles.sourceDropdownOptionSelected
+                                        ]}>
+                                            Aucune source
+                                        </Text>
+                                        {!item.sourceId && <Icon name="check" size={16} color={activeTheme.primary} />}
+                                    </TouchableOpacity>
+                                    
+                                    {sourceOptions.map(option => (
+                                        <TouchableOpacity
+                                            key={option.value}
+                                            style={styles.sourceDropdownOption}
+                                            onPress={() => {
+                                                console.log('[ItemForm] Selected source:', option.value);
+                                                setItem(prev => ({ ...prev, sourceId: option.value }));
+                                                setSourceDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={[
+                                                styles.sourceDropdownOptionText,
+                                                item.sourceId === option.value && styles.sourceDropdownOptionSelected
+                                            ]}>
+                                                {option.label}
+                                            </Text>
+                                            {item.sourceId === option.value && <Icon name="check" size={16} color={activeTheme.primary} />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
                         </View>
-                        <View style={styles.priceWrapper}>
-                            <Text style={styles.priceLabel}>Prix de vente</Text>
-                            <TextInput
-                                style={[styles.input, styles.priceInput]}
-                                placeholder="0.00"
-                                value={item.sellingPrice}
-                                keyboardType="numeric"
-                                onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
-                                placeholderTextColor={activeTheme.text.secondary}
-                            />
-                        </View>
+                    )}
+                </View>
+
+                {/* Section Nom du déposant - uniquement en mode dépôt-vente */}
+                {item.isConsignment && (
+                    <View style={styles.formSection}>
+                        <Text style={styles.sectionTitle}>Déposant</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Nom du déposant"
+                            value={item.consignorName}
+                            onChangeText={(text) => setItem(prev => ({ ...prev, consignorName: text }))}
+                            placeholderTextColor={activeTheme.text.secondary}
+                        />
                     </View>
+                )}
+
+                <View style={styles.formSection}>
+                    {/* Header avec toggle dépôt-vente */}
+                    <View style={styles.priceHeaderContainer}>
+                        <Text style={styles.sectionTitle}>Prix</Text>
+                        <TouchableOpacity
+                            style={[styles.consignmentToggleCompact, item.isConsignment && styles.consignmentToggleCompactActive]}
+                            onPress={() => setItem(prev => ({ 
+                                ...prev, 
+                                isConsignment: !prev.isConsignment,
+                                consignorName: !prev.isConsignment ? prev.consignorName : '',
+                                consignorAmount: !prev.isConsignment ? prev.consignorAmount : '',
+                                consignmentCommission: !prev.isConsignment ? prev.consignmentCommission : '',
+                            }))}
+                        >
+                            <View style={[styles.switchCompact, item.isConsignment && styles.switchCompactActive]}>
+                                <View style={[styles.switchThumbCompact, item.isConsignment && styles.switchThumbCompactActive]} />
+                            </View>
+                            <Text style={styles.consignmentToggleText}>
+                                Dépôt-vente
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Champs prix - mode normal */}
+                    {!item.isConsignment && (
+                        <View style={styles.priceFieldsContainer}>
+                            <View style={styles.priceFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="100"
+                                    value={item.purchasePrice}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setItem(prev => ({ ...prev, purchasePrice: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+                            <View style={styles.priceFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="200"
+                                    value={item.sellingPrice}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setItem(prev => ({ ...prev, sellingPrice: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Champs prix - mode dépôt-vente */}
+                    {item.isConsignment && (
+                        <View style={styles.consignmentFieldsContainer}>
+                            {/* Prix déposant */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <Text style={styles.priceLabel}>Prix déposant (€)</Text>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder="150"
+                                    value={item.consignorAmount}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setItem(prev => ({ ...prev, consignorAmount: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+
+                            {/* Commission avec toggle */}
+                            <View style={styles.consignmentFieldWrapper}>
+                                <View style={styles.commissionLabelContainer}>
+                                    <Text style={styles.priceLabel}>Commission</Text>
+                                    <View style={styles.commissionToggle}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.toggleButton,
+                                                item.consignmentCommissionType === 'amount' && styles.toggleButtonActive
+                                            ]}
+                                            onPress={() => setItem(prev => ({ ...prev, consignmentCommissionType: 'amount' }))}
+                                        >
+                                            <Text style={[
+                                                styles.toggleButtonText,
+                                                item.consignmentCommissionType === 'amount' && styles.toggleButtonTextActive
+                                            ]}>€</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.toggleButton,
+                                                item.consignmentCommissionType === 'percentage' && styles.toggleButtonActive
+                                            ]}
+                                            onPress={() => setItem(prev => ({ ...prev, consignmentCommissionType: 'percentage' }))}
+                                        >
+                                            <Text style={[
+                                                styles.toggleButtonText,
+                                                item.consignmentCommissionType === 'percentage' && styles.toggleButtonTextActive
+                                            ]}>%</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                                <TextInput
+                                    style={[styles.input, styles.priceInput]}
+                                    placeholder={item.consignmentCommissionType === 'percentage' ? '10' : '5.00'}
+                                    value={item.consignmentCommission}
+                                    keyboardType="decimal-pad"
+                                    onChangeText={(text) => setItem(prev => ({ ...prev, consignmentCommission: text }))}
+                                    placeholderTextColor={activeTheme.text.secondary}
+                                />
+                            </View>
+
+                            {/* Prix final calculé */}
+                            {item.consignorAmount && item.consignorAmount.trim() && item.consignmentCommission && item.consignmentCommission.trim() && (
+                                <View style={styles.consignmentFieldWrapper}>
+                                    <Text style={styles.priceLabel}>Prix final client</Text>
+                                    <View style={styles.finalPriceDisplayContainer}>
+                                        <Text style={styles.finalPriceDisplayValue}>
+                                            {`${(calculateFinalPrice(item.consignorAmount, item.consignmentCommission, item.consignmentCommissionType) || 0).toFixed(2)} €`}
+                                        </Text>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.formSection}>
@@ -732,7 +1019,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                 </View>
 
                 <View style={styles.formSection}>
-                    <Text style={styles.sectionTitle}>Emplacement</Text>
+                    <Text style={styles.sectionTitle}>Container</Text>
                     <ContainerList
                         containers={containers}
                         selectedId={item.containerId}
@@ -817,6 +1104,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                     />
                 </View>
             </ScrollView>
+
         </View>
     );
 };
@@ -1121,46 +1409,184 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     addIcon: {
         marginRight: 8,
     },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 20,
-        width: '100%',
-        maxWidth: 500,
-        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-        elevation: 5,
-    },
-    modalButtonsContainer: {
+    sourceDropdownHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 16,
-        gap: 12,
-    },
-    modalButton: {
-        flex: 1,
+        alignItems: 'center',
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
         paddingVertical: 12,
         paddingHorizontal: 16,
+        marginTop: 8,
+    },
+    sourceDropdownHeaderOpen: {
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        borderBottomColor: theme.primary,
+    },
+    sourceDropdownHeaderText: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+    },
+    sourceDropdownPlaceholder: {
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+    },
+    sourceDropdownOptions: {
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderTopWidth: 0,
+        borderColor: theme.border,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        maxHeight: 200,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+            },
+        }),
+    },
+    sourceDropdownOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+    },
+    sourceDropdownOptionText: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+    },
+    sourceDropdownOptionSelected: {
+        color: theme.primary,
+        fontWeight: '600',
+    },
+    priceHeaderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    consignmentToggleCompact: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: theme.backgroundSecondary,
         borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+    },
+    consignmentToggleCompactActive: {
+        backgroundColor: theme.primaryLight,
+        borderColor: theme.primary,
+    },
+    switchCompact: {
+        width: 36,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: theme.border,
+        padding: 2,
+        marginRight: 8,
+    },
+    switchCompactActive: {
+        backgroundColor: theme.primary,
+    },
+    switchThumbCompact: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: theme.text.onPrimary,
+        transform: [{ translateX: 0 }],
+    },
+    switchThumbCompactActive: {
+        transform: [{ translateX: 16 }],
+    },
+    consignmentToggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+    },
+    priceFieldsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        ...Platform.select({
+            default: {
+                flexWrap: 'wrap',
+            },
+        }),
+    },
+    priceFieldWrapper: {
+        flex: 1,
+        minWidth: 140,
+    },
+    consignmentFieldsContainer: {
+        gap: 16,
+    },
+    consignmentFieldWrapper: {
+        width: '100%',
+    },
+    commissionLabelContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    finalPriceDisplayContainer: {
+        backgroundColor: theme.primaryContainer + '20',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.primary + '30',
         alignItems: 'center',
         justifyContent: 'center',
+        minHeight: 48,
     },
-    modalButtonSave: {
-        backgroundColor: '#007AFF',
+    finalPriceDisplayValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: theme.primary,
+        textAlign: 'center',
     },
-    modalButtonCancel: {
-        backgroundColor: '#8E8E93',
+    commissionToggle: {
+        flexDirection: 'row',
+        backgroundColor: theme.border,
+        borderRadius: 6,
+        padding: 2,
+        flexShrink: 0,
     },
-    modalButtonText: {
-        color: '#fff',
-        fontSize: 16,
+    toggleButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 4,
+        backgroundColor: 'transparent',
+    },
+    toggleButtonActive: {
+        backgroundColor: theme.primary,
+    },
+    toggleButtonText: {
+        fontSize: 14,
         fontWeight: '600',
+        color: theme.text.secondary,
+    },
+    toggleButtonTextActive: {
+        color: theme.text.onPrimary,
     },
     disabledButton: {
         opacity: 0.5,
@@ -1227,6 +1653,101 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     inputText: {
         fontSize: 16,
         color: theme.text.primary,
+    },
+    
+    // Styles pour la section Source
+    sourceContainer: {
+        marginBottom: 16,
+    },
+    sourcePickerContainer: {
+        marginTop: 8,
+    },
+    sourcePicker: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        padding: 12,
+        backgroundColor: theme.background,
+        minHeight: 48,
+    },
+    sourcePickerSelected: {
+        borderColor: theme.primary,
+        backgroundColor: theme.surface,
+    },
+    sourcePickerText: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+    },
+    sourcePickerPlaceholder: {
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+    },
+    loadingText: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+        textAlign: 'center',
+        padding: 16,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.text.primary,
+        marginBottom: 4,
+    },
+
+    // Styles pour la section Dépôt-vente
+    consignmentContainer: {
+        gap: 16,
+    },
+    switchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 8,
+    },
+    switchContainerActive: {
+        // Optionnel: style pour le conteneur actif
+    },
+    switch: {
+        width: 50,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: theme.text.disabled,
+        justifyContent: 'center',
+        padding: 2,
+    },
+    switchActive: {
+        backgroundColor: theme.primary,
+    },
+    switchThumb: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    switchThumbActive: {
+        alignSelf: 'flex-end',
+    },
+    switchLabel: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: theme.text.primary,
+    },
+    consignmentInfo: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+        marginTop: 4,
     },
 });
 
