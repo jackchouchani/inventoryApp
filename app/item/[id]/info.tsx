@@ -16,6 +16,7 @@ import { AppDispatch } from '../../../src/store/store';
 import { updateItemStatus } from '../../../src/store/itemsThunks';
 import { useAppTheme, type AppThemeType } from '../../../src/contexts/ThemeContext';
 import { SimilarItems } from '../../../src/components';
+import ItemHistoryList from '../../../src/components/ItemHistoryList';
 
 export default function ItemInfoScreen() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function ItemInfoScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isReceiptGeneratorVisible, setIsReceiptGeneratorVisible] = useState(false);
   const [isLabelGeneratorVisible, setIsLabelGeneratorVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
 
   // Utiliser Redux pour tout
   const { item, isLoading, error, refetch } = useItem(id as string);
@@ -200,72 +202,95 @@ export default function ItemInfoScreen() {
         <View style={styles.itemDetails}>
           <Text style={styles.itemName}>{item.name}</Text>
           
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Prix d'achat:</Text>
-            <Text style={styles.infoValue}>
-              {formatCurrency(item.purchasePrice || 0)}
-            </Text>
+          <View style={styles.tabContainer}>
+            <TouchableOpacity 
+              style={[styles.tabButton, activeTab === 'details' && styles.activeTabButton]}
+              onPress={() => setActiveTab('details')}
+            >
+              <Text style={[styles.tabButtonText, activeTab === 'details' && styles.activeTabButtonText]}>Détails</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.tabButton, activeTab === 'history' && styles.activeTabButton]}
+              onPress={() => setActiveTab('history')}
+            >
+              <Text style={[styles.tabButtonText, activeTab === 'history' && styles.activeTabButtonText]}>Historique</Text>
+            </TouchableOpacity>
           </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Prix de vente:</Text>
-            <Text style={styles.infoValue}>
-              {formatCurrency(item.sellingPrice || 0)}
-            </Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Catégorie:</Text>
-            <Text style={styles.infoValue}>
-              {category?.name || 'Non spécifiée'}
-            </Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Container:</Text>
-            <Text style={styles.infoValue}>
-              {container ? `${container.name}#${container.number}` : 'Non spécifié'}
-            </Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Emplacement:</Text>
-            <Text style={styles.infoValue}>
-              {location ? location.name : 'Non spécifié'}
-            </Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Statut:</Text>
-            <Text style={[
-              styles.statusValue,
-              item.status === 'available' ? styles.availableStatus : styles.soldStatus
-            ]}>
-              {item.status === 'available' ? 'Disponible' : 'Vendu'}
-            </Text>
-          </View>
-          
-          {item.status === 'sold' && item.soldAt && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Date de vente:</Text>
-              <Text style={styles.infoValue}>
-                {new Date(item.soldAt).toLocaleDateString('fr-FR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </Text>
-            </View>
+
+          {activeTab === 'details' && (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Prix d'achat:</Text>
+                <Text style={styles.infoValue}>
+                  {formatCurrency(item.purchasePrice || 0)}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Prix de vente:</Text>
+                <Text style={styles.infoValue}>
+                  {formatCurrency(item.sellingPrice || 0)}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Catégorie:</Text>
+                <Text style={styles.infoValue}>
+                  {category?.name || 'Non spécifiée'}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Container:</Text>
+                <Text style={styles.infoValue}>
+                  {container ? `${container.name}#${container.number}` : 'Non spécifié'}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Emplacement:</Text>
+                <Text style={styles.infoValue}>
+                  {location ? location.name : 'Non spécifié'}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Statut:</Text>
+                <Text style={[
+                  styles.statusValue,
+                  item.status === 'available' ? styles.availableStatus : styles.soldStatus
+                ]}>
+                  {item.status === 'available' ? 'Disponible' : 'Vendu'}
+                </Text>
+              </View>
+              
+              {item.status === 'sold' && item.soldAt && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Date de vente:</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(item.soldAt).toLocaleDateString('fr-FR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Text>
+                </View>
+              )}
+              
+              {item.description ? (
+                <View style={styles.descriptionContainer}>
+                  <Text style={styles.infoLabel}>Description:</Text>
+                  <Text style={styles.description}>{item.description}</Text>
+                </View>
+              ) : null}
+            </>
           )}
-          
-          {item.description ? (
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.infoLabel}>Description:</Text>
-              <Text style={styles.description}>{item.description}</Text>
-            </View>
-          ) : null}
+
+          {activeTab === 'history' && (
+            <ItemHistoryList itemId={Number(id)} />
+          )}
           
           <View style={styles.buttonsContainer}>
             <TouchableOpacity
@@ -510,6 +535,30 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    backgroundColor: theme.background,
+    borderRadius: 8,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  activeTabButton: {
+    backgroundColor: theme.primary,
+  },
+  tabButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text.secondary,
+  },
+  activeTabButtonText: {
+    color: theme.text.onPrimary,
   },
   itemName: {
     fontSize: 22,

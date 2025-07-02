@@ -482,6 +482,15 @@ const SettingsScreen = () => {
       </TouchableOpacity>
 
       <TouchableOpacity 
+        style={styles.menuItem}
+        onPress={() => router.push('/(stack)/audit-log')}
+      >
+        <Icon name="history" size={24} color={activeTheme.primary} />
+        <Text style={styles.menuText}>Journal d'Audit</Text>
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
         style={[styles.menuItem, styles.dangerItem]}
         onPress={handleLogout}
       >

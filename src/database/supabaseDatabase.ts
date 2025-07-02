@@ -4,6 +4,7 @@ import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import type { Location, LocationInput, LocationUpdate } from '../types/location';
+import type { ItemHistory } from '../types/itemHistory';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -858,6 +859,61 @@ export class SupabaseDatabase implements DatabaseInterface {
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
       throw error;
+    }
+  }
+
+  async getItemHistory(itemId: number): Promise<ItemHistory[]> {
+    try {
+      const { data, error } = await supabase
+        .from('item_history')
+        .select('*')
+        .eq('item_id', itemId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (!data) return [];
+
+      return data.map(history => ({
+        id: history.id,
+        itemId: history.item_id,
+        userId: history.user_id,
+        action: history.action,
+        details: history.details,
+        createdAt: history.created_at,
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return [];
+    }
+  }
+
+  async getGlobalHistory(page: number, limit: number): Promise<{ history: ItemHistory[], total: number }> {
+    try {
+      const from = page * limit;
+      const to = from + limit - 1;
+
+      const { data, error, count } = await supabase
+        .rpc('get_global_item_history', { page_num: page, page_size: limit })
+
+      if (error) throw error;
+      if (!data) return { history: [], total: 0 };
+
+      const history = data.map((entry: any) => ({
+        id: entry.id,
+        itemId: entry.item_id,
+        userId: entry.user_id,
+        action: entry.action,
+        details: entry.details,
+        createdAt: entry.created_at,
+        itemName: entry.item_name,
+        userEmail: entry.user_email,
+      }));
+
+      return { history, total: count || 0 };
+
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return { history: [], total: 0 };
     }
   }
 }
