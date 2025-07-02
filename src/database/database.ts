@@ -3,6 +3,7 @@ import type { Category, CategoryInput, CategoryUpdate } from '../types/category'
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import type { Location, LocationInput } from '../types/location';
 import type { Source, SourceInput, SourceUpdate } from '../types/source';
+import type { ItemHistory } from '../types/itemHistory';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -63,6 +64,8 @@ const boundDatabase = {
   addSource: supabaseDatabase.addSource.bind(supabaseDatabase),
   updateSource: supabaseDatabase.updateSource.bind(supabaseDatabase),
   deleteSource: supabaseDatabase.deleteSource.bind(supabaseDatabase)
+  getItemHistory: supabaseDatabase.getItemHistory.bind(supabaseDatabase),
+  getGlobalHistory: supabaseDatabase.getGlobalHistory.bind(supabaseDatabase)
 };
 
 // Exporter les fonctions avec logging
@@ -112,6 +115,7 @@ export type { Category, CategoryInput, CategoryUpdate } from '../types/category'
 export type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 export type { Location, LocationInput, LocationUpdate } from '../types/location';
 export type { Source, SourceInput, SourceUpdate } from '../types/source';
+export type { ItemHistory } from '../types/itemHistory';
 
 export interface DatabaseInterface {
     // Méthodes pour les items
@@ -120,6 +124,8 @@ export interface DatabaseInterface {
     deleteItem: (id: number) => Promise<void>;
     getItems: () => Promise<Item[]>;
     getItem: (id: number) => Promise<Item | null>;
+    getItemHistory: (itemId: number) => Promise<ItemHistory[]>;
+    getGlobalHistory: (page: number, limit: number) => Promise<{ history: ItemHistory[], total: number }>;
     searchItems: (query: string) => Promise<Item[]>;
     updateItemStatus: (id: number, status: Item['status']) => Promise<void>;
     getItemByQRCode: (qrCode: string) => Promise<Item | null>;
