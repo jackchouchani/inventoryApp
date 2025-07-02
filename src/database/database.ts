@@ -2,6 +2,7 @@ import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import type { Location, LocationInput } from '../types/location';
+import type { ItemHistory } from '../types/itemHistory';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -56,7 +57,9 @@ const boundDatabase = {
   removePhotoUri: supabaseDatabase.removePhotoUri.bind(supabaseDatabase),
   saveDatabase: supabaseDatabase.saveDatabase.bind(supabaseDatabase),
   resetDatabase: supabaseDatabase.resetDatabase.bind(supabaseDatabase),
-  storePhotoUri: supabaseDatabase.storePhotoUri.bind(supabaseDatabase)
+  storePhotoUri: supabaseDatabase.storePhotoUri.bind(supabaseDatabase),
+  getItemHistory: supabaseDatabase.getItemHistory.bind(supabaseDatabase),
+  getGlobalHistory: supabaseDatabase.getGlobalHistory.bind(supabaseDatabase)
 };
 
 // Exporter les fonctions avec logging
@@ -100,6 +103,7 @@ export type { Item, ItemInput, ItemUpdate } from '../types/item';
 export type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 export type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 export type { Location, LocationInput, LocationUpdate } from '../types/location';
+export type { ItemHistory } from '../types/itemHistory';
 
 export interface DatabaseInterface {
     // Méthodes pour les items
@@ -108,6 +112,8 @@ export interface DatabaseInterface {
     deleteItem: (id: number) => Promise<void>;
     getItems: () => Promise<Item[]>;
     getItem: (id: number) => Promise<Item | null>;
+    getItemHistory: (itemId: number) => Promise<ItemHistory[]>;
+    getGlobalHistory: (page: number, limit: number) => Promise<{ history: ItemHistory[], total: number }>;
     searchItems: (query: string) => Promise<Item[]>;
     updateItemStatus: (id: number, status: Item['status']) => Promise<void>;
     getItemByQRCode: (qrCode: string) => Promise<Item | null>;

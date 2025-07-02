@@ -35,6 +35,12 @@ export type ThemeColors = {
     text: string;
     background: string;
   };
+  feedback: {
+    success: string;
+    warning: string;
+    error: string;
+    info: string;
+  };
   // ... any other colors
 };
 
@@ -61,6 +67,12 @@ const lightTheme: AppThemeType = {
     disabled: '#C0C0C0', // Light gray
     inverse: '#FFFFFF',    // White
     onPrimary: '#FFFFFF',  // White text on primary background
+  },
+  feedback: {
+    success: '#34C759',
+    warning: '#FFCC00',
+    error: '#FF3B30',
+    info: '#2196F3',
   },
   border: '#D1D1D6',       // Light gray
   backdrop: 'rgba(0, 0, 0, 0.4)',
@@ -97,6 +109,12 @@ const darkTheme: AppThemeType = {
     disabled: '#505050', // Dark gray
     inverse: '#000000',    // Black
     onPrimary: '#FFFFFF',  // White text on primary background
+  },
+  feedback: {
+    success: '#30D158',
+    warning: '#FFD60A',
+    error: '#FF453A',
+    info: '#0A84FF',
   },
   border: '#38383A',       // Darker gray
   backdrop: 'rgba(0, 0, 0, 0.6)',

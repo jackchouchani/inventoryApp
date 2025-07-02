@@ -3,6 +3,7 @@ import itemsReducer from './itemsSlice';
 import categoriesReducer from './categorySlice';
 import containersReducer from './containersSlice';
 import locationsReducer from './locationsSlice';
+import auditLogReducer from './auditLogSlice';
 import { categoriesAdapter } from './categorySlice';
 import { itemsAdapter } from './itemsAdapter';
 import { containersAdapter } from './containersSlice';
@@ -16,6 +17,7 @@ const rootReducer = {
   categories: categoriesReducer,
   containers: containersReducer,
   locations: locationsReducer,
+  auditLog: auditLogReducer,
 };
 
 export const store = configureStore({
