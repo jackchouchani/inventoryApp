@@ -74,7 +74,17 @@ export const useStats = (selectedPeriod: 'week' | 'month' | 'year') => {
 
       const totalPurchaseValue = items.reduce((sum, item) => sum + item.purchasePrice, 0);
       const totalSellingValue = items.reduce((sum, item) => sum + item.sellingPrice, 0);
-      const totalProfit = totalSellingValue - totalPurchaseValue;
+      
+      // 🆕 NOUVELLE LOGIQUE PROFIT - différencier consignation vs achat/vente
+      const totalProfit = items.reduce((sum, item) => {
+        if (item.isConsignment) {
+          // Pour les consignations : profit = commission de l'app
+          return sum + (item.consignmentCommission || 0);
+        } else {
+          // Pour les achats/ventes normaux : profit = marge classique
+          return sum + (item.sellingPrice - item.purchasePrice);
+        }
+      }, 0);
 
       // 🆕 CALCUL STATS ARTICLES DISPONIBLES
       const availableItemsStats = {

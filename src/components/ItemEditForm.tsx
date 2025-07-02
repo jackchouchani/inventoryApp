@@ -7,6 +7,7 @@ import { AppDispatch } from '../store/store';
 import type { Category } from '../types/category';
 import type { Container } from '../types/container';
 import type { Location } from '../types/location';
+import type { Source } from '../types/source';
 import type { MaterialIconName } from '../types/icons';
 import type { Item } from '../types/item';
 import { validateItemName } from '../utils/validation';
@@ -18,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { useAppTheme, type AppThemeType } from '../contexts/ThemeContext';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { useAllLocations } from '../hooks/useOptimizedSelectors';
+import { useSourceSelector } from '../hooks/useSourcesOptimized';
 
 
 interface ItemEditFormProps {
@@ -39,6 +41,14 @@ interface EditedItemForm {
     containerId?: number | null;
     categoryId?: number;
     locationId?: number | null;
+    sourceId?: number | null;
+    isConsignment?: boolean;
+    consignorName?: string;
+    consignmentSplitPercentage?: number;
+    // Nouveaux champs pour le système de commission
+    consignorAmount?: string; // Prix que reçoit le déposant
+    consignmentCommission?: string;
+    consignmentCommissionType?: 'amount' | 'percentage';
 }
 
 const ContainerOption = memo(({ 
@@ -222,6 +232,9 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
     const allLocations = useAllLocations();
     const locations = propLocations || allLocations;
     
+    // Charger les sources disponibles
+    const { sourceOptions } = useSourceSelector();
+    
 
     const dispatch = useDispatch<AppDispatch>();
     const { uploadPhoto, deletePhoto, loadImage, state: photoHookState } = usePhoto();
@@ -240,7 +253,15 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         photo_storage_url: adaptedItem.photo_storage_url,
         containerId: adaptedItem.containerId,
         categoryId: adaptedItem.categoryId,
-        locationId: adaptedItem.locationId
+        locationId: adaptedItem.locationId,
+        sourceId: adaptedItem.sourceId,
+        isConsignment: adaptedItem.isConsignment || false,
+        consignorName: adaptedItem.consignorName || '',
+        consignmentSplitPercentage: adaptedItem.consignmentSplitPercentage || 50,
+        // Nouveaux champs pour le système de commission
+        consignorAmount: adaptedItem.consignorAmount?.toString() || '',
+        consignmentCommission: adaptedItem.consignmentCommission?.toString() || '',
+        consignmentCommissionType: adaptedItem.consignmentCommissionType || 'amount'
     });
 
     const initialItemState = useMemo(() => {
@@ -253,7 +274,15 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
             photo_storage_url: adaptedItem.photo_storage_url,
             containerId: adaptedItem.containerId,
             categoryId: adaptedItem.categoryId,
-            locationId: adaptedItem.locationId
+            locationId: adaptedItem.locationId,
+            sourceId: adaptedItem.sourceId,
+            isConsignment: adaptedItem.isConsignment || false,
+            consignorName: adaptedItem.consignorName || '',
+            consignmentSplitPercentage: adaptedItem.consignmentSplitPercentage || 50,
+            // Nouveaux champs pour le système de commission
+            consignorAmount: adaptedItem.consignorAmount?.toString() || '',
+            consignmentCommission: adaptedItem.consignmentCommission?.toString() || '',
+            consignmentCommissionType: adaptedItem.consignmentCommissionType || 'amount'
         };
         
         return result;
@@ -266,6 +295,9 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         visible: false,
         itemId: null
     });
+
+    const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+
 
 
 
@@ -293,7 +325,11 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
              editedItem.status !== initialItemState.status ||
              editedItem.containerId !== initialItemState.containerId ||
              editedItem.categoryId !== initialItemState.categoryId ||
-             editedItem.locationId !== initialItemState.locationId;
+             editedItem.locationId !== initialItemState.locationId ||
+             editedItem.sourceId !== initialItemState.sourceId ||
+             editedItem.isConsignment !== initialItemState.isConsignment ||
+             editedItem.consignorName !== initialItemState.consignorName ||
+             editedItem.consignmentSplitPercentage !== initialItemState.consignmentSplitPercentage;
 
          const photoChanged =
              localImageNeedsUpload ||
@@ -463,12 +499,18 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         const itemToUpdateToSendToDB: any = {
             name: editedItem.name,
             description: editedItem.description,
-            purchasePrice: parseFloat(editedItem.purchasePrice) || 0,
-            sellingPrice: parseFloat(editedItem.sellingPrice) || 0,
+            purchasePrice: editedItem.isConsignment ? 0 : (parseFloat(editedItem.purchasePrice) || 0),
+            sellingPrice: editedItem.isConsignment ? 
+                calculateFinalPrice(editedItem.consignorAmount || '0', editedItem.consignmentCommission || '0', editedItem.consignmentCommissionType || 'amount') : 
+                (parseFloat(editedItem.sellingPrice) || 0),
             status: editedItem.status,
             containerId: editedItem.containerId,
             categoryId: editedItem.categoryId,
-            locationId: editedItem.locationId
+            locationId: editedItem.locationId,
+            sourceId: editedItem.sourceId,
+            isConsignment: editedItem.isConsignment,
+            consignorName: editedItem.consignorName,
+            consignmentSplitPercentage: editedItem.consignmentSplitPercentage
         };
 
         if (finalPhotoStorageUrl !== undefined) {
@@ -488,6 +530,17 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     categoryId: itemToUpdateToSendToDB.categoryId,
                     containerId: itemToUpdateToSendToDB.containerId,
                     locationId: itemToUpdateToSendToDB.locationId,
+                    sourceId: itemToUpdateToSendToDB.sourceId,
+                    isConsignment: itemToUpdateToSendToDB.isConsignment,
+                    consignorName: itemToUpdateToSendToDB.consignorName,
+                    consignmentSplitPercentage: itemToUpdateToSendToDB.consignmentSplitPercentage,
+                    // Nouveaux champs pour le système de commission
+                    consignmentCommission: itemToUpdateToSendToDB.isConsignment ? 
+                        parseFloat(itemToUpdateToSendToDB.consignmentCommission || '0') || 0 : undefined,
+                    consignmentCommissionType: itemToUpdateToSendToDB.isConsignment ? 
+                        itemToUpdateToSendToDB.consignmentCommissionType : undefined,
+                    consignorAmount: itemToUpdateToSendToDB.isConsignment ? 
+                        parseFloat(itemToUpdateToSendToDB.consignorAmount || '0') || 0 : undefined,
                     photo_storage_url: finalPhotoStorageUrl
                 }
             })).unwrap();
@@ -609,6 +662,18 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
         });
     }, [router, adaptedItem.id]);
 
+    // Fonction pour calculer le prix final en mode dépôt-vente
+    const calculateFinalPrice = useCallback((consignorAmount: string, commission: string, commissionType: 'amount' | 'percentage') => {
+        const deposantPrice = parseFloat(consignorAmount) || 0;
+        const comm = parseFloat(commission) || 0;
+        
+        if (commissionType === 'percentage') {
+            return deposantPrice + (deposantPrice * comm / 100);
+        } else {
+            return deposantPrice + comm;
+        }
+    }, []);
+
     const handleContainerSelect = useCallback((containerId: number | undefined) => {
         if (containerId) {
             // Si on sélectionne un container, hériter de son emplacement
@@ -651,32 +716,106 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                 />
 
                 <View style={styles.priceContainer}>
-                    <View style={styles.priceInputWrapper}>
-                        <View style={styles.priceLabelContainer}>
-                            <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                    {/* Prix d'achat - optionnel en mode dépôt-vente */}
+                    {!editedItem.isConsignment && (
+                        <View style={styles.priceInputWrapper}>
+                            <View style={styles.priceLabelContainer}>
+                                <Text style={styles.priceLabel}>Prix d'achat (€)</Text>
+                            </View>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="100"
+                                value={editedItem.purchasePrice}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => handlePriceChange('purchasePrice', text)}
+                                placeholderTextColor={activeTheme.text.secondary}
+                            />
                         </View>
-                        <TextInput
-                            style={[styles.input, styles.priceInput]}
-                            placeholder="100"
-                            value={editedItem.purchasePrice}
-                            keyboardType="decimal-pad"
-                            onChangeText={(text) => handlePriceChange('purchasePrice', text)}
-                            placeholderTextColor={activeTheme.text.secondary}
-                        />
-                    </View>
-                    <View style={styles.priceInputWrapper}>
-                        <View style={styles.priceLabelContainer}>
-                            <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                    )}
+                    
+                    {editedItem.isConsignment ? (
+                        <View style={styles.priceInputWrapper}>
+                            <View style={styles.priceLabelContainer}>
+                                <Text style={styles.priceLabel}>Prix déposant (€)</Text>
+                            </View>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="150"
+                                value={editedItem.consignorAmount}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorAmount: text }))}
+                                placeholderTextColor={activeTheme.text.secondary}
+                            />
                         </View>
-                        <TextInput
-                            style={[styles.input, styles.priceInput]}
-                            placeholder="200"
-                            value={editedItem.sellingPrice}
-                            keyboardType="decimal-pad"
-                            onChangeText={(text) => handlePriceChange('sellingPrice', text)}
-                            placeholderTextColor={activeTheme.text.secondary}
-                        />
-                    </View>
+                    ) : (
+                        <View style={styles.priceInputWrapper}>
+                            <View style={styles.priceLabelContainer}>
+                                <Text style={styles.priceLabel}>Prix de vente (€)</Text>
+                            </View>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder="200"
+                                value={editedItem.sellingPrice}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => handlePriceChange('sellingPrice', text)}
+                                placeholderTextColor={activeTheme.text.secondary}
+                            />
+                        </View>
+                    )}
+
+                    {/* Section Commission - uniquement en mode dépôt-vente */}
+                    {editedItem.isConsignment && (
+                        <View style={styles.priceInputWrapper}>
+                            <View style={styles.commissionHeader}>
+                                <Text style={styles.priceLabel}>Commission</Text>
+                                <View style={styles.commissionToggle}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.toggleButton,
+                                            editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonActive
+                                        ]}
+                                        onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'amount' }))}
+                                    >
+                                        <Text style={[
+                                            styles.toggleButtonText,
+                                            editedItem.consignmentCommissionType === 'amount' && styles.toggleButtonTextActive
+                                        ]}>€</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.toggleButton,
+                                            editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonActive
+                                        ]}
+                                        onPress={() => setEditedItem(prev => ({ ...prev, consignmentCommissionType: 'percentage' }))}
+                                    >
+                                        <Text style={[
+                                            styles.toggleButtonText,
+                                            editedItem.consignmentCommissionType === 'percentage' && styles.toggleButtonTextActive
+                                        ]}>%</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                            <TextInput
+                                style={[styles.input, styles.priceInput]}
+                                placeholder={editedItem.consignmentCommissionType === 'percentage' ? '10' : '5.00'}
+                                value={editedItem.consignmentCommission || ''}
+                                keyboardType="decimal-pad"
+                                onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignmentCommission: text }))}
+                                placeholderTextColor={activeTheme.text.secondary}
+                            />
+                        </View>
+                    )}
+                    {/* Prix final calculé - uniquement en mode dépôt-vente */}
+                    {editedItem.isConsignment && editedItem.consignorAmount && editedItem.consignmentCommission && (
+                        <View style={styles.priceInputWrapper}>
+                            <View style={styles.finalPriceContainer}>
+                                <Text style={styles.finalPriceLabel}>Prix final client</Text>
+                                <Text style={styles.finalPriceValue}>
+                                    {`${calculateFinalPrice(editedItem.consignorAmount, editedItem.consignmentCommission, editedItem.consignmentCommissionType || 'amount').toFixed(2)} €`}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.formSection}>
@@ -826,6 +965,135 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     ) : null;
                 })()}
 
+                {/* Section Source */}
+                <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionTitle}>Source</Text>
+                    <Text style={styles.sectionDescription}>
+                        D'où provient cet article ?
+                    </Text>
+                    {/* Bouton principal de la dropdown */}
+                    <TouchableOpacity
+                        style={[
+                            styles.sourceDropdownHeader,
+                            sourceDropdownOpen && styles.sourceDropdownHeaderOpen
+                        ]}
+                        onPress={() => setSourceDropdownOpen(!sourceDropdownOpen)}
+                    >
+                        <Text style={[
+                            styles.sourceDropdownHeaderText,
+                            !editedItem.sourceId && styles.sourceDropdownPlaceholder
+                        ]}>
+                            {editedItem.sourceId 
+                                ? sourceOptions.find(s => s.value === editedItem.sourceId)?.label || 'Source inconnue'
+                                : 'Sélectionner une source (optionnel)'
+                            }
+                        </Text>
+                        <Icon 
+                            name={sourceDropdownOpen ? "expand_less" : "expand_more"} 
+                            size={20} 
+                            color={activeTheme.text.secondary} 
+                        />
+                    </TouchableOpacity>
+                    
+                    {/* Options de la dropdown */}
+                    {sourceDropdownOpen && (
+                        <View style={styles.sourceDropdownOptions}>
+                            <TouchableOpacity
+                                style={styles.sourceDropdownOption}
+                                onPress={() => {
+                                    setEditedItem(prev => ({ ...prev, sourceId: null }));
+                                    setSourceDropdownOpen(false);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.sourceDropdownOptionText,
+                                    !editedItem.sourceId && styles.sourceDropdownOptionSelected
+                                ]}>
+                                    Aucune source
+                                </Text>
+                                {!editedItem.sourceId && <Icon name="check" size={16} color={activeTheme.primary} />}
+                            </TouchableOpacity>
+                            
+                            {sourceOptions.map(option => (
+                                <TouchableOpacity
+                                    key={option.value}
+                                    style={styles.sourceDropdownOption}
+                                    onPress={() => {
+                                        console.log('[ItemEditForm] Selected source:', option.value);
+                                        setEditedItem(prev => ({ ...prev, sourceId: option.value }));
+                                        setSourceDropdownOpen(false);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.sourceDropdownOptionText,
+                                        editedItem.sourceId === option.value && styles.sourceDropdownOptionSelected
+                                    ]}>
+                                        {option.label}
+                                    </Text>
+                                    {editedItem.sourceId === option.value && <Icon name="check" size={16} color={activeTheme.primary} />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                    
+                    {/* Section Dépôt-vente */}
+                    {editedItem.sourceId && (
+                        <View style={{ marginTop: 16 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                <TouchableOpacity
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: editedItem.isConsignment ? activeTheme.primary : activeTheme.surface,
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 8,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: editedItem.isConsignment ? activeTheme.primary : activeTheme.border
+                                    }}
+                                    onPress={() => setEditedItem(prev => ({ ...prev, isConsignment: !prev.isConsignment }))}
+                                >
+                                    <Icon 
+                                        name={editedItem.isConsignment ? "check_box" : "check_box_outline_blank"} 
+                                        size={20} 
+                                        color={editedItem.isConsignment ? activeTheme.text.onPrimary : activeTheme.text.primary}
+                                        style={{ marginRight: 8 }}
+                                    />
+                                    <Text style={{
+                                        color: editedItem.isConsignment ? activeTheme.text.onPrimary : activeTheme.text.primary,
+                                        fontWeight: '500'
+                                    }}>
+                                        Dépôt-vente
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {editedItem.isConsignment && (
+                                <View>
+                                    <TextInput
+                                        style={[styles.input, { marginBottom: 12 }]}
+                                        placeholder="Nom du déposant"
+                                        value={editedItem.consignorName || ''}
+                                        onChangeText={(text) => setEditedItem(prev => ({ ...prev, consignorName: text }))}
+                                        placeholderTextColor={activeTheme.text.secondary}
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Pourcentage déposant (ex: 70)"
+                                        value={editedItem.consignmentSplitPercentage?.toString() || '50'}
+                                        onChangeText={(text) => {
+                                            const num = parseInt(text) || 50;
+                                            setEditedItem(prev => ({ ...prev, consignmentSplitPercentage: Math.min(100, Math.max(0, num)) }));
+                                        }}
+                                        keyboardType="number-pad"
+                                        placeholderTextColor={activeTheme.text.secondary}
+                                    />
+                                </View>
+                            )}
+                        </View>
+                    )}
+                </View>
+
                 <View style={styles.sectionContainer}>
                     <Text style={styles.sectionTitle}>Catégorie</Text>
                     <CategoryList
@@ -901,6 +1169,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                     <Text style={styles.globalErrorText}>{photoError.message}</Text>
                 </View>
             )}
+
         </ScrollView>
     );
 }, arePropsEqual);
@@ -1271,24 +1540,122 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
         marginTop: 16,
         gap: 12,
     },
-    modalButton: {
-        flex: 1,
+    sourceDropdownHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
         paddingVertical: 12,
         paddingHorizontal: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
+        marginTop: 8,
     },
-    modalButtonSave: {
+    sourceDropdownHeaderOpen: {
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        borderBottomColor: theme.primary,
+    },
+    sourceDropdownHeaderText: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+    },
+    sourceDropdownPlaceholder: {
+        color: theme.text.secondary,
+        fontStyle: 'italic',
+    },
+    sourceDropdownOptions: {
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderTopWidth: 0,
+        borderColor: theme.border,
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
+        maxHeight: 200,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+            },
+        }),
+    },
+    sourceDropdownOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border,
+    },
+    sourceDropdownOptionText: {
+        fontSize: 16,
+        color: theme.text.primary,
+        flex: 1,
+    },
+    sourceDropdownOptionSelected: {
+        color: theme.primary,
+        fontWeight: '600',
+    },
+    commissionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    commissionToggle: {
+        flexDirection: 'row',
+        backgroundColor: theme.border,
+        borderRadius: 6,
+        padding: 2,
+    },
+    toggleButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 4,
+        backgroundColor: 'transparent',
+    },
+    toggleButtonActive: {
         backgroundColor: theme.primary,
     },
-    modalButtonCancel: {
-        backgroundColor: theme.text.secondary,
-    },
-    modalButtonText: {
-        color: '#fff',
-        fontSize: 16,
+    toggleButtonText: {
+        fontSize: 14,
         fontWeight: '600',
+        color: theme.text.secondary,
+    },
+    toggleButtonTextActive: {
+        color: theme.text.onPrimary,
+    },
+    finalPriceContainer: {
+        backgroundColor: theme.primaryContainer + '20',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: theme.primary + '30',
+        marginTop: 8,
+    },
+    finalPriceLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: theme.primary,
+        marginBottom: 4,
+    },
+    finalPriceValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.primary,
+        textAlign: 'center',
     },
     iconSelectorLabel: {
         marginTop: 16,

@@ -4,16 +4,19 @@ import { itemsAdapter } from './itemsAdapter';
 import { categoriesAdapter } from './categorySlice';
 import { containersAdapter } from './containersSlice';
 import { locationsAdapter } from './locationsSlice';
+import { sourcesAdapter_ } from './sourcesSlice';
 import type { Item } from '../types/item';
 import type { Category } from '../types/category';
 import type { Container } from '../types/container';
 import type { Location } from '../types/location';
+import type { Source } from '../types/source';
 
 // Sélecteurs de base optimisés
 export const selectItemsState = (state: RootState) => state.items;
 export const selectCategoriesState = (state: RootState) => state.categories;
 export const selectContainersState = (state: RootState) => state.containers;
 export const selectLocationsState = (state: RootState) => state.locations;
+export const selectSourcesState = (state: RootState) => state.sources;
 
 // Sélecteurs d'entités avec adaptateurs
 export const {
@@ -42,12 +45,19 @@ export const {
   selectEntities: selectLocationEntities,
 } = locationsAdapter.getSelectors(selectLocationsState);
 
+export const {
+  selectAll: selectAllSources,
+  selectById: selectSourceById,
+  selectEntities: selectSourceEntities,
+} = sourcesAdapter_.getSelectors((state: RootState) => state.sources.sources);
+
 // Interface pour les filtres
 export interface ItemFilters {
   status?: 'all' | 'available' | 'sold';
   categoryId?: number;
   containerId?: number;
   locationId?: number;
+  sourceId?: number;
   minPrice?: number;
   maxPrice?: number;
   searchQuery?: string;
@@ -79,6 +89,11 @@ export const selectFilteredItems = createSelector(
 
       // Filtre par emplacement
       if (filters.locationId && item.locationId !== filters.locationId) {
+        return false;
+      }
+
+      // Filtre par source
+      if (filters.sourceId && item.sourceId !== filters.sourceId) {
         return false;
       }
 
@@ -306,4 +321,143 @@ export const selectPaginationInfo = createSelector(
     totalItems: itemsState.totalItems,
     hasMore: itemsState.hasMore,
   })
+);
+
+// ===== NOUVEAUX SÉLECTEURS POUR LES SOURCES =====
+
+// Interface pour les statistiques d'une source
+export interface SourcePerformance {
+  sourceId: number;
+  sourceName: string;
+  totalItems: number;
+  soldItems: number;
+  availableItems: number;
+  totalRevenue: number;
+  totalCost: number;
+  totalProfit: number;
+  averageRoi: number;
+  averageMargin: number;
+  averageDaysToSell: number;
+}
+
+// Sélecteur pour la performance des sources
+export const selectSourcePerformance = createSelector(
+  [selectAllItems, selectAllSources],
+  (items, sources): SourcePerformance[] => {
+    const sourceMap = new Map(sources.map(source => [source.id, source]));
+    const performanceMap = new Map<number, SourcePerformance>();
+
+    // Initialiser toutes les sources
+    sources.forEach(source => {
+      performanceMap.set(source.id, {
+        sourceId: source.id,
+        sourceName: source.name,
+        totalItems: 0,
+        soldItems: 0,
+        availableItems: 0,
+        totalRevenue: 0,
+        totalCost: 0,
+        totalProfit: 0,
+        averageRoi: 0,
+        averageMargin: 0,
+        averageDaysToSell: 0,
+      });
+    });
+
+    // Calculer les stats pour chaque item
+    items.forEach(item => {
+      if (!item.sourceId) return;
+
+      const performance = performanceMap.get(item.sourceId);
+      if (!performance) return;
+
+      performance.totalItems++;
+      performance.totalCost += item.purchasePrice;
+
+      if (item.status === 'sold') {
+        performance.soldItems++;
+        performance.totalRevenue += item.sellingPrice;
+        performance.totalProfit += (item.sellingPrice - item.purchasePrice);
+      } else {
+        performance.availableItems++;
+      }
+    });
+
+    // Calculer les moyennes
+    return Array.from(performanceMap.values()).map(performance => {
+      if (performance.soldItems > 0) {
+        performance.averageRoi = (performance.totalProfit / performance.totalCost) * 100;
+        performance.averageMargin = ((performance.totalRevenue - performance.totalCost) / performance.totalRevenue) * 100;
+        
+        // Calculer le temps moyen de vente (approximation)
+        const soldItems = items.filter(item => 
+          item.sourceId === performance.sourceId && 
+          item.status === 'sold' && 
+          item.soldAt && 
+          item.createdAt
+        );
+        
+        if (soldItems.length > 0) {
+          const totalDays = soldItems.reduce((sum, item) => {
+            const created = new Date(item.createdAt);
+            const sold = new Date(item.soldAt!);
+            return sum + Math.floor((sold.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+          }, 0);
+          performance.averageDaysToSell = totalDays / soldItems.length;
+        }
+      }
+
+      return performance;
+    }).sort((a, b) => b.totalProfit - a.totalProfit);
+  }
+);
+
+// Interface pour les paiements de dépôt-vente
+export interface ConsignmentPayment {
+  itemId: number;
+  itemName: string;
+  consignorName: string;
+  sellingPrice: number;
+  splitPercentage: number;
+  paymentAmount: number;
+  soldAt: string;
+  sourceId?: number;
+  sourceName?: string;
+}
+
+// Sélecteur pour les paiements de dépôt-vente à effectuer
+export const selectConsignmentPayments = createSelector(
+  [selectAllItems, selectAllSources],
+  (items, sources): ConsignmentPayment[] => {
+    const sourceMap = new Map(sources.map(source => [source.id, source]));
+
+    return items
+      .filter(item => 
+        item.isConsignment && 
+        item.status === 'sold' && 
+        item.consignorName && 
+        item.consignmentSplitPercentage && 
+        item.soldAt
+      )
+      .map(item => ({
+        itemId: item.id,
+        itemName: item.name,
+        consignorName: item.consignorName!,
+        sellingPrice: item.sellingPrice,
+        splitPercentage: item.consignmentSplitPercentage!,
+        paymentAmount: (item.sellingPrice * item.consignmentSplitPercentage!) / 100,
+        soldAt: item.soldAt!,
+        sourceId: item.sourceId || undefined,
+        sourceName: item.sourceId ? sourceMap.get(item.sourceId)?.name : undefined,
+      }))
+      .sort((a, b) => new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime());
+  }
+);
+
+// Sélecteur pour le total des paiements de dépôt-vente
+export const selectTotalConsignmentPayments = createSelector(
+  [selectConsignmentPayments],
+  (payments): number => {
+    return payments.reduce((total, payment) => total + payment.paymentAmount, 0);
+  }
 ); 

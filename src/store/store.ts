@@ -3,10 +3,12 @@ import itemsReducer from './itemsSlice';
 import categoriesReducer from './categorySlice';
 import containersReducer from './containersSlice';
 import locationsReducer from './locationsSlice';
+import sourcesReducer from './sourcesSlice';
 import { categoriesAdapter } from './categorySlice';
 import { itemsAdapter } from './itemsAdapter';
 import { containersAdapter } from './containersSlice';
 import { locationsAdapter } from './locationsSlice';
+import { sourcesAdapter_ } from './sourcesSlice';
 import { Item } from '../types/item';
 import { errorMiddleware } from './middleware/errorMiddleware';
 import { offlineMiddleware } from './middleware/offlineMiddleware';
@@ -16,6 +18,7 @@ const rootReducer = {
   categories: categoriesReducer,
   containers: containersReducer,
   locations: locationsReducer,
+  sources: sourcesReducer,
 };
 
 export const store = configureStore({
@@ -74,4 +77,9 @@ export const getInitialState = () => ({
     offline: getDefaultOfflineMetadata(),
     localChanges: 0,
   }),
+  sources: {
+    sources: sourcesAdapter_.getInitialState(),
+    loading: false,
+    error: null as string | null,
+  },
 });

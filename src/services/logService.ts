@@ -20,12 +20,27 @@ export const logService = {
       throw new Error('Utilisateur non authentifié');
     }
 
-    // Vérifier si nous avons un ID valide
-    const recordId = data.result?.id || (data.arguments?.[0] as number);
+    // Déterminer l'ID selon le type d'action
+    let recordId: number | undefined;
     
-    if (!recordId) {
-      console.warn(`Impossible de créer un log d'audit pour l'action ${action}: ID manquant`);
-      return; // Ne pas créer de log si nous n'avons pas d'ID
+    if (action.startsWith('ADD_')) {
+      // Pour les actions d'ajout, result peut être soit l'ID (number) soit l'objet créé
+      if (typeof data.result === 'number') {
+        recordId = data.result;
+      } else if (data.result?.id) {
+        recordId = data.result.id;
+      }
+    } else if (action.startsWith('UPDATE_') || action.startsWith('DELETE_')) {
+      // Pour les actions de mise à jour/suppression, l'ID est souvent le premier argument
+      recordId = data.arguments?.[0] as number;
+    } else {
+      // Autres actions - essayer de trouver l'ID dans result ou arguments
+      recordId = data.result?.id || (data.arguments?.[0] as number);
+    }
+    
+    if (!recordId || typeof recordId !== 'number') {
+      console.warn(`Impossible de créer un log d'audit pour l'action ${action}: ID manquant ou invalide`, { result: data.result, args: data.arguments });
+      return;
     }
 
     const { error } = await supabase

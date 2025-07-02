@@ -2,6 +2,7 @@ import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 import type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 import type { Location, LocationInput } from '../types/location';
+import type { Source, SourceInput, SourceUpdate } from '../types/source';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -56,7 +57,12 @@ const boundDatabase = {
   removePhotoUri: supabaseDatabase.removePhotoUri.bind(supabaseDatabase),
   saveDatabase: supabaseDatabase.saveDatabase.bind(supabaseDatabase),
   resetDatabase: supabaseDatabase.resetDatabase.bind(supabaseDatabase),
-  storePhotoUri: supabaseDatabase.storePhotoUri.bind(supabaseDatabase)
+  storePhotoUri: supabaseDatabase.storePhotoUri.bind(supabaseDatabase),
+  getSources: supabaseDatabase.getSources.bind(supabaseDatabase),
+  getSource: supabaseDatabase.getSource.bind(supabaseDatabase),
+  addSource: supabaseDatabase.addSource.bind(supabaseDatabase),
+  updateSource: supabaseDatabase.updateSource.bind(supabaseDatabase),
+  deleteSource: supabaseDatabase.deleteSource.bind(supabaseDatabase)
 };
 
 // Exporter les fonctions avec logging
@@ -75,6 +81,9 @@ export const databaseInterface: DatabaseInterface = {
   addCategory: withLogging(boundDatabase.addCategory, 'ADD_CATEGORY'),
   updateCategory: withLogging(boundDatabase.updateCategory, 'UPDATE_CATEGORY'),
   deleteCategory: withLogging(boundDatabase.deleteCategory, 'DELETE_CATEGORY'),
+  addSource: withLogging(boundDatabase.addSource, 'ADD_SOURCE'),
+  updateSource: withLogging(boundDatabase.updateSource, 'UPDATE_SOURCE'),
+  deleteSource: withLogging(boundDatabase.deleteSource, 'DELETE_SOURCE'),
   removePhotoUri: withLogging(boundDatabase.removePhotoUri, 'REMOVE_PHOTO'),
   saveDatabase: withLogging(boundDatabase.saveDatabase, 'SAVE_DATABASE'),
   resetDatabase: withLogging(boundDatabase.resetDatabase, 'RESET_DATABASE'),
@@ -90,6 +99,8 @@ export const databaseInterface: DatabaseInterface = {
   getItemByQRCode: boundDatabase.getItemByQRCode,
   getContainerByQRCode: boundDatabase.getContainerByQRCode,
   getCategory: boundDatabase.getCategory,
+  getSources: boundDatabase.getSources,
+  getSource: boundDatabase.getSource,
   getPhotoUris: boundDatabase.getPhotoUris,
   validateQRCode: boundDatabase.validateQRCode,
   getItemOrContainerByQRCode: boundDatabase.getItemOrContainerByQRCode
@@ -100,6 +111,7 @@ export type { Item, ItemInput, ItemUpdate } from '../types/item';
 export type { Category, CategoryInput, CategoryUpdate } from '../types/category';
 export type { Container, ContainerInput, ContainerUpdate } from '../types/container';
 export type { Location, LocationInput, LocationUpdate } from '../types/location';
+export type { Source, SourceInput, SourceUpdate } from '../types/source';
 
 export interface DatabaseInterface {
     // Méthodes pour les items
@@ -132,6 +144,13 @@ export interface DatabaseInterface {
     deleteLocation: (id: number) => Promise<void>;
     getLocations: () => Promise<Location[]>;
     getLocationByQRCode: (qrCode: string) => Promise<Location | null>;
+
+    // Méthodes pour les sources
+    addSource: (source: SourceInput) => Promise<number>;
+    updateSource: (id: number, source: SourceUpdate) => Promise<void>;
+    deleteSource: (id: number) => Promise<void>;
+    getSources: () => Promise<Source[]>;
+    getSource: (id: number) => Promise<Source | null>;
 
     // Méthodes utilitaires
     validateQRCode: (type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string) => Promise<boolean>;

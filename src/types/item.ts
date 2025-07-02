@@ -13,6 +13,14 @@ export interface Item {
     updatedAt: string;
     soldAt?: string;
     qrCode?: string;
+    sourceId?: number | null;
+    isConsignment: boolean;
+    consignorName?: string;
+    consignmentSplitPercentage?: number;
+    // Nouveaux champs pour le système de commission
+    consignmentCommission?: number;
+    consignmentCommissionType?: 'amount' | 'percentage'; // 'amount' = numeraire, 'percentage' = pourcentage
+    consignorAmount?: number; // Montant que reçoit le déposant
 }
 
 export type ItemInput = Omit<Item, 'id' | 'createdAt' | 'updatedAt'>;

@@ -5,6 +5,7 @@ import {
   selectFilteredItems,
   selectAllItems,
   selectAllLocations,
+  selectAllSources,
   selectItemStats,
   selectItemsByCategory,
   selectItemsByContainer,
@@ -13,6 +14,9 @@ import {
   selectItemsLoading,
   selectItemsError,
   selectPaginationInfo,
+  selectSourcePerformance,
+  selectConsignmentPayments,
+  selectTotalConsignmentPayments,
   type ItemFilters
 } from '../store/selectors';
 import { selectAllCategories } from '../store/categorySlice';
@@ -472,6 +476,53 @@ export const useGlobalSearch = (searchQuery: string) => {
     isSearching,
     total: searchResults.length
   };
+};
+
+/**
+ * Hook pour récupérer toutes les sources
+ */
+export const useAllSources = () => {
+  return useSelector(selectAllSources);
+};
+
+/**
+ * Hook pour les performances des sources
+ */
+export const useSourcePerformance = () => {
+  return useSelector(selectSourcePerformance);
+};
+
+/**
+ * Hook pour les paiements de consignation
+ */
+export const useConsignmentPayments = () => {
+  return useSelector(selectConsignmentPayments);
+};
+
+/**
+ * Hook pour le total des paiements de consignation
+ */
+export const useTotalConsignmentPayments = () => {
+  return useSelector(selectTotalConsignmentPayments);
+};
+
+/**
+ * Hook pour les données du tableau de bord des sources
+ */
+export const useSourcesDashboardData = () => {
+  const sources = useAllSources();
+  const sourcePerformance = useSourcePerformance();
+  const consignmentPayments = useConsignmentPayments();
+  const totalConsignmentPayments = useTotalConsignmentPayments();
+  const isLoading = useItemsLoading();
+
+  return useMemo(() => ({
+    sources,
+    sourcePerformance,
+    consignmentPayments,
+    totalConsignmentPayments,
+    isLoading,
+  }), [sources, sourcePerformance, consignmentPayments, totalConsignmentPayments, isLoading]);
 };
 
 // Export du hook Algolia optimisé pour réutilisation

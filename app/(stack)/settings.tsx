@@ -270,7 +270,7 @@ const SettingsScreen = () => {
       {/* ✅ COMMONHEADER - Header standardisé */}
       <CommonHeader 
         title="Paramètres"
-        onBackPress={() => router.back()}
+        onBackPress={() => router.replace('/(tabs)/stock')}
       />
 
       {/* Theme Selection Section */}
@@ -460,6 +460,15 @@ const SettingsScreen = () => {
       >
         <Icon name="location_on" size={24} color={activeTheme.primary} />
         <Text style={styles.menuText}>Gérer les emplacements</Text>
+        <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.menuItem}
+        onPress={() => router.push('/sources')}
+      >
+        <Icon name="store" size={24} color={activeTheme.primary} />
+        <Text style={styles.menuText}>Gérer les sources</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
 
