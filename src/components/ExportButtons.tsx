@@ -28,6 +28,9 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
   const [availableColumns] = useState<CSVColumn[]>(ReportService.getAvailableCSVColumns());
 
   const handleExport = async (format: 'csv' | 'pdf') => {
+    console.log('[ExportButtons] handleExport called with format:', format);
+    console.log('[ExportButtons] Data items count:', data.items?.length || 0);
+    
     if (format === 'csv') {
       // Pour CSV, ouvrir d'abord la sélection de colonnes
       setShowExportModal(false);
@@ -41,8 +44,10 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
     setShowExportModal(false);
     
     try {
+      console.log('[ExportButtons] Starting export...');
       await exportWithData(format, data);
       
+      console.log('[ExportButtons] Export completed successfully');
       // Afficher un message de succès
       Alert.alert(
         'Export réussi',
@@ -50,6 +55,7 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
         [{ text: 'OK', style: 'default' }]
       );
     } catch (error) {
+      console.error('[ExportButtons] Export failed:', error);
       // L'erreur est déjà gérée dans le hook
       Alert.alert(
         'Erreur d\'export',
@@ -63,9 +69,15 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
   };
 
   const handleCSVExport = async () => {
+    console.log('[ExportButtons] handleCSVExport called');
+    console.log('[ExportButtons] Selected columns:', selectedColumns.length);
+    console.log('[ExportButtons] Selected status:', selectedStatus);
+    console.log('[ExportButtons] Selected categories:', selectedCategories.length);
+    
     setShowColumnsModal(false);
     
     try {
+      console.log('[ExportButtons] Starting CSV export with options...');
       await exportWithData('csv', data, {
         format: 'csv',
         csvColumns: selectedColumns,
@@ -73,12 +85,14 @@ const ExportButtons: React.FC<ExportButtonsProps> = ({
         csvCategoryFilter: selectedCategories.length > 0 ? selectedCategories : undefined
       });
       
+      console.log('[ExportButtons] CSV export completed successfully');
       Alert.alert(
         'Export réussi',
         'Le fichier CSV a été téléchargé avec succès.',
         [{ text: 'OK', style: 'default' }]
       );
     } catch (error) {
+      console.error('[ExportButtons] CSV export failed:', error);
       Alert.alert(
         'Erreur d\'export',
         exportError || 'Une erreur est survenue lors de l\'export.',

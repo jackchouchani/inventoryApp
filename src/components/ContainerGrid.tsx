@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, Dimensions, Platform } from 'react-native';
 import { Container } from '../types/container';
 import { Item } from '../types/item';
 import { GridErrorBoundary } from './GridErrorBoundary';
@@ -185,6 +185,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
           tintColor={activeTheme.primary}
         />
       }
+      // Forcer les styles de scroll pour iOS Safari
+      style={Platform.OS === 'web' ? { WebkitOverflowScrolling: 'touch' } : undefined}
     />
   );
 
@@ -202,6 +204,7 @@ const getGridStyles = (theme: any, layout: any) => StyleSheet.create({
   grid: {
     padding: layout.gridPadding,
     flexGrow: 1,
+    // Pas de paddingBottom ici, on utilise marginBottom sur le container parent
   },
   gridRow: {
     justifyContent: 'space-between',

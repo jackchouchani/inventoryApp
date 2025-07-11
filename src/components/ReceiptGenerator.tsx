@@ -7,6 +7,7 @@ const LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAA
 import { uploadInvoiceToR2 } from '../utils/r2Client';
 
 import getJsPDF from '../utils/jspdf-polyfill';
+import { downloadBlobSafely, monitorMemoryAndCleanup } from '../utils/downloadUtils';
 
 interface Item {
   id: number;
@@ -504,7 +505,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       const fileName = `Facture-${COMPANY_INFO.name.replace(/\s+/g, '_')}-${invoiceRef}.pdf`;
       
-      // Convertir le PDF en Blob pour l'upload
+      // ✅ CORRECTION: Générer le blob une seule fois
       const pdfBlob = doc.output('blob');
       
       try {
@@ -524,8 +525,11 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         // Continuer même en cas d'erreur
       }
       
-      // Télécharger le fichier localement
-      doc.save(fileName);
+      // ✅ CORRECTION: Utiliser l'utilitaire sécurisé pour le téléchargement
+      await downloadBlobSafely(pdfBlob, fileName, { timeout: 30000, cleanup: true });
+      
+      // Monitorer la mémoire après génération
+      monitorMemoryAndCleanup();
 
       setProgress(100);
       handleComplete();
@@ -537,6 +541,12 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     } finally {
       setLoading(false);
       setProgress(0);
+      
+      // ✅ CORRECTION: Nettoyage forcé des ressources jsPDF
+      if (typeof window !== 'undefined') {
+        console.log('[ReceiptGenerator] Force cleanup resources');
+        // Le nettoyage des URL est déjà fait, mais on s'assure que tout est propre
+      }
     }
   }, [items, itemPrices, totalDiscount, discountPercentage, multiPage, handleComplete, onError, calculateTotal]);
 

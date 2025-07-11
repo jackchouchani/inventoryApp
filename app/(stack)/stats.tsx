@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -13,6 +13,9 @@ import SalesBarChart from '../../src/components/SalesBarChart';
 import ExportButtons from '../../src/components/ExportButtons';
 import { useStats } from '../../src/hooks/useStats';
 import { useDashboardData, useStockPageData, useSourcesDashboardData } from '../../src/hooks/useOptimizedSelectors';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../src/store/store';
+import { fetchItems } from '../../src/store/itemsThunks';
 
 import { StatsChart } from '../../src/components/StatsChart';
 import CategoryPieChart from '../../src/components/CategoryPieChart';
@@ -24,8 +27,11 @@ import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { useSalesData } from '../../src/hooks/useSalesData';
 
 const StatsScreen = () => {
+  console.log('[Stats] StatsScreen component mounting/re-mounting at:', new Date().toISOString());
+  
   const { activeTheme } = useAppTheme();
   const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
   
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
   const [salesPeriod, setSalesPeriod] = useState<'week' | 'month' | 'year'>('month');
@@ -35,6 +41,47 @@ const StatsScreen = () => {
     visible: false,
     dataPointIndex: null as number | null
   });
+  
+  // États pour la protection contre la corruption de données
+  const [hasDataBeenLoaded, setHasDataBeenLoaded] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
+
+  // ✅ DEBUGGING: Traquer les événements qui pourraient causer un reload
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      console.log('[Stats] BEFORE UNLOAD event detected!', e);
+    };
+    
+    const handleUnload = (e: Event) => {
+      console.log('[Stats] UNLOAD event detected!', e);
+    };
+    
+    const handleVisibilityChange = () => {
+      console.log('[Stats] Visibility changed:', document.visibilityState);
+    };
+    
+    const handleFocus = () => {
+      console.log('[Stats] Window focused');
+    };
+    
+    const handleBlur = () => {
+      console.log('[Stats] Window blurred');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('unload', handleUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('unload', handleUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
   
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
@@ -54,6 +101,45 @@ const StatsScreen = () => {
   
   // Hook pour les données de sources et dépôt-vente
   const { sourcePerformance, consignmentPayments, totalConsignmentPayments } = useSourcesDashboardData();
+
+  // ✅ PROTECTION: Récupération automatique si les données deviennent vides
+  useEffect(() => {
+    const itemsCount = exportData.items.length;
+    
+    // Log des changements
+    console.log('[Stats] Data change detected:', {
+      itemsCount,
+      isLoading,
+      hasDataBeenLoaded,
+      isRecovering,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Si on a des données, marquer comme chargé
+    if (itemsCount > 0 && !isRecovering) {
+      setHasDataBeenLoaded(true);
+    }
+    
+    // Si on avait des données et qu'elles deviennent vides (corruption possible)
+    if (hasDataBeenLoaded && itemsCount === 0 && !isLoading && !isRecovering) {
+      console.warn('[Stats] Data corruption detected - attempting recovery');
+      setIsRecovering(true);
+      
+      // Relancer le fetch des items au lieu de reloader la page
+      dispatch(fetchItems({ page: 0, limit: 50 }))
+        .unwrap()
+        .then(() => {
+          console.log('[Stats] Data recovery successful');
+          setIsRecovering(false);
+        })
+        .catch((error) => {
+          console.error('[Stats] Data recovery failed:', error);
+          setIsRecovering(false);
+          // En dernier recours, reload complet
+          setTimeout(() => window.location.reload(), 1000);
+        });
+    }
+  }, [exportData.items.length, isLoading, hasDataBeenLoaded, isRecovering, dispatch]);
 
   // Reset tooltip function
   const resetTooltip = useCallback(() => {
@@ -83,10 +169,15 @@ const StatsScreen = () => {
     });
   }, []);
 
-  if (isLoading) {
+  if (isLoading || isRecovering) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={activeTheme.primary} />
+        {isRecovering && (
+          <Text style={[styles.loadingText, { color: activeTheme.text.secondary, marginTop: 16, textAlign: 'center' }]}>
+            Récupération des données en cours...
+          </Text>
+        )}
       </View>
     );
   }

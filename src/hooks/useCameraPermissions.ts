@@ -167,10 +167,10 @@ const usePWALifecycle = (config: PermissionConfig, onReactivation?: () => void):
         if (config.enableLogging) {
         }
         
-        // Forcer un rechargement complet pour éviter les états corrompus
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // 🚫 TEMPORAIRE: Désactiver le reload automatique pour tester le problème PDF/CSV  
+        // setTimeout(() => {
+        //   window.location.reload();
+        // }, 500);
       }
     };
     

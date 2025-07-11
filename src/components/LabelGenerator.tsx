@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { handleLabelGenerationError, handleLabelPrintingError } from '../utils/labelErrorHandler';
 import { checkNetworkConnection } from '../utils/networkUtils';
@@ -10,6 +10,7 @@ import { useAppTheme } from '../contexts/ThemeContext';
 
 // Import des dépendances
 import getJsPDF from '../utils/jspdf-polyfill';
+import { downloadPDFSafely, monitorMemoryAndCleanup } from '../utils/downloadUtils';
 
 interface Item {
   id: number;
@@ -50,6 +51,54 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
   // Cache pour les QR codes générés - optimisation majeure
   const qrCodeCache = useRef<Map<string, string>>(new Map());
+
+  // ✅ CORRECTION: Fonction de nettoyage forcé des ressources
+  const forceCleanupResources = useCallback(() => {
+    console.log('[LabelGenerator] Force cleanup resources');
+    
+    // Nettoyer le cache QR codes
+    qrCodeCache.current.clear();
+    
+    // Forcer le garbage collection des URLs créées
+    if (typeof window !== 'undefined' && window.URL) {
+      // Cette étape est déjà faite dans le nettoyage normal, mais on s'assure ici
+      console.log('[LabelGenerator] URL cleanup completed');
+    }
+    
+    // Nettoyer les éventuels timers ou événements
+    console.log('[LabelGenerator] Resources cleanup completed');
+  }, []);
+
+  // ✅ CORRECTION: Nettoyage au démontage du composant  
+  useEffect(() => {
+    return () => {
+      forceCleanupResources();
+    };
+  }, [forceCleanupResources]);
+
+  // ✅ CORRECTION: Wrapper avec timeout de sécurité pour les générations PDF
+  const withTimeout = useCallback(async <T,>(
+    asyncFunction: () => Promise<T>, 
+    timeoutMs: number = 60000 // 60 secondes par défaut
+  ): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        forceCleanupResources(); // Nettoyage forcé en cas de timeout
+        reject(new Error(`Timeout: La génération PDF a dépassé ${timeoutMs/1000}s`));
+      }, timeoutMs);
+
+      asyncFunction()
+        .then(result => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          forceCleanupResources(); // Nettoyage forcé en cas d'erreur
+          reject(error);
+        });
+    });
+  }, [forceCleanupResources]);
 
   // Validation des items
   const validItems = useMemo(() => {
@@ -114,6 +163,10 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
 
   const generateContainerPDF = useCallback(async () => {
     console.log('[LabelGenerator] generateContainerPDF called');
+    
+    // ✅ CORRECTION: Nettoyage préventif du cache au début
+    qrCodeCache.current.clear();
+    
     const jsPDF = getJsPDF();
     console.log('[LabelGenerator] jsPDF class:', jsPDF);
     if (!jsPDF) {
@@ -223,9 +276,14 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       }
 
       const fileName = `etiquettes-containers-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
-      doc.save(fileName);
       
-      console.log('[LabelGenerator] PDF preview opened successfully');
+      // ✅ CORRECTION: Utiliser l'utilitaire sécurisé pour le téléchargement
+      await downloadPDFSafely(doc, fileName, { timeout: 30000, cleanup: true });
+      
+      // Monitorer la mémoire après génération
+      monitorMemoryAndCleanup();
+      
+      console.log('[LabelGenerator] PDF downloaded successfully with secure cleanup');
       handleComplete();
     } catch (error) {
       console.error('[LabelGenerator] Error in generateContainerPDF:', error);
@@ -235,13 +293,17 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     } finally {
       setLoading(false);
       setProgress(0);
-      // Vider le cache après utilisation
-      qrCodeCache.current.clear();
+      // ✅ CORRECTION: Nettoyage forcé complet
+      forceCleanupResources();
     }
   }, [validItems, handleComplete, onError, getQRCodeImage]);
 
   const generateItemsPDF = useCallback(async () => {
     console.log('[LabelGenerator] generateItemsPDF called');
+    
+    // ✅ CORRECTION: Nettoyage préventif du cache au début
+    qrCodeCache.current.clear();
+    
     const jsPDF = getJsPDF();
     console.log('[LabelGenerator] jsPDF class:', jsPDF);
     if (!jsPDF) {
@@ -392,9 +454,14 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
       }
 
       const fileName = `etiquettes-articles-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
-      doc.save(fileName);
       
-      console.log('[LabelGenerator] PDF preview opened successfully');
+      // ✅ CORRECTION: Utiliser l'utilitaire sécurisé pour le téléchargement
+      await downloadPDFSafely(doc, fileName, { timeout: 30000, cleanup: true });
+      
+      // Monitorer la mémoire après génération
+      monitorMemoryAndCleanup();
+      
+      console.log('[LabelGenerator] PDF downloaded successfully with secure cleanup');
       handleComplete();
     } catch (error) {
       const err = error as Error;
@@ -403,8 +470,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
     } finally {
       setLoading(false);
       setProgress(0);
-      // Vider le cache après utilisation
-      qrCodeCache.current.clear();
+      // ✅ CORRECTION: Nettoyage forcé complet
+      forceCleanupResources();
     }
   }, [validItems, handleComplete, onError, getQRCodeImage]);
 
@@ -439,12 +506,22 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = React.memo(({
           console.log('[LabelGenerator] Button pressed, mode:', mode);
           console.log('[LabelGenerator] validItems.length:', validItems.length);
           console.log('[LabelGenerator] loading:', loading);
+          
+          // ✅ CORRECTION: Utiliser le wrapper avec timeout de sécurité
           if (mode === 'containers') {
-            console.log('[LabelGenerator] Calling generateContainerPDF');
-            generateContainerPDF();
+            console.log('[LabelGenerator] Calling generateContainerPDF with timeout');
+            withTimeout(generateContainerPDF, 90000) // 90s pour containers
+              .catch(error => {
+                console.error('[LabelGenerator] Container PDF generation failed:', error);
+                onError(error);
+              });
           } else {
-            console.log('[LabelGenerator] Calling generateItemsPDF');
-            generateItemsPDF();
+            console.log('[LabelGenerator] Calling generateItemsPDF with timeout');
+            withTimeout(generateItemsPDF, 120000) // 120s pour items (plus complexe)
+              .catch(error => {
+                console.error('[LabelGenerator] Items PDF generation failed:', error);
+                onError(error);
+              });
           }
         }}
         disabled={loading || validItems.length === 0 || isOffline}

@@ -351,6 +351,9 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
     // État pour suivre l'upload en cours
     const [isUploading, setIsUploading] = useState(false);
     
+    // État pour suivre la soumission en cours
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
     // État pour tracker l'image locale sélectionnée mais pas encore uploadée
     const [localImage, setLocalImage] = useState<{ uri: string; needsUpload: boolean } | null>(null);
 
@@ -358,6 +361,7 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
         setItem(INITIAL_STATE);
         setLocalImage(null);
         setIsUploading(false);
+        setIsSubmitting(false);
     }, []);
 
     useEffect(() => {
@@ -526,10 +530,18 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
 
     // Modifier la fonction handleSubmit pour éviter les doubles uploads
     const handleSubmit = async () => {
+        // Protection contre les doubles soumissions
+        if (isSubmitting || isUploading) {
+            console.log("[ItemForm] handleSubmit - Soumission déjà en cours, ignorée");
+            return;
+        }
+        
         console.log("[ItemForm] handleSubmit - Début de la soumission");
         console.log("[ItemForm] handleSubmit - État du formulaire:", item);
         
         try {
+            setIsSubmitting(true);
+            
             const errors = validateForm();
             console.log("[ItemForm] handleSubmit - Erreurs de validation:", errors);
             
@@ -640,7 +652,12 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
                 message: 'Impossible de créer l\'article',
                 showAlert: true
             });
-            setIsUploading(false); // Assurez-vous que l'indicateur d'upload est désactivé en cas d'erreur
+            // En cas d'erreur, on ne fait PAS resetForm() ni onSuccess()
+            // L'utilisateur reste sur le formulaire pour corriger ou réessayer
+        } finally {
+            // Toujours remettre les états à false dans finally
+            setIsSubmitting(false);
+            setIsUploading(false);
         }
     };
 
@@ -723,8 +740,17 @@ const ItemForm: React.FC<ItemFormProps> = ({ containers, categories: propCategor
         <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Nouvel Article</Text>
-                <TouchableOpacity style={styles.saveButton} onPress={handleSubmit} disabled={isUploading}>
-                    <Text style={styles.saveText}>Enregistrer</Text>
+                <TouchableOpacity 
+                    style={[
+                        styles.saveButton, 
+                        (isUploading || isSubmitting) && styles.disabledButton
+                    ]} 
+                    onPress={handleSubmit} 
+                    disabled={isUploading || isSubmitting}
+                >
+                    <Text style={styles.saveText}>
+                        {isSubmitting ? "Enregistrement..." : isUploading ? "Upload..." : "Enregistrer"}
+                    </Text>
                 </TouchableOpacity>
             </View>
             
@@ -1175,7 +1201,7 @@ const getThemedStyles = (theme: any) => StyleSheet.create({
     },
     scrollContent: {
         padding: Platform.OS === 'web' ? 16 : 12,
-        paddingBottom: 100, // Espace pour éviter que le clavier cache le contenu
+        paddingBottom: Platform.OS === 'web' ? 50 : 100, // Padding optimisé pour web, plus sur mobile pour le clavier
     },
     formSection: {
         backgroundColor: theme.surface,

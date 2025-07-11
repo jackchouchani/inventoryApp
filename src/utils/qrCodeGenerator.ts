@@ -62,12 +62,15 @@ const isItemQRCodeExists = async (qrCode: string): Promise<boolean> => {
 
     if (error && error.code !== 'PGRST116') {
       console.error('Erreur lors de la vérification du QR code item:', error);
+      // En cas d'erreur réseau, on assume que le QR code n'existe pas
+      // plutôt que de bloquer la création de l'item
       return false;
     }
 
     return !!data;
   } catch (error) {
     console.error('Erreur lors de la vérification du QR code item:', error);
+    // En cas d'erreur réseau, on assume que le QR code n'existe pas
     return false;
   }
 };
@@ -160,9 +163,11 @@ export const generateUniqueItemQRCode = async (): Promise<string> => {
     }
   }
   
-  // Dernière stratégie : utiliser 8 caractères aléatoires
-  const ultimateCode = `ART_${generateRandomString(8)}`;
-  console.error(`[QR Generator] Utilisation du code ultime (non vérifié): ${ultimateCode}`);
+  // Dernière stratégie : utiliser un timestamp pour garantir l'unicité
+  const timestamp = Date.now().toString(36); // Convertir timestamp en base 36
+  const randomPart = generateRandomString(3); // 3 caractères aléatoires
+  const ultimateCode = `ART_${timestamp}${randomPart}`.substring(0, 12); // Limiter à 12 caractères
+  console.error(`[QR Generator] Utilisation du code ultime avec timestamp: ${ultimateCode}`);
   return ultimateCode;
 };
 

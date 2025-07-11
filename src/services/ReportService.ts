@@ -6,6 +6,10 @@ import { Location } from '../types/location';
 // Import jsPDF dynamically for web compatibility
 let jsPDF: any = null;
 
+// Import des utilitaires sécurisés
+import { downloadTextSafely, downloadPDFSafely, downloadBlobSafely, monitorMemoryAndCleanup } from '../utils/downloadUtils';
+import { downloadTextSafelyAlt, downloadBlobSafelyAlt } from '../utils/downloadUtilsAlternative';
+
 const loadPDFLibraries = async () => {
   if (typeof window !== 'undefined') {
     const { default: jsPDFLib } = await import('jspdf');
@@ -206,13 +210,22 @@ export class ReportService {
    */
   static async exportToCSV(data: ReportData, options?: ExportOptions): Promise<void> {
     try {
+      console.log('[ReportService] Starting CSV export');
       const csvContent = this.generateCSV(data, options);
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
       const filename = `inventaire-${timestamp}.csv`;
       
-      this.downloadFile(csvContent, filename, 'text/csv;charset=utf-8;');
+      // ✅ TEST: Utiliser la méthode alternative qui évite la manipulation DOM
+      downloadTextSafelyAlt(csvContent, filename, 'text/csv;charset=utf-8;');
+      
+      // ✅ TEMPORAIRE: Désactiver le monitoring mémoire pour tester
+      // monitorMemoryAndCleanup();
+      
+      console.log('[ReportService] CSV export completed successfully');
     } catch (error) {
       console.error('Erreur lors de l\'export CSV:', error);
+      // ✅ TEMPORAIRE: Désactiver le monitoring mémoire pour tester  
+      // monitorMemoryAndCleanup();
       throw new Error('Impossible de générer le fichier CSV');
     }
   }
@@ -890,24 +903,22 @@ davantage vos résultats et à maintenir une croissance durable de votre activit
    */
   static async exportToPDF(data: ReportData, options?: ExportOptions): Promise<void> {
     try {
+      console.log('[ReportService] Starting PDF export');
       const pdfBlob = await this.generatePDFReport(data, options);
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
       const filename = `rapport-inventaire-${timestamp}.pdf`;
       
-      // Créer un lien de téléchargement
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
+      // ✅ CORRECTION: Utiliser la méthode alternative qui évite la manipulation DOM
+      downloadBlobSafelyAlt(pdfBlob, filename);
       
-      // Nettoyage
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // ✅ TEMPORAIRE: Désactiver le monitoring mémoire pour tester
+      // monitorMemoryAndCleanup();
       
+      console.log('[ReportService] PDF export completed successfully');
     } catch (error) {
       console.error('Erreur lors de l\'export PDF:', error);
+      // ✅ TEMPORAIRE: Désactiver le monitoring mémoire pour tester  
+      // monitorMemoryAndCleanup();
       throw new Error('Impossible de générer le fichier PDF');
     }
   }

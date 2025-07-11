@@ -99,7 +99,7 @@ export default function TabLayout() {
         tabBarItemStyle: {
           padding: 0,
           height: Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 100 : 0,
+          paddingBottom: 0,
         },
       }}
     >

@@ -173,12 +173,12 @@ export const usePWALifecycle = (config: Partial<PWAConfig> = {}): PWALifecycleHo
       
       if (event.persisted) {
         // ⚠️ CRITIQUE: Page restaurée depuis le cache bfcache (problème iOS PWA)
+        console.log('[PWALifecycle] bfcache restore detected - RELOAD DISABLED for testing');
         
-        
-        // Forcer un rechargement complet pour éviter les états corrompus
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        // 🚫 TEMPORAIRE: Désactiver le reload automatique pour tester le problème PDF/CSV
+        // setTimeout(() => {
+        //   window.location.reload();
+        // }, 500);
         return;
       }
       

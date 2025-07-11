@@ -170,13 +170,18 @@ const ContainerIndexScreen = () => {
           <Text style={headerStyles.headerActionText}>Ajouter un Container</Text>
         </TouchableOpacity>
 
-        {/* Grille responsive */}
-        <ContainerGrid
-          containers={containers}
-          items={items}
-          onContainerPress={handleContainerPress}
-          onRetry={handleRefresh}
-        />
+        {/* Grille responsive avec marginBottom comme VirtualizedItemList */}
+        <View style={{ 
+          flex: 1, 
+          marginBottom: Platform.OS === 'web' ? 85 : 65 // Même logique que VirtualizedItemList
+        }}>
+          <ContainerGrid
+            containers={containers}
+            items={items}
+            onContainerPress={handleContainerPress}
+            onRetry={handleRefresh}
+          />
+        </View>
 
         {/* Dialog de confirmation de suppression */}
         <ConfirmationDialog
