@@ -83,6 +83,7 @@
             padding-bottom: calc(var(--tab-height) + var(--safe-area-inset-bottom));
         }
 
+
         nav.expo-tab-bar {
             position: fixed;
             bottom: 0;
@@ -152,13 +153,13 @@
             });
         }
 
+
         document.addEventListener('touchmove', (e) => {
             if (e.touches.length > 1) {
                 e.preventDefault();
             }
         }, { passive: false });
 
-        // Désactiver également le comportement de défilement par défaut
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1) {
                 e.preventDefault();

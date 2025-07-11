@@ -63,7 +63,7 @@ const boundDatabase = {
   getSource: supabaseDatabase.getSource.bind(supabaseDatabase),
   addSource: supabaseDatabase.addSource.bind(supabaseDatabase),
   updateSource: supabaseDatabase.updateSource.bind(supabaseDatabase),
-  deleteSource: supabaseDatabase.deleteSource.bind(supabaseDatabase)
+  deleteSource: supabaseDatabase.deleteSource.bind(supabaseDatabase),
   getItemHistory: supabaseDatabase.getItemHistory.bind(supabaseDatabase),
   getGlobalHistory: supabaseDatabase.getGlobalHistory.bind(supabaseDatabase)
 };

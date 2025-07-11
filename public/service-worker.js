@@ -1,4 +1,4 @@
-const APP_VERSION = '1.9.0'; // Synchronisé avec app.json
+const APP_VERSION = '1.9.3'; // Synchronisé avec app.json
 const CACHE_NAME = `inventory-app-cache-v${APP_VERSION}`;
 const IMAGES_CACHE = 'offline-images-v1';
 const STATIC_ASSETS = [
@@ -169,7 +169,6 @@ async function handleImageRequest(request) {
     }
     
     if (cachedResponse) {
-      console.log('[SW] Image servie depuis le cache:', request.url);
       return cachedResponse;
     }
     

@@ -909,6 +909,13 @@ export class SupabaseDatabase implements DatabaseInterface {
         city: source.city,
         createdAt: source.created_at,
         userId: source.user_id
+      }));
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      return [];
+    }
+  }
+
   async getItemHistory(itemId: number): Promise<ItemHistory[]> {
     try {
       const { data, error } = await supabase
@@ -1020,13 +1027,16 @@ export class SupabaseDatabase implements DatabaseInterface {
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
       throw error;
+    }
+  }
+
   async getGlobalHistory(page: number, limit: number): Promise<{ history: ItemHistory[], total: number }> {
     try {
       const from = page * limit;
       const to = from + limit - 1;
 
       const { data, error, count } = await supabase
-        .rpc('get_global_item_history', { page_num: page, page_size: limit })
+        .rpc('get_global_item_history', { page_num: page, page_size: limit });
 
       if (error) throw error;
       if (!data) return { history: [], total: 0 };
@@ -1049,7 +1059,7 @@ export class SupabaseDatabase implements DatabaseInterface {
       return { history: [], total: 0 };
     }
   }
-}
+};
 
 export const database = new SupabaseDatabase();
 export default database;

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, TouchableOpacity, Text, Alert, ActivityIndicator, useColorScheme, Switch } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, ActivityIndicator, useColorScheme, Switch, ScrollView } from 'react-native';
 import { Modal, Portal, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useSelector } from 'react-redux';
@@ -273,7 +273,14 @@ const SettingsScreen = () => {
         onBackPress={() => router.replace('/(tabs)/stock')}
       />
 
-      {/* Theme Selection Section */}
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        className="page-transition"
+      >
+        {/* Theme Selection Section */}
       <View style={styles.sectionContainer}>
         <Text style={styles.sectionTitle}>Thème (Actuel: {currentThemeDisplay})</Text>
         <View style={styles.themeButtonsContainer}>
@@ -507,6 +514,7 @@ const SettingsScreen = () => {
         <Text style={[styles.menuText, styles.dangerText]}>Se déconnecter</Text>
         <Icon name="chevron_right" size={24} color={activeTheme.text.secondary} />
       </TouchableOpacity>
+      </ScrollView>
 
       {/* Modal de confirmation pour le téléchargement */}
       <Portal>

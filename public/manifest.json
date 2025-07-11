@@ -1,7 +1,7 @@
 {
   "short_name": "Inventory",
   "name": "Inventory App",
-  "version": "1.9.0",
+  "version": "1.9.3",
   "description": "Application de gestion d'inventaire",
   "icons": [
     {

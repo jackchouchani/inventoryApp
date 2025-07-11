@@ -140,6 +140,7 @@ const StockScreenContent = () => {
   // --- STATES OPTIMISÉS ---
   const [filters, setFilters] = useState<StockFilters>({ status: 'available' });
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // *** ÉTATS POUR LE MODAL DE DATE DE VENTE ***
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
@@ -147,7 +148,7 @@ const StockScreenContent = () => {
   const [selectedSoldDate, setSelectedSoldDate] = useState<Date>(new Date());
 
   // --- Chargement des données avec hooks Redux appropriés ---
-  const { data: items, isLoading: itemsLoading, error: itemsError, loadMore } = useItems();
+  const { data: items, isLoading: itemsLoading, error: itemsError, loadMore, refetch } = useItems();
   const { categories, isLoading: categoriesLoading, error: categoriesError } = useCategories();  
   const { data: containers, isLoading: containersLoading, error: containersError } = useContainers();
 
@@ -256,6 +257,16 @@ const StockScreenContent = () => {
   // Combiner les états de chargement et erreurs
   const isLoading = (itemsLoading || categoriesLoading || containersLoading || algoliaSearch.isLoading || algoliaSearch.isSearching || localSearch.isSearching);
   const error = itemsError || categoriesError || containersError;
+
+  // Fonction refresh pour pull-to-refresh
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   // Callbacks pour gérer le scroll iOS PWA
   const handleSearchFocus = useCallback(() => {
@@ -632,6 +643,8 @@ const StockScreenContent = () => {
           onMarkAsAvailable={stableCallbacks.current.handleMarkAsAvailablePress}
           onEndReached={isSearchActive && !isOffline ? algoliaSearch.loadMore : loadMore}
           isLoadingMore={isSearchActive && !isOffline ? algoliaSearch.isSearching : (itemsLoading && items.length > 0)}
+          refreshing={refreshing}
+          onRefresh={refresh}
           estimatedItemSize={120}
         />
       </View>

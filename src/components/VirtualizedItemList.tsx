@@ -170,26 +170,21 @@ const VirtualizedItemList: React.FC<VirtualizedItemListProps> = ({
   // Configuration des données mémoïsée
   const listData = useMemo(() => items, [items]);
 
-  // Style du container avec hauteur réduite pour éviter l'overlap avec tab bar
+  // Style du container
   const containerStyle = useMemo(() => {
-    let tabBarHeight;
-    if (Platform.OS === 'web') {
-      tabBarHeight = 80;
-    } else {
-      tabBarHeight = Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65;
-    }
+    const tabBarHeight = Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65;
     
     return [
       styles.container,
       {
-        marginBottom: tabBarHeight, // Réduire la hauteur du container
+        marginBottom: tabBarHeight,
       }
     ];
   }, [styles.container, insets.bottom]);
 
-  // Style du contenu - padding réduit maintenant
+  // Style du contenu
   const contentContainerStyle = useMemo(() => ({
-    paddingBottom: 20, // Juste un petit padding
+    paddingBottom: 20,
   }), []);
 
   if (isLoading && items.length === 0) {

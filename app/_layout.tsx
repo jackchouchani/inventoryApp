@@ -21,6 +21,7 @@ import { fetchContainers } from '../src/store/containersThunks';
 import { fetchLocations } from '../src/store/locationsThunks';
 import { conflictNotificationService } from '../src/services/ConflictNotificationService';
 
+
 // Empêcher le masquage automatique du splash screen
 SplashScreen.preventAutoHideAsync();
 
@@ -170,6 +171,7 @@ function RootLayoutContent() {
   const segments = useSegments();
   const { activeTheme } = useAppTheme();
   const { appWasHidden, reactivationCount } = usePWALifecycle();
+  
   
   // Timeout de sécurité pour éviter les blocages infinis
   const loadingTimeoutRef = useRef<NodeJS.Timeout>();

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { TouchableOpacity, View, Platform, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
@@ -12,6 +12,7 @@ export default function TabLayout() {
   const { user } = useAuth();
   const { activeTheme } = useAppTheme();
   const insets = useSafeAreaInsets();
+
 
   // Si l'utilisateur n'est pas authentifié, ne pas rendre les onglets
   // La redirection sera gérée par le layout racine

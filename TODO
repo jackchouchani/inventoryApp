@@ -58,43 +58,43 @@ Ce document détaille les prochaines fonctionnalités à implémenter pour enric
 
 ### 2.1. Schéma de Données Supabase
 
-- [ ] **Nouvelle table `sources` :**
-  - [ ] `id`: `int8`, PK, auto-increment.
-  - [ ] `name`: `text`, not null.
-  - [ ] `type`: `text` (valeurs possibles : 'Marché', 'Boutique', 'En ligne', 'Particulier').
-  - [ ] `city`: `text`, nullable.
-  - [ ] `created_at`: `timestamptz`, default `now()`.
-  - [ ] `user_id`: `uuid`, FK vers `auth.users`.
-- [ ] **Table `items` :**
-  - [ ] Ajouter `source_id`: `int8`, nullable, FK vers `sources.id`.
-  - [ ] Ajouter `is_consignment`: `boolean`, default `false`.
-  - [ ] Ajouter `consignor_name`: `text`, nullable.
-  - [ ] Ajouter `consignment_split_percentage`: `numeric(5, 2)`, nullable.
+- [x] **Nouvelle table `sources` :**
+  - [x] `id`: `int8`, PK, auto-increment.
+  - [x] `name`: `text`, not null.
+  - [x] `type`: `text` (valeurs possibles : 'Marché', 'Boutique', 'En ligne', 'Particulier').
+  - [x] `city`: `text`, nullable.
+  - [x] `created_at`: `timestamptz`, default `now()`.
+  - [x] `user_id`: `uuid`, FK vers `auth.users`.
+- [x] **Table `items` :**
+  - [x] Ajouter `source_id`: `int8`, nullable, FK vers `sources.id`.
+  - [x] Ajouter `is_consignment`: `boolean`, default `false`.
+  - [x] Ajouter `consignor_name`: `text`, nullable.
+  - [x] Ajouter `consignment_split_percentage`: `numeric(5, 2)`, nullable.
 
 ### 2.2. Couche de Données (Redux & Database)
 
-- [ ] **`src/database/database.ts` :**
-  - [ ] Ajouter les fonctions CRUD pour la table `sources`.
-- [ ] **Store Redux (`src/store/`) :**
-  - [ ] Créer `sourcesSlice.ts` et `sourcesThunks.ts` pour gérer l'état des sources.
-  - [ ] Mettre à jour `itemsThunks.ts` pour inclure les nouveaux champs (`source_id`, `is_consignment`, etc.) lors de la création/mise à jour d'items.
-- [ ] **Sélecteurs (`src/store/selectors.ts`) :**
-  - [ ] Créer un sélecteur `selectSourcePerformance` qui calcule le ROI moyen et la marge totale par `source_id`.
-  - [ ] Créer un sélecteur `selectConsignmentPayments` qui liste les articles vendus en dépôt-vente et calcule le montant à reverser (`selling_price * consignment_split_percentage / 100`).
+- [x] **`src/database/database.ts` :**
+  - [x] Ajouter les fonctions CRUD pour la table `sources`.
+- [x] **Store Redux (`src/store/`) :**
+  - [x] Créer `sourcesSlice.ts` et `sourcesThunks.ts` pour gérer l'état des sources.
+  - [x] Mettre à jour `itemsThunks.ts` pour inclure les nouveaux champs (`source_id`, `is_consignment`, etc.) lors de la création/mise à jour d'items.
+- [x] **Sélecteurs (`src/store/selectors.ts`) :**
+  - [x] Créer un sélecteur `selectSourcePerformance` qui calcule le ROI moyen et la marge totale par `source_id`.
+  - [x] Créer un sélecteur `selectConsignmentPayments` qui liste les articles vendus en dépôt-vente et calcule le montant à reverser (`selling_price * consignment_split_percentage / 100`).
 
 ### 2.3. Interface Utilisateur
 
-- [ ] **Nouvelle section de l'app : `app/sources/`**
-  - [ ] `index.tsx` : Liste des sources avec recherche et bouton "Ajouter".
-  - [ ] `add.tsx` : Formulaire de création de source.
-  - [ ] `[id]/index.tsx` : Page de détail d'une source, affichant ses stats de performance et la liste des articles qui en proviennent.
-- [ ] **Formulaire d'item (`src/components/ItemForm.tsx`) :**
-  - [ ] Ajouter un sélecteur pour choisir une `source`.
-  - [ ] Ajouter une case à cocher "Article en dépôt-vente".
-  - [ ] Si coché, afficher les champs pour le nom du déposant et le pourcentage.
-- [ ] **Tableau de Bord (`app/(stack)/stats.tsx`) :**
-  - [ ] Ajouter une section "Performance par Source".
-  - [ ] Ajouter une section "Paiements Dépôts-Ventes à effectuer".
+- [x] **Nouvelle section de l'app : `app/sources/`**
+  - [x] `index.tsx` : Liste des sources avec recherche et bouton "Ajouter".
+  - [x] `add.tsx` : Formulaire de création de source.
+  - [x] `[id]/index.tsx` : Page de détail d'une source, affichant ses stats de performance et la liste des articles qui en proviennent.
+- [x] **Formulaire d'item (`src/components/ItemForm.tsx`) :**
+  - [x] Ajouter un sélecteur pour choisir une `source`.
+  - [x] Ajouter une case à cocher "Article en dépôt-vente".
+  - [x] Si coché, afficher les champs pour le nom du déposant et le pourcentage.
+- [x] **Tableau de Bord (`app/(stack)/stats.tsx`) :**
+  - [x] Ajouter une section "Performance par Source".
+  - [x] Ajouter une section "Paiements Dépôts-Ventes à effectuer".
 
 ---
 
