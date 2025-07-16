@@ -32,7 +32,7 @@ import {
 } from '../../../src/store/selectors';
 
 import type { UserProfile, AppPermissions } from '../../../src/types/permissions';
-import { applyDefaultPermissionsForRole, getRoleLabel, getRoleColor } from '../../../src/utils/permissionsUtils';
+import { applyDefaultPermissionsForRole, getRoleLabel, getRoleColor, normalizePermissions } from '../../../src/utils/permissionsUtils';
 import { forceLog } from '../../../src/utils/debugUtils';
 import { supabase } from '../../../src/config/supabase';
 
@@ -172,22 +172,10 @@ export default function PermissionsScreen() {
     // Mettre à jour l'activité utilisateur
     updateActivity();
     
-    console.log('[handlePermissionToggle] START - selectedUser:', !!selectedUser, 'isUpdating:', isUpdating, 'isStuck:', isStuck);
-    
-    if (!selectedUser) {
-      console.log('[handlePermissionToggle] No selected user, aborting');
-      return;
-    }
-    
-    if (isUpdating) {
-      console.log('[handlePermissionToggle] Already updating, aborting');
-      return;
-    }
-    
-    if (isStuck) {
-      console.log('[handlePermissionToggle] System is stuck, aborting');
-      return;
-    }
+    // Vérifications préliminaires
+    if (!selectedUser) return;
+    if (isUpdating) return;
+    if (isStuck) return;
     
     // Optimisation : créer les nouvelles permissions de manière plus efficace
     const newPermissions = {
@@ -198,18 +186,13 @@ export default function PermissionsScreen() {
       }
     };
     
-    console.log('[handlePermissionToggle] New permissions:', newPermissions);
-    
     const updatedUser = { ...selectedUser, permissions: newPermissions };
     
     // Mise à jour optimiste immédiate (synchrone)
     dispatch(selectUser(updatedUser));
-    console.log('[handlePermissionToggle] Optimistic update applied');
     
     // Mise à jour en arrière-plan avec retry automatique
     try {
-      console.log('[handlePermissionToggle] Starting backend update for user:', selectedUser.id);
-      
       let updatedProfile;
       let retryCount = 0;
       const maxRetries = 2;
@@ -222,11 +205,9 @@ export default function PermissionsScreen() {
             currentProfile: selectedUser
           })).unwrap();
           
-          console.log('[handlePermissionToggle] Backend update successful on attempt:', retryCount + 1);
           break;
         } catch (error) {
           retryCount++;
-          console.log(`[handlePermissionToggle] Attempt ${retryCount} failed:`, error);
           
           if (retryCount > maxRetries) {
             throw error;
@@ -234,26 +215,15 @@ export default function PermissionsScreen() {
           
           // Attendre avant de réessayer
           await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-          console.log(`[handlePermissionToggle] Retrying attempt ${retryCount + 1}...`);
         }
-      }
-      
-      console.log('[handlePermissionToggle] Backend update successful:', updatedProfile);
-      
-      // Vérifier que les permissions ont été réellement sauvegardées
-      if (JSON.stringify(updatedProfile.permissions) !== JSON.stringify(newPermissions)) {
-        console.warn('[handlePermissionToggle] WARNING: Saved permissions differ from expected!');
-        console.warn('[handlePermissionToggle] Expected:', newPermissions);
-        console.warn('[handlePermissionToggle] Actual:', updatedProfile.permissions);
       }
       
       // Mettre à jour le contexte si nécessaire
       if (currentUser && selectedUser.id === currentUser.id) {
         updateCurrentUser(updatedProfile);
-        console.log('[handlePermissionToggle] Current user context updated');
       }
     } catch (error) {
-      console.error('[handlePermissionToggle] Backend update failed after retries:', error);
+      forceLog(`[handlePermissionToggle] Backend update failed: ${error}`, 'error');
       // Restaurer l'état précédent en cas d'erreur
       dispatch(selectUser(selectedUser));
     }
@@ -282,16 +252,20 @@ export default function PermissionsScreen() {
     }
   };
   
-  const handleApplyDefaultPermissions = async () => {
-    console.log('[handleApplyDefaultPermissions] Button clicked!');
+  const handleApplyDefaultPermissions = useCallback(async () => {
+    forceLog('[handleApplyDefaultPermissions] Button clicked!', 'warn');
     
     if (!selectedUser) {
-      console.log('[handleApplyDefaultPermissions] No selected user!');
+      forceLog('[handleApplyDefaultPermissions] No selected user!', 'error');
       return;
     }
     
-    console.log('[handleApplyDefaultPermissions] Selected user:', selectedUser);
-    console.log('[handleApplyDefaultPermissions] User role:', selectedUser.role);
+    forceLog(`[handleApplyDefaultPermissions] Selected user: ${selectedUser.email}`, 'info');
+    forceLog(`[handleApplyDefaultPermissions] User role: ${selectedUser.role}`, 'info');
+    
+    // Test de la fonction applyDefaultPermissionsForRole
+    const testPermissions = await applyDefaultPermissionsForRole(selectedUser.role);
+    forceLog(`[handleApplyDefaultPermissions] Test permissions result: ${JSON.stringify(testPermissions)}`, 'info');
     
     Alert.alert(
       'Confirmer l\'action',
@@ -302,18 +276,12 @@ export default function PermissionsScreen() {
           text: 'Confirmer',
           style: 'destructive',
           onPress: async () => {
-            console.log('[handleApplyDefaultPermissions] User confirmed action');
-            
-            const defaultPermissions = applyDefaultPermissionsForRole(selectedUser.role);
-            console.log('[handleApplyDefaultPermissions] Default permissions calculated:', defaultPermissions);
+            const defaultPermissions = await applyDefaultPermissionsForRole(selectedUser.role);
             
             try {
-              console.log('[handleApplyDefaultPermissions] Starting permission update...');
-              
               // Mise à jour optimiste de l'interface
               const updatedUser = { ...selectedUser, permissions: defaultPermissions };
               dispatch(selectUser(updatedUser));
-              console.log('[handleApplyDefaultPermissions] Optimistic update applied');
               
               const updatedProfile = await dispatch(updatePermissionsThunk({
                 userId: selectedUser.id,
@@ -321,16 +289,13 @@ export default function PermissionsScreen() {
                 currentProfile: selectedUser
               })).unwrap();
               
-              console.log('[handleApplyDefaultPermissions] Backend update successful:', updatedProfile);
-              
               if (currentUser && selectedUser.id === currentUser.id) {
                 updateCurrentUser(updatedProfile);
-                console.log('[handleApplyDefaultPermissions] Current user context updated');
               }
               
               Alert.alert('Succès', 'Permissions par défaut appliquées');
             } catch (error) {
-              console.error('[handleApplyDefaultPermissions] Error:', error);
+              forceLog(`[handleApplyDefaultPermissions] Error: ${error}`, 'error');
               Alert.alert('Erreur', 'Impossible d\'appliquer les permissions par défaut.');
               // Restaurer l'état précédent en cas d'erreur
               dispatch(selectUser(selectedUser));
@@ -339,7 +304,7 @@ export default function PermissionsScreen() {
         }
       ]
     );
-  };
+  }, [selectedUser, dispatch, currentUser, updateCurrentUser]);
   
   const handleSendInvitation = async () => {
     if (!inviteEmail.trim()) {
@@ -411,6 +376,14 @@ export default function PermissionsScreen() {
       <Text style={styles.sectionDescription}>
         Sélectionnez un utilisateur pour gérer ses permissions
       </Text>
+      
+      {/* Bouton pour accéder à la gestion des permissions par défaut */}
+      <TouchableOpacity
+        style={[styles.inviteButton, { backgroundColor: activeTheme.secondary, marginBottom: 16 }]}
+        onPress={() => router.push('/(stack)/admin/default-permissions')}
+      >
+        <Text style={styles.inviteButtonText}>⚙️ Configurer les permissions par défaut</Text>
+      </TouchableOpacity>
       
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -490,7 +463,7 @@ export default function PermissionsScreen() {
     </ScrollView>
   );
   
-  const renderPermissionSwitch = (
+  const renderPermissionSwitch = useCallback((
     section: string,
     action: string,
     label: string,
@@ -498,8 +471,13 @@ export default function PermissionsScreen() {
   ) => {
     if (!selectedUser) return null;
     
-    const sectionPermissions = selectedUser.permissions[section as keyof AppPermissions];
+    // Normaliser les permissions pour assurer la compatibilité
+    const normalizedPermissions = normalizePermissions(selectedUser.permissions);
+    const sectionPermissions = normalizedPermissions[section as keyof AppPermissions];
     const isEnabled = sectionPermissions?.[action as keyof typeof sectionPermissions] === true;
+    
+    // Log seulement lors de changements significatifs
+    // (Logging désactivé pour éviter le spam - le système fonctionne correctement)
     
     return (
       <View key={`${section}.${action}`} style={styles.permissionRow}>
@@ -510,6 +488,7 @@ export default function PermissionsScreen() {
           )}
         </View>
         <Switch
+          key={`${section}.${action}.${selectedUser.id}.${isEnabled}`}
           value={isEnabled}
           onValueChange={(value) => handlePermissionToggle(section, action, value)}
           disabled={isUpdating}
@@ -518,16 +497,16 @@ export default function PermissionsScreen() {
         />
       </View>
     );
-  };
+  }, [selectedUser, isUpdating, handlePermissionToggle]);
   
-  const renderPermissionSection = (title: string, children: React.ReactNode) => (
+  const renderPermissionSection = useCallback((title: string, children: React.ReactNode) => (
     <View style={styles.permissionSection}>
       <Text style={styles.permissionSectionTitle}>{title}</Text>
       {children}
     </View>
-  );
+  ), []);
   
-  const renderPermissionsPanel = () => (
+  const renderPermissionsPanel = useCallback(() => (
     <ScrollView style={styles.container}>
       <View style={styles.selectedUserHeader}>
         <View style={styles.userMainInfo}>
@@ -553,14 +532,35 @@ export default function PermissionsScreen() {
               <Text style={styles.changeRoleText}>Modifier</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity
-              style={styles.defaultPermissionsButton}
-              onPress={handleApplyDefaultPermissions}
-            >
-              <Text style={styles.defaultPermissionsButtonText}>
-                📋 Permissions par défaut
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.defaultPermissionsContainer}>
+              <TouchableOpacity
+                style={[styles.defaultPermissionsButton, { 
+                  backgroundColor: activeTheme.primary, 
+                  borderWidth: 2, 
+                  borderColor: 'red',
+                  zIndex: 9999 
+                }]}
+                onPress={() => {
+                  forceLog('[TouchableOpacity] Default permissions button pressed!', 'warn');
+                  handleApplyDefaultPermissions();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.defaultPermissionsButtonText, { color: 'white' }]}>
+                  📋 Permissions par défaut
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.manageDefaultsButton, { backgroundColor: activeTheme.secondary }]}
+                onPress={() => router.push('/(stack)/admin/default-permissions')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.manageDefaultsButtonText}>
+                  ⚙️ Gérer les défauts
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -626,7 +626,7 @@ export default function PermissionsScreen() {
         </>
       ))}
     </ScrollView>
-  );
+  ), [selectedUser, isUpdating, handleApplyDefaultPermissions, handleForceUnstuck, activeTheme, renderPermissionSwitch, renderPermissionSection, dispatch, currentUser, updateCurrentUser]);
   
   return (
     <View style={styles.container}>

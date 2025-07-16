@@ -38,7 +38,16 @@ export interface InviteUserRequest {
   role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
 }
 
-// Permissions par défaut selon le rôle
+export interface DefaultPermissions {
+  id: string;
+  role: 'ADMIN' | 'MANAGER' | 'OPERATOR';
+  permissions: AppPermissions;
+  created_at: string;
+  updated_at: string;
+  updated_by: string;
+}
+
+// Permissions par défaut selon le rôle - Structure complète pour matcher la base de données
 export const DEFAULT_PERMISSIONS: Record<UserProfile['role'], AppPermissions> = {
   ADMIN: {
     items: { create: true, update: true, delete: true },

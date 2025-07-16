@@ -1,11 +1,60 @@
 import { DEFAULT_PERMISSIONS } from '../types/permissions';
 import type { AppPermissions, UserProfile } from '../types/permissions';
+import { database } from '../database/database';
+
+/**
+ * Normalise les permissions pour qu'elles correspondent à la structure AppPermissions
+ */
+export const normalizePermissions = (permissions: any): AppPermissions => {
+  return {
+    items: {
+      create: permissions.items?.create ?? false,
+      update: permissions.items?.update ?? false,
+      delete: permissions.items?.delete ?? false
+    },
+    categories: {
+      create: permissions.categories?.create ?? false,
+      update: permissions.categories?.update ?? false,
+      delete: permissions.categories?.delete ?? false
+    },
+    containers: {
+      create: permissions.containers?.create ?? false,
+      update: permissions.containers?.update ?? false,
+      delete: permissions.containers?.delete ?? false
+    },
+    features: {
+      scanner: permissions.features?.scanner ?? false,
+      locations: permissions.features?.locations ?? false,
+      sources: permissions.features?.sources ?? false,
+      invoices: permissions.features?.invoices ?? false,
+      auditLog: permissions.features?.auditLog ?? false,
+      labels: permissions.features?.labels ?? false,
+      dashboard: permissions.features?.dashboard ?? false
+    },
+    stats: {
+      viewPurchasePrice: permissions.stats?.viewPurchasePrice ?? false
+    },
+    settings: {
+      canManageUsers: permissions.settings?.canManageUsers ?? false
+    }
+  };
+};
 
 /**
  * Applique les permissions par défaut selon le rôle
+ * Utilise d'abord les permissions par défaut personnalisées depuis la base de données,
+ * puis les permissions par défaut codées en dur si aucune n'est trouvée
  */
-export const applyDefaultPermissionsForRole = (role: UserProfile['role']): AppPermissions => {
-  return { ...DEFAULT_PERMISSIONS[role] };
+export const applyDefaultPermissionsForRole = async (role: UserProfile['role']): Promise<AppPermissions> => {
+  try {
+    // Tenter d'obtenir les permissions par défaut personnalisées depuis la base de données
+    const customDefaultPermissions = await database.getDefaultPermissionsForRole(role);
+    return { ...customDefaultPermissions };
+  } catch (error) {
+    console.error('[applyDefaultPermissionsForRole] Erreur lors de la récupération des permissions par défaut:', error);
+    // Fallback vers les permissions par défaut codées en dur
+    return { ...DEFAULT_PERMISSIONS[role] };
+  }
 };
 
 /**

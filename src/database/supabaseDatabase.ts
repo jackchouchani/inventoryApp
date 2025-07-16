@@ -6,7 +6,8 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 import type { Location, LocationInput, LocationUpdate } from '../types/location';
 import type { Source, SourceInput, SourceUpdate } from '../types/source';
 import type { ItemHistory } from '../types/itemHistory';
-import type { UserProfile, UserPermissionsUpdate, UserProfileUpdate, InviteUserRequest } from '../types/permissions';
+import type { UserProfile, UserPermissionsUpdate, UserProfileUpdate, InviteUserRequest, DefaultPermissions, AppPermissions } from '../types/permissions';
+import { DEFAULT_PERMISSIONS } from '../types/permissions';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -1061,6 +1062,95 @@ export class SupabaseDatabase implements DatabaseInterface {
     }
   }
   
+  // ===== GESTION DES PERMISSIONS PAR DÉFAUT =====
+  
+  async getDefaultPermissions(): Promise<DefaultPermissions[]> {
+    try {
+      const { data, error } = await supabase
+        .from('default_permissions')
+        .select('*')
+        .order('role');
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('[Database] Erreur getDefaultPermissions:', error);
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async getDefaultPermissionsForRole(role: UserProfile['role']): Promise<AppPermissions> {
+    try {
+      const { data, error } = await supabase
+        .from('default_permissions')
+        .select('permissions')
+        .eq('role', role)
+        .single();
+      
+      if (error) throw error;
+      return data?.permissions || DEFAULT_PERMISSIONS[role];
+    } catch (error) {
+      console.error('[Database] Erreur getDefaultPermissionsForRole:', error);
+      // Retourner les permissions par défaut codées en dur en cas d'erreur
+      return DEFAULT_PERMISSIONS[role];
+    }
+  }
+
+  async updateDefaultPermissions(role: UserProfile['role'], permissions: AppPermissions): Promise<DefaultPermissions> {
+    try {
+      const { data, error } = await supabase
+        .from('default_permissions')
+        .update({
+          permissions,
+          updated_by: (await supabase.auth.getUser()).data.user?.id
+        })
+        .eq('role', role)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('[Database] Erreur updateDefaultPermissions:', error);
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async updateDefaultPermissionsForRole(role: UserProfile['role'], permissions: AppPermissions): Promise<DefaultPermissions> {
+    return this.updateDefaultPermissions(role, permissions);
+  }
+
+  async resetDefaultPermissionsToHardcoded(): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      
+      const updates = Object.entries(DEFAULT_PERMISSIONS).map(([role, permissions]) => ({
+        role,
+        permissions,
+        updated_by: userId
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('default_permissions')
+          .update({
+            permissions: update.permissions,
+            updated_by: update.updated_by
+          })
+          .eq('role', update.role);
+        
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('[Database] Erreur resetDefaultPermissionsToHardcoded:', error);
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
   // ===== GESTION DES PERMISSIONS UTILISATEUR =====
   
   async getAllUsers(): Promise<UserProfile[]> {

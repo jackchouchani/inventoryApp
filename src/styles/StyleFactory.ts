@@ -3671,6 +3671,11 @@ class StyleFactory {
         fontWeight: '600' as const,
         textTransform: 'uppercase' as const,
       },
+      defaultPermissionsContainer: {
+        flexDirection: 'row' as const,
+        gap: 8,
+        marginTop: 8,
+      },
       defaultPermissionsButton: {
         backgroundColor: theme.feedback.warning + '20',
         borderWidth: 1,
@@ -3679,11 +3684,48 @@ class StyleFactory {
         paddingHorizontal: 16,
         borderRadius: 8,
         alignItems: 'center' as const,
-        marginTop: 8,
+        flex: 1,
       },
       defaultPermissionsButtonText: {
         color: theme.feedback.warning,
         fontSize: 14,
+        fontWeight: '600' as const,
+      },
+      manageDefaultsButton: {
+        backgroundColor: theme.secondary + '20',
+        borderWidth: 1,
+        borderColor: theme.secondary,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center' as const,
+        flex: 1,
+      },
+      manageDefaultsButtonText: {
+        color: theme.secondary,
+        fontSize: 14,
+        fontWeight: '600' as const,
+      },
+      
+      // Styles pour les tabs de rôles
+      roleTab: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: theme.border,
+        alignItems: 'center' as const,
+      },
+      roleTabActive: {
+        borderColor: 'transparent',
+      },
+      roleTabText: {
+        fontSize: 14,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+      },
+      roleTabTextActive: {
+        color: '#fff',
         fontWeight: '600' as const,
       },
       
