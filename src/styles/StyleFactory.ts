@@ -1,5 +1,6 @@
 import { StyleSheet, Platform, ImageResizeMode, Dimensions } from 'react-native';
 import type { AppThemeType } from '../contexts/ThemeContext';
+import { PlatformUtils } from '../utils/platformUtils';
 
 // Interface pour les styles communs
 interface CommonStyles {
@@ -39,6 +40,7 @@ type ComponentName =
 class StyleFactory {
   private static cache = new Map<string, any>();
   private static themeVersion = 0;
+  
 
   /**
    * Invalide le cache lors d'un changement de thème
@@ -3452,6 +3454,339 @@ class StyleFactory {
         color: theme.danger.main,
         fontWeight: '500' as const,
       },
+      
+      // Styles pour la page d'administration des permissions
+      sectionDescription: {
+        fontSize: 14,
+        color: theme.text.secondary,
+        marginBottom: 16,
+        lineHeight: 20,
+      },
+      userList: {
+        marginTop: 16,
+      },
+      userCard: {
+        backgroundColor: theme.surface,
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 12,
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      userInfo: {
+        flex: 1,
+      },
+      userEmail: {
+        fontSize: 16,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+        marginBottom: 4,
+      },
+      userRole: {
+        fontSize: 14,
+        color: theme.text.secondary,
+      },
+      userActions: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+      },
+      manageButton: {
+        backgroundColor: theme.primary,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+      },
+      manageButtonText: {
+        color: theme.text.onPrimary,
+        fontSize: 14,
+        fontWeight: '500' as const,
+      },
+      selectedUserHeader: {
+        backgroundColor: theme.surface,
+        padding: 16,
+        borderRadius: 8,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      selectedUserEmail: {
+        fontSize: 18,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        marginBottom: 4,
+      },
+      selectedUserRole: {
+        fontSize: 14,
+        color: theme.text.secondary,
+      },
+      updatingBanner: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        backgroundColor: theme.warning.light,
+        padding: 12,
+        borderRadius: 6,
+        marginBottom: 16,
+      },
+      updatingText: {
+        marginLeft: 8,
+        fontSize: 14,
+        color: theme.warning.main,
+      },
+      permissionSection: {
+        marginBottom: 24,
+      },
+      permissionSectionTitle: {
+        fontSize: 16,
+        fontWeight: '600' as const,
+        color: theme.text.primary,
+        marginBottom: 12,
+      },
+      permissionRow: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: theme.surface,
+        borderRadius: 8,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: theme.border,
+      },
+      permissionInfo: {
+        flex: 1,
+        marginRight: 16,
+      },
+      permissionLabel: {
+        fontSize: 14,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+        marginBottom: 2,
+      },
+      permissionDescription: {
+        fontSize: 12,
+        color: theme.text.secondary,
+        lineHeight: 16,
+      },
+      errorContainer: {
+        backgroundColor: theme.danger.light,
+        padding: 12,
+        borderRadius: 6,
+        marginTop: 16,
+      },
+      errorText: {
+        color: theme.danger.main,
+        fontSize: 14,
+        textAlign: 'center' as const,
+      },
+      
+      // Nouveaux styles pour les features étendues
+      roleContainer: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        marginTop: 4,
+      },
+      roleBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: 'flex-start' as const,
+      },
+      roleBadgeText: {
+        fontSize: 11,
+        fontWeight: '600' as const,
+        color: '#FFFFFF',
+        textTransform: 'uppercase' as const,
+      },
+      inviteButton: {
+        backgroundColor: theme.success,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        marginTop: 20,
+        alignItems: 'center' as const,
+        borderWidth: 1,
+        borderColor: theme.success,
+        ...Platform.select({
+          web: {
+            boxShadow: `0 4px 12px ${theme.success}30`,
+          },
+          default: {
+            shadowColor: theme.success,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+          },
+        }),
+      },
+      inviteButtonText: {
+        color: theme.text.onPrimary,
+        fontSize: 16,
+        fontWeight: '700' as const,
+      },
+      userMainInfo: {
+        flexDirection: 'row' as const,
+        alignItems: 'flex-start' as const,
+        justifyContent: 'space-between' as const,
+        marginBottom: 16,
+      },
+      userInfoSection: {
+        flex: 1,
+        marginRight: 12,
+      },
+      roleSection: {
+        alignItems: 'flex-end' as const,
+      },
+      roleSelector: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        marginBottom: 8,
+      },
+      changeRoleText: {
+        fontSize: 12,
+        color: theme.primary,
+        marginLeft: 8,
+        fontWeight: '500' as const,
+      },
+      roleChangeButton: {
+        backgroundColor: theme.primary,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 6,
+        marginLeft: 8,
+      },
+      roleChangeButtonText: {
+        color: theme.text.onPrimary,
+        fontSize: 11,
+        fontWeight: '600' as const,
+        textTransform: 'uppercase' as const,
+      },
+      defaultPermissionsButton: {
+        backgroundColor: theme.feedback.warning + '20',
+        borderWidth: 1,
+        borderColor: theme.feedback.warning,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center' as const,
+        marginTop: 8,
+      },
+      defaultPermissionsButtonText: {
+        color: theme.feedback.warning,
+        fontSize: 14,
+        fontWeight: '600' as const,
+      },
+      
+      // Styles pour les modales
+      modalOverlay: {
+        flex: 1,
+        backgroundColor: theme.backdrop,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+        padding: 20,
+      },
+      modalContent: {
+        backgroundColor: theme.surface,
+        borderRadius: 16,
+        padding: 24,
+        minWidth: 320,
+        maxWidth: 400,
+        width: '100%',
+        borderWidth: 1,
+        borderColor: theme.border,
+        ...Platform.select({
+          web: {
+            boxShadow: `0 8px 32px ${theme.backdrop}`,
+          },
+          default: {
+            shadowColor: theme.backdrop,
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.3,
+            shadowRadius: 16,
+            elevation: 8,
+          },
+        }),
+      },
+      modalTitle: {
+        fontSize: 20,
+        fontWeight: '700' as const,
+        color: theme.text.primary,
+        marginBottom: 24,
+        textAlign: 'center' as const,
+      },
+      roleOption: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        borderWidth: 2,
+        borderColor: theme.border,
+        backgroundColor: theme.backgroundSecondary,
+      },
+      roleOptionSelected: {
+        backgroundColor: theme.primary + '15',
+        borderColor: theme.primary,
+      },
+      emailInput: {
+        ...common.input,
+        marginBottom: 16,
+      },
+      roleLabel: {
+        fontSize: 16,
+        fontWeight: '500' as const,
+        color: theme.text.primary,
+        marginBottom: 12,
+      },
+      modalButtons: {
+        flexDirection: 'row' as const,
+        justifyContent: 'space-between' as const,
+        marginTop: 24,
+        gap: 12,
+      },
+      modalCancelButton: {
+        backgroundColor: theme.backgroundSecondary,
+        borderWidth: 1,
+        borderColor: theme.border,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        flex: 1,
+        alignItems: 'center' as const,
+      },
+      modalCancelButtonText: {
+        color: theme.text.secondary,
+        fontSize: 16,
+        fontWeight: '600' as const,
+      },
+      modalConfirmButton: {
+        backgroundColor: theme.primary,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 10,
+        flex: 1,
+        alignItems: 'center' as const,
+      },
+      modalConfirmButtonText: {
+        color: theme.text.onPrimary,
+        fontSize: 16,
+        fontWeight: '600' as const,
+      },
+      modalConfirmButtonDisabled: {
+        backgroundColor: theme.text.disabled,
+        opacity: 0.5,
+      },
     });
   }
 
@@ -4384,10 +4719,11 @@ class StyleFactory {
   private static getCommonHeaderStyles(theme: AppThemeType, common: CommonStyles) {
     return StyleSheet.create({
       topBar: {
-        height: Platform.OS === 'ios' ? 44 : 56,
+        minHeight: Platform.OS === 'ios' ? 44 : 56,
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
         paddingHorizontal: 10,
+        paddingBottom: 8, // Padding bottom pour espacer du contenu
         backgroundColor: theme.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.border,
@@ -4406,16 +4742,17 @@ class StyleFactory {
       backButton: {
         flexDirection: 'row' as const,
         alignItems: 'center' as const,
-        paddingVertical: 10,
-        paddingHorizontal: Platform.OS === 'ios' ? 0 : 8,
-        minWidth: Platform.OS === 'ios' ? 70 : 50,
+        paddingVertical: 10, // Padding uniforme
+        paddingHorizontal: 8,
+        minWidth: 50,
+        minHeight: 40, // Zone de touch standard
         justifyContent: 'flex-start' as const,
       },
       
       backButtonText: {
         fontSize: 17,
         color: theme.primary,
-        marginLeft: Platform.OS === 'ios' ? 6 : 4,
+        marginLeft: 4,
       },
       
       backIcon: {
@@ -4483,6 +4820,7 @@ class StyleFactory {
         alignItems: 'center' as const,
         justifyContent: 'space-between' as const,
         padding: 16,
+        paddingTop: Platform.OS === 'ios' ? 20 : 16, // Plus d'espace en haut sur iOS
         backgroundColor: theme.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.border,

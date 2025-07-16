@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
+import { useUserPermissions } from '../../src/hooks/useUserPermissions';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -11,7 +12,6 @@ import StyleFactory from '../../src/styles/StyleFactory';
 import CommonHeader from '../../src/components/CommonHeader';
 import SalesBarChart from '../../src/components/SalesBarChart';
 import ExportButtons from '../../src/components/ExportButtons';
-import { useStats } from '../../src/hooks/useStats';
 import { useDashboardData, useStockPageData, useSourcesDashboardData } from '../../src/hooks/useOptimizedSelectors';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../src/store/store';
@@ -27,10 +27,31 @@ import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { useSalesData } from '../../src/hooks/useSalesData';
 
 const StatsScreen = () => {
+  const router = useRouter();
+  const userPermissions = useUserPermissions();
+  
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canViewDashboard) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canViewDashboard, router]);
+  
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canViewDashboard) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#000', fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour accéder au tableau de bord
+        </Text>
+      </View>
+    );
+  }
+  
   console.log('[Stats] StatsScreen component mounting/re-mounting at:', new Date().toISOString());
   
   const { activeTheme } = useAppTheme();
-  const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
@@ -86,15 +107,14 @@ const StatsScreen = () => {
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Stats');
   
-  const { stats, periodStats, isLoading, error } = useStats(selectedPeriod);
+  const { stats, itemsByCategory, itemsByContainer, isLoading } = useDashboardData();
 
 
   
   // Hook pour les données de ventes avec navigation temporelle
   const salesData = useSalesData(salesPeriod);
 
-  // Hook pour les données de containers
-  const { itemsByContainer } = useDashboardData();
+  
   
   // Hook pour les données d'export
   const exportData = useStockPageData();
@@ -214,8 +234,6 @@ const StatsScreen = () => {
 
   const totalCA_periode = periodStats.totalRevenueForPeriod;
   const totalMarge_periode = periodStats.totalProfitForPeriod;
-  
-  const tauxMarge_periode = totalCA_periode > 0 ? (totalMarge_periode / totalCA_periode) * 100 : 0;
 
   return (
     <ErrorBoundary>

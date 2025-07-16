@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc

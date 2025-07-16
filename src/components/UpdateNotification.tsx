@@ -13,11 +13,8 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({
   const [currentVersion, setCurrentVersion] = useState<string>('');
 
   useEffect(() => {
-    // Vérifier si on est dans un environnement web avec service worker
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      registerServiceWorker();
-      setupUpdateListener();
-    }
+    // Service Worker désactivé pour éviter les problèmes de reload
+    console.log('[UpdateNotification] Service Worker désactivé');
   }, []);
 
   const registerServiceWorker = async () => {

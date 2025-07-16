@@ -1,7 +1,7 @@
-import React, { useCallback, memo } from 'react';
+import React, { useCallback, memo, useMemo } from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useImagePicker } from '../hooks/useImagePicker';
-import { useTheme } from '../hooks/useTheme';
+import { useAppTheme, AppThemeType } from '../contexts/ThemeContext';
 
 interface ImagePickerProps {
   onImageSelected: (uri: string) => void;
@@ -20,7 +20,9 @@ export const ImagePicker: React.FC<ImagePickerProps> = memo(({
   allowsEditing,
   disabled = false
 }) => {
-  const theme = useTheme();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
+  
   const { pickImage, isLoading, error } = useImagePicker({
     quality,
     aspect,
@@ -40,19 +42,15 @@ export const ImagePicker: React.FC<ImagePickerProps> = memo(({
     <TouchableOpacity 
       style={[
         styles.button,
-        { backgroundColor: theme.primary },
         disabled && styles.buttonDisabled
       ]}
       onPress={handlePress}
       disabled={disabled || isLoading}
     >
       {isLoading ? (
-        <ActivityIndicator color={theme.background} />
+        <ActivityIndicator color={activeTheme.text.onPrimary} />
       ) : (
-        <Text style={[
-          styles.buttonText,
-          { color: theme.background }
-        ]}>
+        <Text style={styles.buttonText}>
           Sélectionner une image
         </Text>
       )}
@@ -62,8 +60,9 @@ export const ImagePicker: React.FC<ImagePickerProps> = memo(({
 
 ImagePicker.displayName = 'ImagePicker';
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppThemeType) => StyleSheet.create({
   button: {
+    backgroundColor: theme.primary,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -73,6 +72,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
+    color: theme.text.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -109,8 +109,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({
       setLayout(getResponsiveLayout());
     };
     
-    // Écouter les changements de dimensions (Web)
-    if (typeof window !== 'undefined') {
+    // Écouter les changements de dimensions (Web seulement)
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }

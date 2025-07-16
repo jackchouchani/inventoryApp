@@ -4,6 +4,7 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 import type { Location, LocationInput } from '../types/location';
 import type { Source, SourceInput, SourceUpdate } from '../types/source';
 import type { ItemHistory } from '../types/itemHistory';
+import type { UserProfile, UserPermissionsUpdate, UserProfileUpdate, InviteUserRequest } from '../types/permissions';
 
 import supabaseDatabase from './supabaseDatabase';
 import { logService } from '../services/logService';
@@ -39,6 +40,13 @@ const boundDatabase = {
   getItemByQRCode: supabaseDatabase.getItemByQRCode.bind(supabaseDatabase),
   getContainerByQRCode: supabaseDatabase.getContainerByQRCode.bind(supabaseDatabase),
   getCategory: supabaseDatabase.getCategory.bind(supabaseDatabase),
+  getSources: supabaseDatabase.getSources.bind(supabaseDatabase),
+  getSource: supabaseDatabase.getSource.bind(supabaseDatabase),
+  getAllUsers: supabaseDatabase.getAllUsers.bind(supabaseDatabase),
+  getUserProfile: supabaseDatabase.getUserProfile.bind(supabaseDatabase),
+  updateUserPermissions: supabaseDatabase.updateUserPermissions.bind(supabaseDatabase),
+  updateUserProfile: supabaseDatabase.updateUserProfile.bind(supabaseDatabase),
+  inviteUser: supabaseDatabase.inviteUser.bind(supabaseDatabase),
   getPhotoUris: supabaseDatabase.getPhotoUris.bind(supabaseDatabase),
   validateQRCode: supabaseDatabase.validateQRCode.bind(supabaseDatabase),
   getItemOrContainerByQRCode: supabaseDatabase.getItemOrContainerByQRCode.bind(supabaseDatabase),
@@ -106,7 +114,14 @@ export const databaseInterface: DatabaseInterface = {
   getSource: boundDatabase.getSource,
   getPhotoUris: boundDatabase.getPhotoUris,
   validateQRCode: boundDatabase.validateQRCode,
-  getItemOrContainerByQRCode: boundDatabase.getItemOrContainerByQRCode
+  getItemOrContainerByQRCode: boundDatabase.getItemOrContainerByQRCode,
+  getAllUsers: boundDatabase.getAllUsers,
+  getUserProfile: boundDatabase.getUserProfile,
+  updateUserPermissions: boundDatabase.updateUserPermissions, // Logging désactivé temporairement
+  updateUserProfile: boundDatabase.updateUserProfile, // Logging désactivé temporairement  
+  inviteUser: boundDatabase.inviteUser, // Logging désactivé temporairement
+  getItemHistory: boundDatabase.getItemHistory,
+  getGlobalHistory: boundDatabase.getGlobalHistory
 };
 
 // Réexporter les types
@@ -157,6 +172,13 @@ export interface DatabaseInterface {
     deleteSource: (id: number) => Promise<void>;
     getSources: () => Promise<Source[]>;
     getSource: (id: number) => Promise<Source | null>;
+    
+    // Méthodes pour les permissions utilisateur
+    getAllUsers: () => Promise<UserProfile[]>;
+    getUserProfile: (userId: string) => Promise<UserProfile | null>;
+    updateUserPermissions: (userId: string, permissions: UserPermissionsUpdate) => Promise<void>;
+    updateUserProfile: (userId: string, profileUpdate: UserProfileUpdate) => Promise<void>;
+    inviteUser: (inviteRequest: InviteUserRequest) => Promise<{ success: boolean; message: string }>;
 
     // Méthodes utilitaires
     validateQRCode: (type: 'ITEM' | 'CONTAINER' | 'LOCATION', qrCode: string) => Promise<boolean>;

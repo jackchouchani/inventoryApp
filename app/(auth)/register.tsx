@@ -1,13 +1,13 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { authService } from '../../src/services/authService';
 import { checkNetworkConnection } from '../../src/utils/networkUtils';
 import * as Sentry from '@sentry/react-native';
 import Toast from 'react-native-toast-message';
 import { useAuthValidation } from '../../src/hooks/useAuthValidation';
-import { theme } from '../../src/utils/theme';
-import { useMemo } from 'react';
+import { useAppTheme, AppThemeType } from '../../src/contexts/ThemeContext';
+import ThemeToggle from '../../src/components/ThemeToggle';
 
 const REGISTER_TIMEOUT = 15000;
 
@@ -18,15 +18,8 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { validateEmail, validatePassword, validatePasswordConfirmation, showValidationError } = useAuthValidation();
-
-  // Nettoyage des champs lors du démontage du composant
-  useEffect(() => {
-    return () => {
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-    };
-  }, []);
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
 
   const validateForm = useCallback(() => {
     const emailValidation = validateEmail(email);
@@ -54,7 +47,7 @@ export default function RegisterScreen() {
     if (loading) return;
     if (!validateForm()) return;
 
-    let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     try {
       setLoading(true);
@@ -110,141 +103,150 @@ export default function RegisterScreen() {
     }
   }, [loading, validateForm, email, password, router]);
 
-  const styles = useMemo(() => createStyles(), []);
-
   return (
-    <View style={styles.container}>
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>Inscription</Text>
-        
-        <TextInput
-          style={[styles.input, loading && styles.inputDisabled]}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!loading}
-          textContentType="emailAddress"
-          autoComplete="email"
-          accessibilityLabel="Champ email"
-          accessibilityHint="Entrez votre adresse email"
-        />
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.container}>
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>Inscription</Text>
+          <ThemeToggle />
+          
+          <TextInput
+            style={[styles.input, loading && styles.inputDisabled]}
+            placeholder="Email"
+            placeholderTextColor={activeTheme.text.secondary}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!loading}
+            textContentType="emailAddress"
+            autoComplete="email"
+            accessibilityLabel="Champ email"
+            accessibilityHint="Entrez votre adresse email"
+          />
 
-        <TextInput
-          style={[styles.input, loading && styles.inputDisabled]}
-          placeholder="Mot de passe"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!loading}
-          textContentType="newPassword"
-          autoComplete="password-new"
-          accessibilityLabel="Champ mot de passe"
-          accessibilityHint="Créez votre mot de passe"
-        />
+          <TextInput
+            style={[styles.input, loading && styles.inputDisabled]}
+            placeholder="Mot de passe"
+            placeholderTextColor={activeTheme.text.secondary}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            editable={!loading}
+            textContentType="newPassword"
+            autoComplete="password-new"
+            accessibilityLabel="Champ mot de passe"
+            accessibilityHint="Créez votre mot de passe"
+          />
 
-        <TextInput
-          style={[styles.input, loading && styles.inputDisabled]}
-          placeholder="Confirmer le mot de passe"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          editable={!loading}
-          textContentType="newPassword"
-          autoComplete="password-new"
-          accessibilityLabel="Champ confirmation mot de passe"
-          accessibilityHint="Confirmez votre mot de passe"
-        />
+          <TextInput
+            style={[styles.input, loading && styles.inputDisabled]}
+            placeholder="Confirmer le mot de passe"
+            placeholderTextColor={activeTheme.text.secondary}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            editable={!loading}
+            textContentType="newPassword"
+            autoComplete="password-new"
+            accessibilityLabel="Champ confirmation mot de passe"
+            accessibilityHint="Confirmez votre mot de passe"
+          />
 
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
-          accessibilityLabel="Bouton d'inscription"
-          accessibilityHint="Appuyez pour créer votre compte"
-        >
-          {loading ? (
-            <ActivityIndicator color={theme.colors.text.inverse} />
-          ) : (
-            <Text style={styles.buttonText}>S'inscrire</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+            accessibilityLabel="Bouton d'inscription"
+            accessibilityHint="Appuyez pour créer votre compte"
+          >
+            {loading ? (
+              <ActivityIndicator color={activeTheme.text.onPrimary} />
+            ) : (
+              <Text style={styles.buttonText}>S'inscrire</Text>
+            )}
+          </TouchableOpacity>
 
-        <Link
-          href="/(auth)/login"
-          style={[styles.link, loading && styles.linkDisabled]}
-          accessibilityLabel="Lien vers la connexion"
-        >
-          <Text style={styles.linkText}>
-            Déjà un compte ? Se connecter
-          </Text>
-        </Link>
+          <Link
+            href="/(auth)/login"
+            style={[styles.link, loading && styles.linkDisabled]}
+            accessibilityLabel="Lien vers la connexion"
+          >
+            <Text style={styles.linkText}>
+              Déjà un compte ? Se connecter
+            </Text>
+          </Link>
+        </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
-const createStyles = () => StyleSheet.create({
+const createStyles = (theme: AppThemeType) => StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    backgroundColor: theme.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
     justifyContent: 'center',
     padding: theme.spacing.lg,
   },
   formContainer: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.surface,
     padding: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.25)', elevation: 5,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadows.md,
   },
   title: {
     fontSize: theme.typography.h1.fontSize,
     fontWeight: '600',
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     textAlign: 'center',
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
   },
   input: {
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.md,
+    backgroundColor: theme.backgroundSecondary,
+    height: 50,
+    paddingHorizontal: theme.spacing.md,
     borderRadius: theme.borderRadius.sm,
     marginBottom: theme.spacing.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.border,
     fontSize: theme.typography.body.fontSize,
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
   },
   button: {
-    backgroundColor: theme.colors.primary,
-    padding: theme.spacing.md,
+    backgroundColor: theme.primary,
+    height: 50,
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: theme.spacing.sm,
   },
   buttonDisabled: {
-    backgroundColor: theme.colors.background,
-    opacity: 0.7,
+    backgroundColor: theme.primary,
+    opacity: 0.6,
   },
   buttonText: {
-    color: theme.colors.text.inverse,
+    color: theme.text.onPrimary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: '600',
   },
   link: {
-    marginTop: theme.spacing.md,
-    alignItems: 'center',
+    marginTop: theme.spacing.lg,
+    alignSelf: 'center',
   },
   linkText: {
-    color: theme.colors.primary,
+    color: theme.primary,
     fontSize: theme.typography.caption.fontSize,
   },
   linkDisabled: {
     opacity: 0.5,
-    pointerEvents: 'none',
   },
   inputDisabled: {
-    opacity: 0.5,
-    pointerEvents: 'none',
+    backgroundColor: theme.background,
+    opacity: 0.7,
   },
 }); 

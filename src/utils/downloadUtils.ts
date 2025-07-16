@@ -3,7 +3,11 @@
  * 
  * Ce module centralise la logique de téléchargement de fichiers
  * avec nettoyage automatique des ressources pour éviter les memory leaks
+ * 
+ * Note: Ce module est conçu pour le web uniquement
  */
+
+import { Platform } from 'react-native';
 
 interface DownloadOptions {
   timeout?: number; // Timeout en millisecondes
@@ -21,6 +25,12 @@ export const downloadBlobSafely = (
   const { timeout = 30000, cleanup = true } = options;
   
   return new Promise((resolve, reject) => {
+    // Vérification de plateforme
+    if (Platform.OS !== 'web') {
+      console.warn('[DownloadUtils] Téléchargement ignoré sur mobile');
+      resolve();
+      return;
+    }
     let url: string | null = null;
     let link: HTMLAnchorElement | null = null;
     let timeoutId: NodeJS.Timeout | null = null;

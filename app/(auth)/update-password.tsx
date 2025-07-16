@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../src/config/supabase';
-import { theme } from '../../src/utils/theme';
+import { useAppTheme, AppThemeType } from '../../src/contexts/ThemeContext';
 import * as Sentry from '@sentry/react-native';
+import ThemeToggle from '../../src/components/ThemeToggle';
+import { Icon } from '../../src/components';
 
 export default function UpdatePassword() {
   const [password, setPassword] = useState('');
@@ -17,36 +19,28 @@ export default function UpdatePassword() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { verified, email: paramEmail } = params;
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
 
   useEffect(() => {
     const checkVerification = async () => {
       try {
         setIsLoading(true);
-        console.log('Vérification de l\'accès à la page de réinitialisation');
-        
-        // Récupérer l'email depuis les paramètres ou le stockage local
         let userEmail = paramEmail as string || null;
         
         if (!userEmail && Platform.OS === 'web') {
           userEmail = localStorage.getItem('reset_email');
         }
         
-        if (userEmail) {
-          setEmail(userEmail);
-        }
+        if (userEmail) setEmail(userEmail);
         
-        // Vérifier si l'utilisateur a été vérifié via OTP
         if (verified === 'true' && userEmail) {
-          console.log('Accès autorisé: l\'utilisateur a été vérifié par OTP');
           setIsLoading(false);
           return;
         }
         
-        // Si l'utilisateur n'a pas été vérifié correctement, rediriger vers la page de récupération
-        console.log('Accès non autorisé, redirection vers la page de récupération');
         setError('Veuillez d\'abord vérifier votre email avec le code reçu.');
-      } catch (err) {
-        console.error('Erreur lors de la vérification de l\'accès:', err);
+      } catch {
         setError('Une erreur est survenue. Veuillez réessayer.');
       } finally {
         setIsLoading(false);
@@ -54,55 +48,33 @@ export default function UpdatePassword() {
     };
     
     checkVerification();
-  }, [verified, paramEmail, router]);
+  }, [verified, paramEmail]);
 
   const handleUpdatePassword = async () => {
-    // Validation des champs
     if (!password || !confirmPassword) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
-
     if (password !== confirmPassword) {
-      // Message d'erreur explicite pour les mots de passe qui ne correspondent pas
-      Alert.alert(
-        'Mots de passe différents', 
-        'Le mot de passe et sa confirmation doivent être identiques.'
-      );
+      Alert.alert('Mots de passe différents', 'Les mots de passe doivent être identiques.');
       return;
     }
-
     if (password.length < 6) {
       Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères');
       return;
     }
-
     if (!email) {
-      Alert.alert('Erreur', 'Email non disponible. Veuillez recommencer le processus.');
+      Alert.alert('Erreur', 'Email non disponible. Veuillez recommencer.');
       return;
     }
 
     setIsUpdating(true);
-
     try {
-      console.log('Tentative de mise à jour du mot de passe pour:', email);
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
       
-      // Utiliser directement l'API de mise à jour du mot de passe
-      const { error } = await supabase.auth.updateUser({
-        password: password
-      });
-
-      if (error) {
-        console.error('Erreur lors de la mise à jour du mot de passe:', error);
-        throw error;
-      }
-      
-      console.log('Mot de passe mis à jour avec succès');
-      
-      // Déconnexion pour forcer une nouvelle connexion avec le nouveau mot de passe
       await supabase.auth.signOut();
       
-      // Nettoyer le stockage local
       if (Platform.OS === 'web') {
         localStorage.removeItem('reset_email');
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -114,34 +86,15 @@ export default function UpdatePassword() {
         level: 'info'
       });
 
-      // Afficher un message de succès pour la mise à jour du mot de passe
       Alert.alert(
         'Mot de passe mis à jour',
-        'Votre mot de passe a été mis à jour avec succès. Veuillez vous reconnecter avec votre nouveau mot de passe.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              console.log('Redirection vers la page de connexion');
-              router.replace('/(auth)/login');
-            },
-          },
-        ]
+        'Votre mot de passe a été mis à jour. Veuillez vous reconnecter.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
       );
     } catch (error) {
-      console.error('Error updating password:', error);
-      
-      Sentry.captureException(error, {
-        tags: { action: 'update_password' }
-      });
-
-      // Message d'erreur plus spécifique
+      Sentry.captureException(error, { tags: { action: 'update_password' } });
       const errorMessage = error instanceof Error ? error.message : 'Une erreur inconnue est survenue';
-      
-      Alert.alert(
-        'Erreur',
-        `Impossible de mettre à jour le mot de passe: ${errorMessage}. Veuillez réessayer.`
-      );
+      Alert.alert('Erreur', `Impossible de mettre à jour: ${errorMessage}.`);
     } finally {
       setIsUpdating(false);
     }
@@ -150,12 +103,8 @@ export default function UpdatePassword() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.card}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 16 }]}>
-            Vérification du lien de réinitialisation...
-          </Text>
-        </View>
+        <ActivityIndicator size="large" color={activeTheme.primary} />
+        <Text style={styles.centeredText}>Vérification...</Text>
       </View>
     );
   }
@@ -165,7 +114,7 @@ export default function UpdatePassword() {
       <View style={styles.container}>
         <View style={styles.card}>
           <Text style={styles.title}>Erreur</Text>
-          <Text style={[styles.subtitle, { color: 'red' }]}>{error}</Text>
+          <Text style={[styles.subtitle, { color: activeTheme.danger.main }]}>{error}</Text>
           <TouchableOpacity 
             style={styles.button}
             onPress={() => router.replace('/(auth)/forgot-password')}
@@ -176,8 +125,6 @@ export default function UpdatePassword() {
       </View>
     );
   }
-  
-
 
   return (
     <KeyboardAvoidingView 
@@ -187,9 +134,7 @@ export default function UpdatePassword() {
       <View style={styles.container}>
         <View style={styles.card}>
           <Text style={styles.title}>Nouveau mot de passe</Text>
-          <Text style={styles.subtitle}>
-            Veuillez entrer votre nouveau mot de passe ci-dessous.
-          </Text>
+          <Text style={styles.subtitle}>Veuillez entrer votre nouveau mot de passe.</Text>
           
           <View style={styles.inputContainer}>
             <TextInput
@@ -202,13 +147,13 @@ export default function UpdatePassword() {
               autoComplete="password-new"
               textContentType="newPassword"
               editable={!isUpdating}
-              placeholderTextColor="#999"
+              placeholderTextColor={activeTheme.text.secondary}
             />
             <TouchableOpacity 
               style={styles.eyeIcon} 
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              <Icon name={showPassword ? 'visibility' : 'visibility_off'} size={24} color={activeTheme.text.secondary} />
             </TouchableOpacity>
           </View>
           
@@ -223,7 +168,7 @@ export default function UpdatePassword() {
               autoComplete="password-new"
               textContentType="newPassword"
               editable={!isUpdating}
-              placeholderTextColor="#999"
+              placeholderTextColor={activeTheme.text.secondary}
               onSubmitEditing={handleUpdatePassword}
               returnKeyType="done"
             />
@@ -231,7 +176,7 @@ export default function UpdatePassword() {
               style={styles.eyeIcon} 
               onPress={() => setShowConfirmPassword(!showConfirmPassword)}
             >
-              <Text>{showConfirmPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              <Icon name={showConfirmPassword ? 'visibility' : 'visibility_off'} size={24} color={activeTheme.text.secondary} />
             </TouchableOpacity>
           </View>
           
@@ -241,53 +186,51 @@ export default function UpdatePassword() {
             disabled={isUpdating}
           >
             {isUpdating ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={activeTheme.text.onPrimary} />
             ) : (
-              <Text style={styles.buttonText}>Mettre à jour le mot de passe</Text>
+              <Text style={styles.buttonText}>Mettre à jour</Text>
             )}
           </TouchableOpacity>
           
-          <TouchableOpacity 
-            style={styles.linkButton}
-            onPress={() => router.replace('/(auth)/login')}
-            disabled={isUpdating}
-          >
-            <Text style={styles.linkText}>Retour à la connexion</Text>
-          </TouchableOpacity>
+          <ThemeToggle />
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.background,
+  },
+  centeredText: {
+    textAlign: 'center',
+    marginTop: 16,
+    color: theme.text.primary,
+    fontSize: 16,
   },
   card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.surface,
+    borderRadius: theme.borderRadius.lg,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    ...theme.shadows.medium,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: theme.text.secondary,
     marginBottom: 24,
     lineHeight: 22,
+    textAlign: 'center',
   },
   inputContainer: {
     position: 'relative',
@@ -296,22 +239,22 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.border,
     borderRadius: theme.borderRadius.sm,
     paddingHorizontal: 16,
-    paddingRight: 50, // Espace pour l'icône
+    paddingRight: 50,
     fontSize: 16,
-    color: theme.colors.text.primary,
-    backgroundColor: theme.colors.background,
+    color: theme.text.primary,
+    backgroundColor: theme.backgroundSecondary,
   },
   eyeIcon: {
     position: 'absolute',
-    right: 15,
+    right: 12,
     top: 13,
     padding: 5,
   },
   button: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
     borderRadius: theme.borderRadius.sm,
     height: 50,
     justifyContent: 'center',
@@ -322,17 +265,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.text.onPrimary,
     fontSize: 16,
     fontWeight: '600',
-  },
-  linkButton: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: theme.colors.primary,
-    fontSize: 16,
-    fontWeight: '500',
   },
 });

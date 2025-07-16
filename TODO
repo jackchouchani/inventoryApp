@@ -134,34 +134,126 @@ Ce document détaille les prochaines fonctionnalités à implémenter pour enric
 
 ---
 
-## Thème 4 : Rôles et Permissions Utilisateurs
+## Thème 4 : Gestion Granulaire des Permissions Utilisateurs
 
-**Objectif :** Mettre en place un système de rôles pour sécuriser l'accès aux fonctionnalités sensibles.
+**Objectif :** Remplacer le système de rôles statiques par une interface d'administration permettant de gérer finement les droits de chaque utilisateur, permission par permission.
 
-### 4.1. Configuration Supabase
+### 4.1. Évolution du Schéma de Données Supabase
 
-- [ ] **Nouvelle table `profiles` :**
-  - [ ] `id`: `uuid`, PK, FK vers `auth.users.id`.
-  - [ ] `role`: `text`, not null, default `'OPERATOR'`. (Valeurs possibles: `ADMIN`, `MANAGER`, `OPERATOR`).
-- [ ] **Mettre en place la Row Level Security (RLS) :**
-  - [ ] Activer la RLS sur les tables `items`, `categories`, `containers`, etc.
-  - [ ] **Exemple de politique pour `items` :**
-    - [ ] `ADMIN` peut tout faire (SELECT, INSERT, UPDATE, DELETE).
-    - [ ] `MANAGER` peut tout faire sauf DELETE.
-    - [ ] `OPERATOR` peut SELECT, INSERT, et UPDATE (mais pas les champs financiers comme `purchase_price`).
-  - [ ] Créer une fonction `get_user_role()` dans Supabase pour faciliter l'écriture des politiques.
+- [ ] **Table `profiles` :**
+  - [ ] Conserver la colonne `role` (`ADMIN`, `MANAGER`, `OPERATOR`) pour un contrôle d'accès de haut niveau (ex: seul un `ADMIN` peut accéder à la page de gestion des permissions).
+  - [ ] **Ajouter une colonne `permissions` de type `jsonb`**. Cette colonne stockera un objet définissant les droits spécifiques de l'utilisateur.
+    - **Structure de l'objet `permissions` :**
+      ```json
+      {
+        "items": {
+          "create": true,
+          "update": true,
+          "delete": false
+        },
+        "categories": {
+          "create": true,
+          "update": true,
+          "delete": false
+        },
+        "containers": {
+          "create": true,
+          "update": true,
+          "delete": false
+        },
+        "features": {
+          "scanner": true,
+          "locations": true,
+          "sources": true,
+          "invoices": false,
+          "auditLog": false,
+          "labels": true,
+          "dashboard": true
+        },
+        "stats": {
+          "viewPurchasePrice": true
+        },
+        "settings": {
+          "canManageUsers": false
+        }
+      }
+      ```
+- [ ] **Simplifier la Row Level Security (RLS) :**
+  - [ ] Supprimer les politiques RLS complexes basées sur les rôles.
+  - [ ] Conserver des politiques simples : un utilisateur authentifié peut-il lire/écrire sur une table ? La logique fine sera gérée côté client.
+- [ ] **Créer une fonction trigger `on_new_user` :**
+  - [ ] Qui crée automatiquement un profil dans `profiles` pour chaque nouvel utilisateur dans `auth.users`.
+  - [ ] Ce trigger assignera un rôle par défaut (`OPERATOR`) et un set de permissions initiales très restreintes.
 
-### 4.2. Modifications dans l'Application
+### 4.2. Logique Applicative et Hooks
 
-- [ ] **Contexte d'Authentification (`src/contexts/AuthContext.tsx` ou équivalent) :**
-  - [ ] Au login, récupérer et stocker le rôle de l'utilisateur dans l'état global (Redux ou Context).
-- [ ] **Créer un hook `useUserRole()` :**
-  - [ ] Ce hook retourne le rôle de l'utilisateur courant pour un accès facile.
-- [ ] **Adapter l'UI :**
-  - [ ] Dans les composants, utiliser `useUserRole()` pour conditionnellement afficher/masquer des éléments :
-    - [ ] Masquer le bouton "Supprimer" pour les non-Admins.
-    - [ ] Rendre les champs de prix non éditables pour les Opérateurs.
-    - [ ] Masquer l'accès à la page "Tableau de Bord" pour les Opérateurs.
+- [ ] **Contexte d'Authentification (`src/contexts/AuthContext.tsx`) :**
+  - [ ] Au login, récupérer et stocker l'intégralité du profil utilisateur, incluant son `role` et son objet `permissions`, dans un état global (Redux ou Context).
+- [ ] **Nouveau Hook `usePermissions()` (`src/hooks/`) :**
+  - [ ] Créer un hook `usePermissions` qui facilite la vérification des droits.
+  - [ ] Le hook exposera une fonction `can(permission: string)`:
+    - `permissions.can('items.create')` -> `true`
+    - `permissions.can('features.auditLog')` -> `false`
+  - [ ] Il retournera aussi l'objet de permissions complet si nécessaire.
+- [ ] **Thunks Redux / Services :**
+  - [ ] Créer une fonction `updateUserPermissions(userId, newPermissions)` dans `database.ts` et un thunk associé pour permettre aux admins de sauvegarder les modifications.
+
+### 4.3. Interface d'Administration des Permissions
+
+- [ ] **Nouvelle Page Admin (`app/(stack)/admin/permissions.tsx`) :**
+  - [ ] Sécuriser l'accès à cette page uniquement pour les utilisateurs avec le rôle `ADMIN`.
+  - [ ] **Partie 1 : Liste des Utilisateurs**
+    - [ ] Afficher la liste de tous les utilisateurs avec leur email et leur rôle.
+    - [ ] Ajouter un bouton "Gérer les permissions" à côté de chaque utilisateur.
+  - [ ] **Partie 2 : Panneau de Permissions**
+    - [ ] Au clic, afficher une modale ou une nouvelle vue avec les permissions de l'utilisateur sélectionné.
+    - [ ] Organiser les permissions par sections claires (Gestion des Articles, Fonctionnalités, etc.).
+    - [ ] **Utiliser des composants `Switch` (boutons on/off) pour chaque permission.**
+    - [ ] **Section "Articles" :**
+      - [ ] `[Switch]` Créer
+      - [ ] `[Switch]` Modifier
+      - [ ] `[Switch]` Supprimer
+    - [ ] **Section "Catégories" :** (idem)
+    - [ ] **Section "Contenants" :** (idem)
+    - [ ] **Section "Fonctionnalités" :**
+      - [ ] `[Switch]` Accès au Scanner
+      - [ ] `[Switch]` Accès aux Emplacements
+      - [ ] `[Switch]` Accès aux Sources
+      - [ ] `[Switch]` Accès aux Factures
+      - [ ] `[Switch]` Accès au Journal d'audit
+      - [ ] `[Switch]` Accès aux Étiquettes
+      - [ ] `[Switch]` Accès au Tableau de Bord
+    - [ ] **Section "Données Sensibles" :**
+      - [ ] `[Switch]` Voir le prix d'achat
+    - [ ] **Section "Administration" :**
+      - [ ] `[Switch]` Peut gérer les utilisateurs (donne accès à cette page)
+  - [ ] La modification d'un switch doit immédiatement appeler le thunk pour mettre à jour le profil de l'utilisateur.
+
+### 4.4. Adaptation de l'UI Existante
+
+- [ ] **Intégrer `usePermissions` dans toute l'application :**
+  - [ ] Remplacer les anciennes vérifications de `useUserRole()` par `usePermissions()`.
+  - [ ] **Exemples :**
+    - [ ] **Boutons :**
+      ```tsx
+      const permissions = usePermissions();
+      {permissions.can('items.delete') && <Button title="Supprimer" />}
+      ```
+    - [ ] **Champs de formulaire :**
+      ```tsx
+      <TextInput editable={permissions.can('items.update')} />
+      ```
+    - [ ] **Accès aux pages :** Dans les layouts de navigation, vérifier les permissions pour masquer des onglets ou des stacks entiers.
+      ```tsx
+      // Dans (tabs)/_layout.tsx
+      <Tabs.Screen
+        name="scan"
+        options={{
+          title: 'Scanner',
+          href: permissions.can('features.scanner') ? '/scan' : null,
+        }}
+      />
+      ```
 
 ---
 
@@ -315,3 +407,153 @@ Ce document détaille les prochaines fonctionnalités à implémenter pour enric
   - [ ] Le `LabelRenderer` (le composant qui affiche l'étiquette finale) devra lire la `config` JSON du modèle et les données de l'article pour générer l'étiquette finale en remplaçant les placeholders par les vraies données.
 - [ ] **Améliorer la fonction d'impression :**
   - [ ] La fonction d'impression doit générer un PDF A4 en disposant les étiquettes générées dans une grille, en fonction de leurs dimensions, pour optimiser l'utilisation du papier.
+---
+
+## Thème 9 : Mise en Place d'une Stratégie de Tests Complète
+
+**Objectif :** Assurer la robustesse, la fiabilité et la non-régression de l'application en intégrant une suite de tests complète. L'absence actuelle de tests représente un risque majeur pour la stabilité et l'évolution future du projet.
+
+### 9.1. Philosophie et Stratégie de Test
+
+- **Pyramide de Tests :** Adopter une approche équilibrée :
+    - **Tests Unitaires (70%) :** Rapides et ciblés. Valider la logique des fonctions pures, des composants UI simples, des slices Redux et des services.
+    - **Tests d'Intégration (20%) :** Valider la collaboration entre plusieurs unités. Ex: un formulaire qui dispatche une action Redux et met à jour le store.
+    - **Tests End-to-End (E2E) (10%) :** Simuler des parcours utilisateurs complets. Ex: se connecter, ajouter un article, le vendre, et vérifier qu'il apparaît dans les stats.
+- **Outils à Mettre en Place :**
+    - **Framework de test :** `Jest` (déjà en place).
+    - **Bibliothèque de test pour composants React Native :** `React Native Testing Library` (`@testing-library/react-native`) pour des tests orientés utilisateur.
+    - **Mocking :** `Jest` pour mocker les modules et les fonctions (ex: `jest.mock`).
+    - **Tests E2E :** `Detox` ou `Maestro` pour les tests sur simulateurs/appareils réels. `Cypress` pourrait être une option pour la version web.
+    - **Couverture de code :** `Jest` fournit cette fonctionnalité nativement.
+
+### 9.2. Plan d'Action Détaillé
+
+#### Étape 1 : Configuration de l'Environnement de Test (Priorité Haute)
+
+- [ ] **Installer et configurer React Native Testing Library.**
+    - `npm install --save-dev @testing-library/react-native @testing-library/jest-native`
+    - Mettre à jour `jest.setup.js` pour inclure les matchers de `@testing-library/jest-native`.
+- [ ] **Configurer le mocking global.**
+    - Mettre en place des mocks pour les dépendances externes communes (ex: `expo-router`, `react-native-safe-area-context`, Supabase client) dans `jest.setup.js`.
+- [ ] **Définir un script `npm test` clair.**
+    - `package.json` : `"test": "jest"`, `"test:watch": "jest --watch"`, `"test:coverage": "jest --coverage"`.
+- [ ] **Objectif de couverture initial :** Viser un objectif réaliste de 30% de couverture pour commencer, puis augmenter progressivement.
+
+#### Étape 2 : Tests Unitaires des Fonctions Critiques (Priorité Haute)
+
+- [ ] **`src/utils/` :**
+    - [ ] `qrCodeGenerator.ts` : Tester la génération, la validation de format et la gestion des collisions (en mockant la base de données).
+    - [ ] `permissions.ts` : Tester la logique de vérification des permissions.
+- [ ] **`src/database/` :**
+    - [ ] Tester les fonctions de mapping `snake_case` vers `camelCase`.
+- [ ] **`src/services/` :**
+    - [ ] Tester la logique des services (ex: `imageService`) en mockant les appels externes (R2, Cloudflare workers).
+
+#### Étape 3 : Tests du Store Redux (Priorité Haute)
+
+- [ ] **Slices (`src/store/*Slice.ts`) :**
+    - [ ] Pour chaque slice (`itemsSlice`, `categoriesSlice`, etc.), tester les reducers :
+        - Vérifier l'état initial.
+        - Vérifier que chaque action met à jour l'état correctement.
+        - Tester les cas de `pending`, `fulfilled`, `rejected` pour les thunks.
+- [ ] **Sélecteurs (`src/store/selectors.ts`) :**
+    - [ ] Tester chaque sélecteur avec un état Redux mocké pour s'assurer qu'il extrait et transforme les données correctement.
+    - [ ] Porter une attention particulière aux sélecteurs mémoïsés pour vérifier qu'ils ne recalculent pas inutilement.
+- [ ] **Thunks (`src/store/*Thunks.ts`) :**
+    - [ ] Tester les thunks en mockant les appels à la base de données (`database.ts`).
+    - [ ] Vérifier que les bonnes actions sont dispatchées en fonction du succès ou de l'échec de l'appel asynchrone.
+
+#### Étape 4 : Tests de Composants UI (Priorité Moyenne)
+
+- [ ] **Composants de base (`src/components/`) :**
+    - [ ] `Icon.tsx`, `Button.tsx`, `Input.tsx` : Tester qu'ils rendent correctement les props et gèrent les événements utilisateur (ex: `onPress`).
+    - [ ] `ItemCard.tsx` : Tester l'affichage des données de l'item, le formatage des prix, et le déclenchement des callbacks.
+    - [ ] `ItemForm.tsx` : Test plus complexe.
+        - Remplir les champs.
+        - Simuler la soumission.
+        - Vérifier que la fonction de soumission est appelée avec les bonnes données.
+        - Tester la validation des champs.
+- [ ] **Composants de liste :**
+    - [ ] `VirtualizedItemList.tsx` : Tester qu'il affiche une liste d'items et gère correctement les états vide et de chargement.
+
+#### Étape 5 : Tests d'Intégration (Priorité Moyenne)
+
+- [ ] **Écrans simples (`app/(tabs)/add.tsx`) :**
+    - [ ] Mettre en place un test qui rend l'écran complet avec un store Redux mocké.
+    - [ ] Simuler le remplissage du formulaire et la soumission.
+    - [ ] Vérifier que le thunk `createItem` a été appelé.
+- [ ] **Écrans d'affichage (`app/(tabs)/stock.tsx`) :**
+    - [ ] Rendre l'écran avec un store pré-rempli.
+    - [ ] Vérifier que la liste des articles s'affiche.
+    - [ ] Simuler une recherche ou un filtre et vérifier que la liste se met à jour.
+    - [ ] Simuler un clic sur un item et vérifier que la navigation est déclenchée (en mockant `expo-router`).
+
+#### Étape 6 : Mise en Place des Tests E2E (Priorité Basse, à planifier)
+
+- [ ] **Choisir et configurer l'outil E2E (ex: `Detox` pour mobile, `Cypress` pour web).**
+- [ ] **Définir les scénarios critiques à tester :**
+    - [ ] **Scénario 1 : Connexion** -> Tenter de se connecter avec des identifiants valides et invalides.
+    - [ ] **Scénario 2 : Création d'un article** -> Se connecter, naviguer vers le formulaire d'ajout, remplir les champs, sauvegarder, et vérifier que l'article apparaît dans la liste de stock.
+    - [ ] **Scénario 3 : Vente d'un article** -> Trouver un article, le marquer comme vendu, et vérifier que son statut change.
+    - [ ] **Scénario 4 : Recherche et Filtre** -> Appliquer un filtre et une recherche sur la page de stock et vérifier que les résultats sont corrects.
+
+### 9.3. Intégration Continue (CI)
+
+- [ ] **Configurer un workflow GitHub Actions (ou autre CI).**
+- [ ] Ajouter une étape qui exécute `npm test` à chaque `push` sur une branche ou `pull request`.
+- [ ] (Optionnel) Ajouter une étape qui calcule la couverture de code et la publie (ex: via `Codecov`).
+- [ ] Bloquer la fusion des `pull requests` si les tests échouent.
+---
+
+## Thème 10 : Internationalisation (i18n) et Support Multilingue
+
+**Objectif :** Rendre l'application accessible à un public plus large en ajoutant le support pour plusieurs langues, en commençant par l'anglais. Cela améliorera l'expérience utilisateur et préparera l'application à une éventuelle expansion internationale.
+
+### 10.1. Mise en Place de l'Infrastructure d'Internationalisation (i18n)
+
+- [ ] **Choisir et installer la librairie i18n :**
+  - [ ] Installer `i18next` et `react-i18next` : `npm install i18next react-i18next`.
+- [ ] **Créer la structure des fichiers de traduction :**
+  - [ ] Créer un nouveau dossier `src/locales/`.
+  - [ ] À l'intérieur, créer des sous-dossiers pour chaque langue : `src/locales/en/` et `src/locales/fr/`.
+  - [ ] Créer un fichier `translation.json` dans chaque dossier de langue.
+    - `fr/translation.json` contiendra les textes en français (ex: `{ "settings": { "title": "Paramètres" } }`).
+    - `en/translation.json` contiendra les textes en anglais (ex: `{ "settings": { "title": "Settings" } }`).
+- [ ] **Configurer i18next :**
+  - [ ] Créer un fichier de configuration `src/config/i18n.ts`.
+  - [ ] Dans ce fichier, initialiser `i18next` avec les ressources (les fichiers `translation.json`), la langue par défaut (`fr`), et une langue de secours.
+- [ ] **Intégrer le provider i18n :**
+  - [ ] Dans le layout racine de l'application (`app/_layout.tsx`), wrapper l'application avec le `I18nextProvider`.
+
+### 10.2. Traduction du Contenu de l'Application
+
+- [ ] **Remplacer les chaînes de caractères statiques :**
+  - [ ] Parcourir systématiquement tous les composants et toutes les pages.
+  - [ ] Utiliser le hook `useTranslation` de `react-i18next` pour obtenir la fonction `t`.
+  - [ ] Remplacer chaque texte hardcodé par une clé de traduction.
+    - **Exemple :** Remplacer `<Text>Paramètres</Text>` par `<Text>{t('settings.title')}</Text>`.
+- [ ] **Gérer les pluriels et les interpolations :**
+  - [ ] Utiliser les fonctionnalités avancées de `i18next` pour gérer les cas complexes.
+    - **Pluriels :** `t('items.count', { count: nbItems })` qui pourra donner "1 article" ou "5 articles".
+    - **Interpolation :** `t('welcomeMessage', { user: userName })` pour afficher "Bienvenue, John".
+- [ ] **Traduire les messages d'erreur et de succès :**
+  - [ ] Ne pas oublier de traduire les textes affichés dans les Toasts, les alertes et les modales.
+
+### 10.3. Interface de Sélection de la Langue
+
+- [ ] **Créer un composant `LanguageSelector.tsx` :**
+  - [ ] Sur le modèle du `ThemeToggle`, créer un sélecteur pour la langue.
+  - [ ] Ce composant affichera les langues disponibles (ex: "Français", "English").
+- [ ] **Ajouter le sélecteur à la page des paramètres :**
+  - [ ] Intégrer le `LanguageSelector` dans la page `app/(stack)/settings.tsx`.
+- [ ] **Implémenter le changement de langue :**
+  - [ ] L'action de sélection appellera la fonction `i18n.changeLanguage('en')` pour changer la langue de toute l'application à la volée.
+
+### 10.4. Persistance et Détection de la Langue
+
+- [ ] **Sauvegarder le choix de l'utilisateur :**
+  - [ ] Utiliser `AsyncStorage` pour sauvegarder la langue sélectionnée par l'utilisateur.
+  - [ ] Au démarrage de l'application, lire cette valeur pour initialiser `i18next` avec la langue préférée de l'utilisateur.
+- [ ] **Détecter la langue du système (optionnel mais recommandé) :**
+  - [ ] Pour la première utilisation, détecter la langue du téléphone de l'utilisateur (`expo-localization`).
+  - [ ] Si la langue du système est supportée (français ou anglais), l'utiliser comme langue par défaut. Sinon, revenir au français.

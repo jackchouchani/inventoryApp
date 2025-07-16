@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store/store';
 import { fetchItems } from '../store/itemsThunks';
 import { itemsAdapter } from '../store/itemsAdapter';
+import { useAuth } from '../contexts/AuthContext';
+import { testSupabaseConnection } from '../config/supabase';
 
 // Créer le sélecteur avec RootState
 const selectAllItems = itemsAdapter.getSelectors<RootState>((state) => state.items).selectAll;
@@ -14,6 +16,7 @@ interface UseItemsOptions {
 export const useItems = (options: UseItemsOptions = {}) => {
   const { loadAll = false } = options;
   const dispatch = useDispatch<AppDispatch>();
+  const { session, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -27,6 +30,12 @@ export const useItems = (options: UseItemsOptions = {}) => {
     try {
       setIsLoading(true);
       setError(null);
+      
+      // Test de connexion Supabase avant de charger les données
+      const connectionOk = await testSupabaseConnection();
+      if (!connectionOk) {
+        throw new Error('Impossible de se connecter à Supabase');
+      }
       
       // Si loadAll est true, charger tous les items d'un coup
       if (loadAll) {
@@ -52,7 +61,8 @@ export const useItems = (options: UseItemsOptions = {}) => {
           page = Math.ceil(items.length / 20);
         }
         
-        await dispatch(fetchItems({ page, limit })).unwrap();
+        const result = await dispatch(fetchItems({ page, limit })).unwrap();
+        console.log('[useItems] Items chargés avec succès:', result.items.length, 'items');
       }
     } catch (error) {
       console.error('Erreur lors du chargement des items:', error);
@@ -71,10 +81,11 @@ export const useItems = (options: UseItemsOptions = {}) => {
   // Déclenche le chargement initial dès que le status revient à 'idle'
   // Cela couvre le cas où un seul item est présent (par ex. suite à fetchItemById)
   useEffect(() => {
-    if (status === 'idle') {
+    // Attendre que l'auth soit prête avant de charger les items
+    if (status === 'idle' && !authLoading) {
       loadItems(true);
     }
-  }, [loadItems, status]);
+  }, [loadItems, status, authLoading]);
 
   // Synchroniser avec le status Redux
   useEffect(() => {

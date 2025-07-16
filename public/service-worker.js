@@ -74,12 +74,12 @@ self.addEventListener('fetch', (event) => {
   // Mettre à jour le timestamp d'activité
   lastActiveTime = Date.now();
   
-  // Vérifier si l'app était suspendue
-  if (isAppSuspended) {
-    console.log('[SW] App réactivée après suspension, notification aux clients');
-    isAppSuspended = false;
-    notifyClientsOfReactivation();
-  }
+  // DÉSACTIVÉ : Vérification de suspension qui causait les reloads
+  // if (isAppSuspended) {
+  //   console.log('[SW] App réactivée après suspension, notification aux clients');
+  //   isAppSuspended = false;
+  //   notifyClientsOfReactivation();
+  // }
 
   const url = new URL(event.request.url);
   
@@ -173,7 +173,6 @@ async function handleImageRequest(request) {
     }
     
     // 2. Si pas en cache, télécharger depuis le réseau avec l'URL nettoyée
-    console.log('[SW] Téléchargement image:', cleanUrl);
     const networkResponse = await fetch(cleanRequest, { 
       mode: 'no-cors',
       cache: 'default'
@@ -183,7 +182,6 @@ async function handleImageRequest(request) {
     if (networkResponse.type === 'opaque' || networkResponse.ok) {
       // ✅ Mettre en cache avec l'URL nettoyée pour éviter les doublons
       await cache.put(cleanRequest, networkResponse.clone());
-      console.log('[SW] Image téléchargée et mise en cache (mode no-cors):', cleanUrl);
       return networkResponse;
     } else {
       throw new Error(`Réponse invalide: type=${networkResponse.type}, status=${networkResponse.status}`);
@@ -288,10 +286,11 @@ self.addEventListener('message', (event) => {
       .catch(error => console.error('[SW] Erreur lors de la vérification manuelle:', error));
   }
   
-  if (event.data && event.data.type === 'APP_SUSPENDED') {
-    console.log('[SW] App marquée comme suspendue');
-    isAppSuspended = true;
-  }
+  // DÉSACTIVÉ : Messages de suspension qui causaient les reloads
+  // if (event.data && event.data.type === 'APP_SUSPENDED') {
+  //   console.log('[SW] App marquée comme suspendue');
+  //   isAppSuspended = true;
+  // }
   
   if (event.data && event.data.type === 'HEARTBEAT') {
     // Heartbeat des clients pour détecter la suspension
@@ -408,25 +407,25 @@ async function handleAppReactivation() {
     const manifestResponse = await fetch('/manifest.json');
     await checkForUpdates(manifestResponse);
     
-    // Notifier les clients de la réactivation
-    await notifyClientsOfReactivation();
+    // DÉSACTIVÉ : Notification de réactivation qui causait les reloads
+    // await notifyClientsOfReactivation();
     
   } catch (error) {
     console.error('[SW] Erreur lors de la gestion de réactivation:', error);
   }
 }
 
-// Timer pour détecter l'inactivité prolongée
-setInterval(() => {
-  const now = Date.now();
-  const timeSinceLastActive = now - lastActiveTime;
-  
-  // Si plus de 5 minutes d'inactivité, marquer comme suspendu
-  if (timeSinceLastActive > 300000 && !isAppSuspended) {
-    console.log('[SW] Inactivité prolongée détectée, marquage comme suspendu');
-    isAppSuspended = true;
-  }
-}, 60000); // Vérifier toutes les minutes
+// DÉSACTIVÉ : Timer d'inactivité qui causait les problèmes de reload
+// setInterval(() => {
+//   const now = Date.now();
+//   const timeSinceLastActive = now - lastActiveTime;
+//   
+//   // Si plus de 5 minutes d'inactivité, marquer comme suspendu
+//   if (timeSinceLastActive > 300000 && !isAppSuspended) {
+//     console.log('[SW] Inactivité prolongée détectée, marquage comme suspendu');
+//     isAppSuspended = true;
+//   }
+// }, 60000); // Vérifier toutes les minutes
 
 
 // Fonction pour gérer les requêtes API en mode offline

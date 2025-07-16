@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../src/config/supabase';
-import { theme } from '../../src/utils/theme';
+import { useAppTheme, AppThemeType } from '../../src/contexts/ThemeContext';
 import * as Sentry from '@sentry/react-native';
+import ThemeToggle from '../../src/components/ThemeToggle';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,8 @@ export default function ForgotPassword() {
   const [emailSent, setEmailSent] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const router = useRouter();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,23 +42,15 @@ export default function ForgotPassword() {
         data: { email: email }
       });
 
-      console.log('Envoi d\'un code OTP à:', email);
-      
-      // Envoyer un code OTP par email
       const { error } = await supabase.auth.signInWithOtp({
         email: email,
         options: {
-          // Ne pas rediriger automatiquement, nous allons vérifier le code manuellement
           shouldCreateUser: false
         }
       });
       
-      if (error) {
-        console.error('Erreur lors de l\'envoi du code OTP:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      console.log('Code OTP envoyé avec succès à:', email);
       setEmailSent(true);
       
       Sentry.addBreadcrumb({
@@ -64,15 +59,13 @@ export default function ForgotPassword() {
         level: 'info'
       });
     } catch (error) {
-      console.error('Error sending OTP:', error);
-      
       Sentry.captureException(error, {
         tags: { action: 'password_reset_otp' }
       });
 
       Alert.alert(
         'Erreur',
-        'Une erreur est survenue lors de l\'envoi du code de réinitialisation. Veuillez réessayer.'
+        'Une erreur est survenue lors de l\'envoi du code. Veuillez réessayer.'
       );
     } finally {
       setLoading(false);
@@ -94,29 +87,16 @@ export default function ForgotPassword() {
         level: 'info'
       });
       
-      console.log('Vérification du code OTP pour:', email);
-      
-      // Vérifier le code OTP
       const { error } = await supabase.auth.verifyOtp({
         email,
         token: otpCode,
         type: 'email'
       });
       
-      if (error) {
-        console.error('Erreur lors de la vérification du code OTP:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('Code OTP vérifié avec succès');
-      
-      // Stocker l'email vérifié dans le stockage local pour la réinitialisation
-      localStorage.setItem('reset_email', email);
-      
-      // Déconnecter l'utilisateur pour éviter la redirection automatique
       await supabase.auth.signOut();
       
-      // Rediriger vers la page de mise à jour du mot de passe
       router.replace({
         pathname: '/(auth)/update-password',
         params: { verified: 'true', email: email }
@@ -128,8 +108,6 @@ export default function ForgotPassword() {
         level: 'info'
       });
     } catch (error) {
-      console.error('Error verifying OTP:', error);
-      
       Sentry.captureException(error, {
         tags: { action: 'verify_otp' }
       });
@@ -143,71 +121,55 @@ export default function ForgotPassword() {
     }
   }, [email, otpCode, router]);
 
-  if (emailSent) {
-    return (
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.container}>
-          <View style={styles.card}>
-            <Text style={styles.title}>Code envoyé</Text>
-            <Text style={styles.subtitle}>
-              Un code de réinitialisation a été envoyé à {email}. 
-              Veuillez vérifier votre boîte de réception et saisir le code ci-dessous.
-            </Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Code de réinitialisation"
-              value={otpCode}
-              onChangeText={setOtpCode}
-              keyboardType="number-pad"
-              autoCapitalize="none"
-              editable={!verifying}
-              maxLength={6}
-              placeholderTextColor="#999"
-            />
-            
-            <TouchableOpacity 
-              style={[styles.button, verifying && styles.buttonDisabled]}
-              onPress={handleVerifyOTP}
-              disabled={verifying}
-            >
-              {verifying ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Vérifier le code</Text>
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.linkButton}
-              onPress={() => setEmailSent(false)}
-              disabled={verifying}
-            >
-              <Text style={styles.linkText}>Demander un nouveau code</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.linkButton}
-              onPress={() => router.back()}
-              disabled={verifying}
-            >
-              <Text style={styles.linkText}>Retour à la connexion</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
+  const renderContent = () => {
+    if (emailSent) {
+      return (
+        <>
+          <Text style={styles.title}>Code envoyé</Text>
+          <Text style={styles.subtitle}>
+            Un code a été envoyé à {email}. Veuillez le saisir ci-dessous.
+          </Text>
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Code de réinitialisation"
+            value={otpCode}
+            onChangeText={setOtpCode}
+            keyboardType="number-pad"
+            autoCapitalize="none"
+            editable={!verifying}
+            maxLength={6}
+            placeholderTextColor={activeTheme.text.secondary}
+          />
+          
+          <TouchableOpacity 
+            style={[styles.button, verifying && styles.buttonDisabled]}
+            onPress={handleVerifyOTP}
+            disabled={verifying}
+          >
+            {verifying ? (
+              <ActivityIndicator color={activeTheme.text.onPrimary} />
+            ) : (
+              <Text style={styles.buttonText}>Vérifier le code</Text>
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.linkButton}
+            onPress={() => setEmailSent(false)}
+            disabled={verifying}
+          >
+            <Text style={styles.linkText}>Demander un nouveau code</Text>
+          </TouchableOpacity>
+        </>
+      );
+    }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.card}>
+    return (
+      <>
         <Text style={styles.title}>Mot de passe oublié</Text>
         <Text style={styles.subtitle}>
-          Entrez votre adresse email pour recevoir un code de réinitialisation
+          Entrez votre email pour recevoir un code de réinitialisation.
         </Text>
         
         <TextInput
@@ -220,7 +182,7 @@ export default function ForgotPassword() {
           keyboardType="email-address"
           textContentType="emailAddress"
           editable={!loading}
-          placeholderTextColor="#999"
+          placeholderTextColor={activeTheme.text.secondary}
         />
         
         <TouchableOpacity 
@@ -229,66 +191,77 @@ export default function ForgotPassword() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={activeTheme.text.onPrimary} />
           ) : (
-            <Text style={styles.buttonText}>Envoyer le code de réinitialisation</Text>
+            <Text style={styles.buttonText}>Envoyer le code</Text>
           )}
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.linkButton}
-          onPress={() => router.back()}
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>Retour à la connexion</Text>
-        </TouchableOpacity>
+      </>
+    );
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.container}>
+        <View style={styles.card}>
+          {renderContent()}
+          <TouchableOpacity 
+            style={styles.linkButton}
+            onPress={() => router.back()}
+            disabled={loading || verifying}
+          >
+            <Text style={styles.linkText}>Retour à la connexion</Text>
+          </TouchableOpacity>
+          <ThemeToggle />
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.background,
   },
   card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.surface,
+    borderRadius: theme.borderRadius.lg,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    ...theme.shadows.md,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: theme.text.secondary,
     marginBottom: 24,
     lineHeight: 22,
+    textAlign: 'center',
   },
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.border,
     borderRadius: theme.borderRadius.sm,
     paddingHorizontal: 16,
     marginBottom: 16,
     fontSize: 16,
-    color: theme.colors.text.primary,
-    backgroundColor: theme.colors.background,
+    color: theme.text.primary,
+    backgroundColor: theme.backgroundSecondary,
   },
   button: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
     borderRadius: theme.borderRadius.sm,
     height: 50,
     justifyContent: 'center',
@@ -299,17 +272,18 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
+    color: theme.text.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   linkButton: {
-    padding: 12,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   linkText: {
-    color: theme.colors.primary,
+    color: theme.primary,
     fontSize: 16,
     fontWeight: '500',
   },
 });
+

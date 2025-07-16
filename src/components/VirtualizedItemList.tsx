@@ -25,6 +25,7 @@ interface VirtualizedItemListProps {
   onRefresh?: () => void;
   estimatedItemSize?: number;
   windowSize?: number;
+  canUpdateItems?: boolean; // Permission pour modifier les articles
 }
 
 // Composant de skeleton optimisé pour la virtualisation
@@ -56,12 +57,14 @@ const VirtualizedItemComponent: React.FC<{
   onItemPress?: (item: Item) => void;
   onMarkAsSold?: (item: Item) => void; 
   onMarkAsAvailable?: (item: Item) => void;
+  canUpdateItems?: boolean;
   index: number;
 }> = memo(({ 
   item, 
   onItemPress,
   onMarkAsSold,
   onMarkAsAvailable,
+  canUpdateItems,
 }) => {
   const handleItemPress = useCallback(() => {
     if (onItemPress) onItemPress(item);
@@ -81,6 +84,7 @@ const VirtualizedItemComponent: React.FC<{
       onPress={handleItemPress}
       onMarkAsSold={handleMarkAsSold}
       onMarkAsAvailable={handleMarkAsAvailable}
+      canUpdateItems={canUpdateItems}
     />
   );
 }, (prevProps, nextProps) => {
@@ -107,6 +111,7 @@ const VirtualizedItemList: React.FC<VirtualizedItemListProps> = ({
   refreshing = false,
   onRefresh,
   estimatedItemSize = 120,
+  canUpdateItems = true,
 }) => {
   const { activeTheme } = useAppTheme();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemList');
@@ -122,10 +127,11 @@ const VirtualizedItemList: React.FC<VirtualizedItemListProps> = ({
         onItemPress={onItemPress}
         onMarkAsSold={onMarkAsSold}
         onMarkAsAvailable={onMarkAsAvailable}
+        canUpdateItems={canUpdateItems}
         index={index}
       />
     );
-  }, [categories, containers, onItemPress, onMarkAsSold, onMarkAsAvailable]);
+  }, [categories, containers, onItemPress, onMarkAsSold, onMarkAsAvailable, canUpdateItems]);
 
   // Fonction pour déterminer le type d'item (optimisation FlashList)
   const getItemType = useCallback((item: Item) => {
@@ -170,22 +176,20 @@ const VirtualizedItemList: React.FC<VirtualizedItemListProps> = ({
   // Configuration des données mémoïsée
   const listData = useMemo(() => items, [items]);
 
-  // Style du container
+  // Style du container - laissons React Navigation gérer l'espacement
   const containerStyle = useMemo(() => {
-    const tabBarHeight = Platform.OS === 'ios' ? 65 + insets.bottom + 20 : 65;
-    
     return [
       styles.container,
       {
-        marginBottom: tabBarHeight,
+        flex: 1, // Utiliser flex: 1 au lieu de marginBottom
       }
     ];
-  }, [styles.container, insets.bottom]);
+  }, [styles.container]);
 
   // Style du contenu
   const contentContainerStyle = useMemo(() => ({
-    paddingBottom: 20,
-  }), []);
+    paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 20,
+  }), [insets.bottom]);
 
   if (isLoading && items.length === 0) {
     return <ItemLoadingSkeleton />;

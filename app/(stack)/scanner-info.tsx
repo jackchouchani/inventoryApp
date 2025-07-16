@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, ActivityIndicator, Alert, BackHandler, FlatList, Modal, TextInput, Platform } from 'react-native';
 import { Icon } from '../../src/components';
 import { useRouter, Stack } from 'expo-router';
+import { useAppTheme } from '../../src/contexts/ThemeContext';
 import { CameraView as ExpoCameraView } from 'expo-camera';
 import { useCameraPermissions } from '../../src/hooks/useCameraPermissions';
 import { formatCurrency } from '../../src/utils/format';
 import { getImageUrl } from '../../src/utils/r2Client';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectAllItems, selectAllCategories, selectAllContainers } from '../../src/store/selectors';
-import { updateItem } from '../../src/store/itemsThunks';
+import { updateItem, updateItemStatus } from '../../src/store/itemsThunks';
 import { AppDispatch } from '../../src/store/store';
 // Importation de la librairie algoliasearch
 import algoliasearch from 'algoliasearch';
@@ -85,7 +86,6 @@ const WebCamera: React.FC<{
 
   useEffect(() => {
     let mounted = true;
-    let initializationTimeout: NodeJS.Timeout;
 
     const initializeScanner = async () => {
       if (!videoRef.current || qrScannerRef.current) return;
@@ -93,24 +93,19 @@ const WebCamera: React.FC<{
       try {
         console.log("Initialisation du scanner QR...");
         
-        // Vérifier si on est en HTTPS ou localhost
         const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
         if (!isSecure) {
           throw new Error('HTTPS est requis pour l\'accès à la caméra. Veuillez utiliser: npx expo start --web --https');
         }
         
-        // Créer une instance de QrScanner
         const qrScanner = new QrScanner(
           videoRef.current,
           (result) => {
             console.log("Code QR détecté:", result.data);
-            // Convertir le résultat au format attendu
             onBarcodeScanned({ data: result.data });
           },
           {
-            onDecodeError: () => {
-              // Ne pas logger tous les erreurs de décodage car c'est normal
-            },
+            onDecodeError: () => {},
             highlightScanRegion: true,
             highlightCodeOutline: true,
             preferredCamera: 'environment'
@@ -119,7 +114,6 @@ const WebCamera: React.FC<{
 
         qrScannerRef.current = qrScanner;
 
-        // Démarrer le scanner avec un délai pour éviter les conflits
         await new Promise(resolve => setTimeout(resolve, 100));
         await qrScanner.start();
         
@@ -143,8 +137,7 @@ const WebCamera: React.FC<{
       }
     };
 
-    // Délai pour éviter les initialisations multiples rapides
-    initializationTimeout = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (mounted) {
         initializeScanner();
       }
@@ -152,14 +145,14 @@ const WebCamera: React.FC<{
 
     return () => {
       mounted = false;
-      clearTimeout(initializationTimeout);
+      clearTimeout(timeoutId);
       
       if (qrScannerRef.current) {
         console.log("Arrêt du scanner QR...");
         try {
           qrScannerRef.current.stop();
           qrScannerRef.current.destroy();
-        } catch (e) {
+        } catch {
           console.log("Nettoyage du scanner (normal)");
         }
         qrScannerRef.current = null;
@@ -268,6 +261,7 @@ export default function ScannerInfoScreen() {
   const router = useRouter();
   const permissions = useCameraPermissions();
   const dispatch = useDispatch<AppDispatch>();
+  const { activeTheme } = useAppTheme();
   
   // Hooks Redux pour accéder aux données offline
   const allItems = useSelector(selectAllItems);
@@ -324,7 +318,7 @@ export default function ScannerInfoScreen() {
     
     try {
       // Utiliser les données Redux au lieu de Supabase
-      const container = allContainers.find(cont => cont.id === containerId);
+      const container = allContainers.find(cont => cont.id === Number(containerId));
       return container?.name || 'Non spécifié';
     } catch (error) {
       console.error('Erreur lors de la récupération du conteneur:', error);
@@ -340,7 +334,7 @@ export default function ScannerInfoScreen() {
     
     try {
       // Utiliser les données Redux au lieu de Supabase
-      const category = allCategories.find(cat => cat.id === categoryId);
+      const category = allCategories.find(cat => cat.id === Number(categoryId));
       return category?.name || 'Non spécifiée';
     } catch (error) {
       console.error('Erreur lors de la récupération de la catégorie:', error);
@@ -465,7 +459,7 @@ export default function ScannerInfoScreen() {
         } else {
           setSimilarItems([]);
         }
-      } catch (e) {
+      } catch {
         setError('Erreur lors de la récupération des articles similaires.');
         setSimilarItems([]);
       } finally {
@@ -575,11 +569,18 @@ export default function ScannerInfoScreen() {
     setIsUpdating(true);
     try {
       // Utiliser Redux thunk au lieu de Supabase direct
+      // D'abord mettre à jour le statut
+      await dispatch(updateItemStatus({
+        itemId: Number(scannedItem.id),
+        status: 'sold'
+      })).unwrap();
+      
+      // Puis mettre à jour le prix de vente
       await dispatch(updateItem({
-        id: scannedItem.id,
-        status: 'sold',
-        sellingPrice: salePrice,
-        soldAt: new Date().toISOString() // Optionnel: enregistrer la date de vente
+        id: Number(scannedItem.id),
+        updates: {
+          sellingPrice: salePrice
+        }
       })).unwrap();
 
       // Mettre à jour l'état local
@@ -686,7 +687,7 @@ export default function ScannerInfoScreen() {
         <ScrollView style={styles.itemInfo}>
           {loading && !scannedItem ? ( // Afficher le chargement principal seulement si aucun item n'est encore affiché
             <View style={styles.centerContent}>
-              <ActivityIndicator size="large" color="#0066CC" />
+              <ActivityIndicator size="large" color={activeTheme.primary} />
               <Text style={styles.message}>Chargement des informations...</Text>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton]}
@@ -718,7 +719,7 @@ export default function ScannerInfoScreen() {
                 {/* Affichage de l'image avec états de chargement et d'erreur */}
                 {imageLoading ? (
                   <View style={[styles.itemImage, styles.imagePlaceholder]}>
-                    <ActivityIndicator size="small" color="#007AFF" />
+                    <ActivityIndicator size="small" color={activeTheme.primary} />
                     <Text style={styles.loadingText}>Chargement...</Text>
                   </View>
                 ) : imageError ? (
@@ -801,7 +802,7 @@ export default function ScannerInfoScreen() {
 
               {loading && similarItems.length === 0 && ( // Indicateur de chargement pour les articles similaires
                 <View style={styles.centerContentSmall}>
-                  <ActivityIndicator size="small" color="#0066CC" />
+                  <ActivityIndicator size="small" color={activeTheme.primary} />
                   <Text style={styles.messageSmall}>Recherche d'articles similaires...</Text>
                 </View>
               )}
@@ -889,7 +890,7 @@ export default function ScannerInfoScreen() {
                 disabled={isUpdating}
               >
                 {isUpdating ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={activeTheme.text.onPrimary} />
                 ) : (
                   <Text style={styles.buttonText}>Confirmer</Text>
                 )}
@@ -1000,7 +1001,7 @@ export default function ScannerInfoScreen() {
                   disabled={isUpdating}
                 >
                   {isUpdating ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={activeTheme.text.onPrimary} />
                   ) : (
                     <Text style={styles.buttonText}>Oui</Text>
                   )}

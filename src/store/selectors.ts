@@ -469,4 +469,62 @@ export const selectTotalConsignmentPayments = createSelector(
   (payments): number => {
     return payments.reduce((total, payment) => total + payment.paymentAmount, 0);
   }
+);
+
+// ===== SÉLECTEURS POUR LES PERMISSIONS =====
+
+// Sélecteurs mémoïsés pour les permissions
+export const selectAllUsers = createSelector(
+  [(state: RootState) => state.permissions.users],
+  (users) => users
+);
+
+export const selectSelectedUser = createSelector(
+  [(state: RootState) => state.permissions.selectedUser],
+  (selectedUser) => selectedUser
+);
+
+export const selectPermissionsLoading = createSelector(
+  [(state: RootState) => state.permissions.isLoading],
+  (isLoading) => isLoading
+);
+
+export const selectPermissionsUpdating = createSelector(
+  [(state: RootState) => state.permissions.isUpdating],
+  (isUpdating) => isUpdating
+);
+
+export const selectPermissionsError = createSelector(
+  [(state: RootState) => state.permissions.error],
+  (error) => error
+);
+
+// Sélecteur pour un utilisateur spécifique par ID
+export const selectUserById = createSelector(
+  [selectAllUsers, (_: RootState, userId: string) => userId],
+  (users, userId) => users.find(user => user.id === userId)
+);
+
+// Sélecteur pour les utilisateurs par rôle
+export const selectUsersByRole = createSelector(
+  [selectAllUsers, (_: RootState, role: 'ADMIN' | 'MANAGER' | 'OPERATOR') => role],
+  (users, role) => users.filter(user => user.role === role)
+);
+
+// Sélecteur pour le nombre d'utilisateurs par rôle
+export const selectUserCountByRole = createSelector(
+  [selectAllUsers],
+  (users) => {
+    const counts = { ADMIN: 0, MANAGER: 0, OPERATOR: 0 };
+    users.forEach(user => {
+      counts[user.role]++;
+    });
+    return counts;
+  }
+);
+
+// Sélecteur pour les utilisateurs avec permission de gestion
+export const selectUsersWithManagePermission = createSelector(
+  [selectAllUsers],
+  (users) => users.filter(user => user.permissions?.settings?.canManageUsers)
 ); 

@@ -4,7 +4,8 @@ import {
   Text,
   StyleSheet,
   Animated,
-  TouchableOpacity
+  TouchableOpacity,
+  Platform
 } from 'react-native';
 import {
   Button,
@@ -47,6 +48,11 @@ export const ConflictNotificationBanner: React.FC<ConflictNotificationBannerProp
    * Charger les conflits non résolus
    */
   const loadConflicts = useCallback(async () => {
+    // Désactiver les notifications de conflits sur mobile (IndexedDB n'est pas disponible)
+    if (Platform.OS !== 'web') {
+      return;
+    }
+    
     try {
       const unresolvedConflicts = await conflictDetector.getUnresolvedConflicts();
       const previousCount = conflicts.length;

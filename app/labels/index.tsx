@@ -4,6 +4,7 @@ import { Icon } from '../../src/components';
 import type { Item } from '../../src/types/item';
 import type { Container } from '../../src/types/container';
 import { useRouter } from 'expo-router';
+import { useUserPermissions } from '../../src/hooks/useUserPermissions';
 import { useCategoriesOptimized as useCategories } from '../../src/hooks/useCategoriesOptimized';
 import { useAllContainers } from '../../src/hooks/useOptimizedSelectors';
 import * as Sentry from '@sentry/react-native';
@@ -542,7 +543,7 @@ const LabelScreenContent = () => {
         Platform.OS === 'web' ? { paddingTop: 0 } : {}
       ]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={activeTheme.primary} />
           <Text style={styles.loadingText}>Chargement des données...</Text>
         </View>
       </SafeAreaView>
@@ -604,7 +605,7 @@ const LabelScreenContent = () => {
                   placeholder="Catégorie"
                   styles={selectStyles}
                   isClearable
-                  menuPortalTarget={document.body} 
+                  menuPortalTarget={Platform.OS === 'web' ? document.body : undefined} 
                 />
               </View>
               <View style={styles.dropdownWrapper}>
@@ -617,7 +618,7 @@ const LabelScreenContent = () => {
                   placeholder="Sélectionner conteneur"
                   styles={selectStyles}
                   isClearable
-                  menuPortalTarget={document.body} 
+                  menuPortalTarget={Platform.OS === 'web' ? document.body : undefined} 
                 />
               </View>
             </View>
@@ -776,6 +777,29 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 const LabelScreen = () => {
+  const router = useRouter();
+  const userPermissions = useUserPermissions();
+  const { activeTheme } = useAppTheme();
+
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canViewLabels) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canViewLabels, router]);
+
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canViewLabels) {
+    return (
+      <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour accéder aux étiquettes
+        </Text>
+      </View>
+    );
+  }
+
   return <LabelScreenContent />;
 };
 

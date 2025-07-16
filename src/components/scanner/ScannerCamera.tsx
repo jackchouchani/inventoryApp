@@ -151,7 +151,7 @@ const WebCamera: React.FC<WebCameraProps> = React.memo(({ onBarcodeScanned, onCa
       )}
       {!isReady && !error && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
+          <ActivityIndicator size="large" color={activeTheme.text.onPrimary} />
           <Text style={styles.loadingText}>
             Initialisation du scanner QR...
           </Text>

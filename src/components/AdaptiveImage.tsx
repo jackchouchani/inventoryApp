@@ -215,7 +215,7 @@ export const AdaptiveImage: React.FC<AdaptiveImageProps> = ({
   if (imageState.loading) {
     return (
       <View style={containerStyle}>
-        <ActivityIndicator size="small" color="#999" />
+        <ActivityIndicator size="small" color={activeTheme.text.secondary} />
         {placeholderImage && (
           <Image
             source={placeholderImage}

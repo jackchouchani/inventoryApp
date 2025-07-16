@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { debounce } from 'lodash';
 import type { MaterialIconName } from '../types/icons';
 import { IconSelector } from './IconSelector';
-import { theme } from '../utils/theme';
+import { useAppTheme, AppThemeType } from '../contexts/ThemeContext';
 import { useRouter } from 'expo-router';
 
 export interface CategoryFormData {
@@ -43,6 +43,9 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
   loading = false
 }) => {
   const router = useRouter();
+  const { activeTheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(activeTheme), [activeTheme]);
+  
   const { control, handleSubmit, formState: { errors, isDirty }, setValue } = useForm<CategoryFormData>({
     defaultValues: {
       name: initialData?.name || '',
@@ -70,7 +73,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <ActivityIndicator size="large" color={activeTheme.primary} />
         <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
@@ -115,7 +118,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
                       debouncedSetValue('name', text);
                     }}
                     placeholder="Nom de la catégorie"
-                    placeholderTextColor={theme.colors.text.secondary}
+                    placeholderTextColor={activeTheme.text.secondary}
                   />
                   {errors.name && (
                     <Text style={styles.errorText}>{errors.name.message}</Text>
@@ -141,7 +144,7 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
                       debouncedSetValue('description', text);
                     }}
                     placeholder="Description de la catégorie"
-                    placeholderTextColor={theme.colors.text.secondary}
+                    placeholderTextColor={activeTheme.text.secondary}
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
@@ -183,13 +186,13 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
               disabled={!isDirty || loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={activeTheme.text.onPrimary} />
               ) : (
                 <>
                   <Icon 
                     name={initialData ? 'save' : 'add'} 
                     size={24} 
-                    color="#fff" 
+                    color={activeTheme.text.onPrimary} 
                   />
                   <Text style={styles.submitButtonText}>{submitButtonText}</Text>
                 </>
@@ -202,10 +205,10 @@ export const CategoryForm: React.FC<CategoryFormProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppThemeType) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background
+    backgroundColor: theme.background
   },
   keyboardAvoidingView: {
     flex: 1
@@ -222,38 +225,38 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.surface,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: theme.colors.text.primary,
+    color: theme.text.primary,
   },
   inputError: {
-    borderColor: theme.colors.error,
+    borderColor: theme.danger.main,
   },
   textArea: {
     minHeight: 120,
     textAlignVertical: 'top',
   },
   errorText: {
-    color: theme.colors.error,
+    color: theme.danger.main,
     fontSize: 14,
     marginTop: 8,
   },
   charCount: {
     fontSize: 12,
-    color: theme.colors.text.secondary,
+    color: theme.text.secondary,
     textAlign: 'right',
     marginTop: 4,
   },
   submitButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.primary,
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
@@ -262,11 +265,11 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   submitButtonDisabled: {
-    backgroundColor: theme.colors.text.secondary,
-    opacity: 0.5,
+    backgroundColor: theme.text.disabled,
+    opacity: 0.7,
   },
   submitButtonText: {
-    color: '#fff',
+    color: theme.text.onPrimary,
     fontSize: 18,
     fontWeight: '600',
     marginLeft: 8,
@@ -275,11 +278,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.background,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: theme.colors.text.secondary,
+    color: theme.text.secondary,
   },
 }); 

@@ -67,7 +67,7 @@ const DEFAULT_CONFIG: PermissionConfig = {
   enableLogging: true,
   // ✅ NOUVEAU: Config PWA
   pwaInactivityThreshold: 30000,  // 30 secondes
-  enableAutoRefresh: true
+  enableAutoRefresh: false  // Désactivé pour éviter les reloads au changement de focus
 };
 
 // ==================================================================================

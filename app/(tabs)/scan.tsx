@@ -1,27 +1,45 @@
-import React, { useState, useCallback } from 'react';
-import { View, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 
-// ✅ STYLEFACTORY selon stylefactory-optimization.mdc
-import StyleFactory from '../../src/styles/StyleFactory';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
-
-// Composants
-import { Icon } from '../../src/components';
-import { ScannerNew as Scanner } from '../../src/components/ScannerNew';
-import { ErrorBoundary } from '../../src/components/ErrorBoundary';
-
-// ✅ HOOKS OPTIMISÉS selon optimizations-hooks.mdc
-// ⚠️ CORRECTION CRITIQUE: Utiliser useContainerPageData() au lieu de useItems() + useAllContainers()
-// pour charger TOUS les items (pas seulement les 50 premiers) nécessaires au scanner
-import { useContainerPageData } from '../../src/hooks/useOptimizedSelectors';
+import { useCameraPermissions } from '../../src/hooks/useCameraPermissions';
+import { useUserPermissions } from '../../src/hooks/useUserPermissions';
+import { ScannerCamera, ScannerOverlay, PermissionRequest, ScannerHeader } from '../../src/components/scanner';
+import { parseId } from '../../src/utils/identifierManager';
+import { BarcodeScanningResult } from 'expo-camera';
 
 // États de l'écran
 type ScanScreenMode = 'scanner' | 'manual';
 
-const ScanScreen: React.FC = () => {
+const ScanScreen = () => {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { activeTheme } = useAppTheme();
+  const permissions = useCameraPermissions();
+  const userPermissions = useUserPermissions();
+  const [scannedData, setScannedData] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canUseScanner) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canUseScanner, router]);
+  
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canUseScanner) {
+    return (
+      <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour utiliser le scanner
+        </Text>
+      </View>
+    );
+  }
   
   // ✅ STYLEFACTORY - Récupération des styles mis en cache
   const styles = StyleFactory.getThemedStyles(activeTheme, 'Scanner');
@@ -36,9 +54,11 @@ const ScanScreen: React.FC = () => {
   // Le workflow de scan est maintenant géré dans le composant ScannerNew
   
   // Gestionnaire de changement de mode (scanner/manuel)
-  const handleModeChange = useCallback(() => {
-    setMode(prev => (prev === 'manual' ? 'scanner' : 'manual'));
-  }, []);
+  const handleBarcodeScanned = useCallback((scanningResult: BarcodeScanningResult) => {
+    if (!isProcessing && scanningResult.data) {
+      setScannedData(scanningResult.data);
+    }
+  }, [isProcessing]);
 
   // Affichage du chargement
   if (isLoading) {

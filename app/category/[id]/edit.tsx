@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
+import { useUserPermissions } from '../../../src/hooks/useUserPermissions';
 import { selectCategoryById, editCategory } from '../../../src/store/categorySlice';
 import { RootState } from '../../../src/store/store';
 import { CategoryForm, type CategoryFormData } from '../../../src/components/CategoryForm';
@@ -18,7 +19,27 @@ export default function EditCategoryScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const { activeTheme } = useAppTheme();
+  const userPermissions = useUserPermissions();
   const [loading, setLoading] = useState(false);
+
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canUpdateCategories) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canUpdateCategories, router]);
+
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canUpdateCategories) {
+    return (
+      <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour modifier les catégories
+        </Text>
+      </View>
+    );
+  }
   
   const categoryId = id ? parseInt(id, 10) : null;
   const category = useSelector((state: RootState) => 

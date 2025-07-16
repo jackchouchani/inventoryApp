@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ItemEditForm } from '../../../src/components/ItemEditForm';
 import { useAllCategories, useAllContainers } from '../../../src/hooks/useOptimizedSelectors';
@@ -9,11 +9,13 @@ import { useItem } from '../../../src/hooks/useItem';
 import { Icon } from '../../../src/components';
 import { TouchableOpacity } from 'react-native';
 import { useAppTheme, type AppThemeType } from '../../../src/contexts/ThemeContext';
+import { useUserPermissions } from '../../../src/hooks/useUserPermissions';
 
 export default function ItemEditScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { activeTheme } = useAppTheme();
+  const userPermissions = useUserPermissions();
   
   // Utiliser les hooks optimisés pour forcer le chargement des données
   useCategories(); // Force le chargement des categories
@@ -23,6 +25,26 @@ export default function ItemEditScreen() {
   const categories = useAllCategories();
   const containers = useAllContainers();
   const { item, isLoading: isLoadingItem, error: errorItem } = useItem(id ? Number(id) : null);
+  const styles = getThemedStyles(activeTheme);
+
+  // Vérifier les permissions d'accès
+  useEffect(() => {
+    if (!userPermissions.canUpdateItems) {
+      router.replace(`/item/${id}/info`);
+      return;
+    }
+  }, [userPermissions.canUpdateItems, router, id]);
+
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canUpdateItems) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour modifier cet article
+        </Text>
+      </View>
+    );
+  }
 
   const handleSuccess = () => {
     // Après succès, retourner vers la page info de l'article
@@ -36,8 +58,6 @@ export default function ItemEditScreen() {
 
   // Loading state - attendre que les données item soient chargées (categories et containers sont toujours disponibles)
   const isLoading = isLoadingItem;
-  
-  const styles = getThemedStyles(activeTheme);
   
   if (isLoading) {
     return (

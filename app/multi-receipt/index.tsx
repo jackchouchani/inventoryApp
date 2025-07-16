@@ -89,34 +89,33 @@ const MultiReceiptScreen = () => {
   
   // ✅ REDUX - Fonction de recherche utilisant les données Redux (marche offline et online)
   const searchItemsCallback = useCallback((query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    
     setIsLoading(true);
     try {
-      // Filtrer les items depuis le store Redux
-      const searchLower = query.toLowerCase();
-      const filteredItems = allItems
-        .filter(item => item.status === 'available') // Afficher uniquement les articles disponibles
-        .filter(item => 
-          item.name.toLowerCase().includes(searchLower) ||
-          (item.description && item.description.toLowerCase().includes(searchLower)) ||
-          (item.qrCode && item.qrCode.toLowerCase().includes(searchLower))
-        )
-        .slice(0, 20); // Limiter à 20 résultats
-      
-      // Convertir les résultats au format ReceiptItem
-      const formattedResults = filteredItems.map(item => ({
-        ...item,
-        actualSellingPrice: item.sellingPrice
-      })) as ReceiptItem[];
-      
-      setSearchResults(formattedResults);
+      let results: ReceiptItem[] = [];
+      if (!query.trim()) {
+        // Suggestions: articles récemment vendus
+        results = allItems
+          .filter(item => item.status === 'sold' && item.soldAt)
+          .sort((a, b) => new Date(b.soldAt!).getTime() - new Date(a.soldAt!).getTime())
+          .slice(0, 20)
+          .map(item => ({ ...item, actualSellingPrice: item.sellingPrice })) as ReceiptItem[];
+      } else {
+        // Recherche: articles disponibles
+        const searchLower = query.toLowerCase();
+        results = allItems
+          .filter(item => item.status === 'available')
+          .filter(item => 
+            item.name.toLowerCase().includes(searchLower) ||
+            (item.description && item.description.toLowerCase().includes(searchLower)) ||
+            (item.qrCode && item.qrCode.toLowerCase().includes(searchLower))
+          )
+          .slice(0, 20)
+          .map(item => ({ ...item, actualSellingPrice: item.sellingPrice })) as ReceiptItem[];
+      }
+      setSearchResults(results);
     } catch (error) {
-      console.error('Error searching items:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de la recherche');
+      console.error('Error processing items:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de la recherche ou de la suggestion');
     } finally {
       setIsLoading(false);
     }
@@ -296,7 +295,7 @@ const MultiReceiptScreen = () => {
               disabled={isUpdatingItems}
             >
               {isUpdatingItems ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={activeTheme.text.onPrimary} />
               ) : (
                 <Text style={styles.confirmationButtonText}>Oui</Text>
               )}
@@ -488,7 +487,7 @@ const MultiReceiptScreen = () => {
             <Text style={styles.searchResultsTitle}>
               {searchQuery.trim() ? 
                 `Résultats pour "${searchQuery}"` : 
-                "Recherchez des articles à ajouter"
+                "Suggestions (articles récemment vendus)"
               }
             </Text>
             
@@ -514,9 +513,9 @@ const MultiReceiptScreen = () => {
                   </View>
                 ) : (
                   <View style={styles.startSearchContainer}>
-                    <Icon name="search" size={40} color={activeTheme.text.disabled} />
+                    <Icon name="inbox" size={40} color={activeTheme.text.disabled} />
                     <Text style={styles.startSearchText}>
-                      Commencez votre recherche pour trouver des articles
+                      Aucun article récemment vendu à suggérer
                     </Text>
                   </View>
                 )

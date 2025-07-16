@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { useAppTheme } from '../contexts/ThemeContext';
 import StyleFactory from '../styles/StyleFactory';
@@ -24,6 +25,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({
 }) => {
   const router = useRouter();
   const { activeTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'CommonHeader');
 
   const handleBackPress = () => {
@@ -60,7 +62,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({
 
   if (variant === 'modal') {
     return (
-      <View style={styles.modalHeader}>
+      <View style={[styles.modalHeader, { paddingTop: insets.top }]}>
         {leftComponent || renderBackButton()}
         <Text style={styles.modalTitle}>{title}</Text>
         {rightComponent || <View style={styles.headerSpacer} />}
@@ -69,7 +71,7 @@ const CommonHeader: React.FC<CommonHeaderProps> = ({
   }
 
   return (
-    <View style={styles.topBar}>
+    <View style={[styles.topBar, { paddingTop: insets.top }]}>
       {leftComponent || renderBackButton()}
       {title && <Text style={styles.topBarTitle}>{title}</Text>}
       {rightComponent || <View style={styles.headerSpacer} />}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Alert, ScrollView, ActivityIndicator, TouchableOpacity, Text, StyleSheet, View, SafeAreaView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useUserPermissions } from '../../../src/hooks/useUserPermissions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ✅ STYLEFACTORY selon stylefactory-optimization.mdc
@@ -23,11 +24,31 @@ import { supabase } from '../../../src/config/supabase';
 
 const EditContainerScreen = () => {
   const router = useRouter();
+  const userPermissions = useUserPermissions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const dispatch = useDispatch<AppDispatch>();
   const { activeTheme } = useAppTheme();
   
   const insets = useSafeAreaInsets();
+  
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canUpdateContainers) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canUpdateContainers, router]);
+
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canUpdateContainers) {
+    return (
+      <View style={{ flex: 1, backgroundColor: activeTheme.background, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour modifier les contenants
+        </Text>
+      </View>
+    );
+  }
   
   const containers = useAllContainers();
   const container = containers.find(c => c.id === parseInt(id || '0', 10));

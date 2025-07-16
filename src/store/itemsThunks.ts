@@ -43,11 +43,14 @@ export const fetchItems = createAsyncThunk<
   { state: RootState; rejectValue: ThunkError }
 >('items/fetchItems', async ({ page, limit }, { getState, rejectWithValue }) => {
   try {
+    console.log('[fetchItems] Début du chargement des items, page:', page, 'limit:', limit);
     const state = getState();
     
     // Vérifier si nous sommes en mode hors ligne (réseau OU forcé)
     if (isOfflineMode()) {
       console.log('[fetchItems] Mode hors ligne détecté, récupération depuis IndexedDB');
+      // Sur mobile, on n'est jamais en mode offline, donc ce code ne devrait pas s'exécuter
+      throw new Error('Mode offline non supporté sur mobile');
       const { localDB } = await import('../database/localDatabase');
       
       // Récupérer les items depuis IndexedDB avec pagination
@@ -83,9 +86,11 @@ export const fetchItems = createAsyncThunk<
       };
     }
 
+    console.log('[fetchItems] Mode en ligne - requête Supabase...');
     const start = page * limit;
     const end = start + limit - 1;
 
+    console.log('[fetchItems] Requête Supabase - range:', start, 'à', end);
     const { data, error, count } = await supabase
       .from('items')
       .select('*', { count: 'exact' })
@@ -93,7 +98,11 @@ export const fetchItems = createAsyncThunk<
       .eq('deleted', false)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    console.log('[fetchItems] Réponse Supabase - data:', data?.length, 'items, count:', count, 'error:', error);
+    if (error) {
+      console.error('[fetchItems] Erreur Supabase:', error);
+      throw error;
+    }
 
     const items = data.map(item => ({
       id: item.id,

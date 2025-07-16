@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, FlatList } from 'react-native';
 import { 
   Text, 
@@ -12,6 +12,7 @@ import {
   Divider
 } from 'react-native-paper';
 import { router } from 'expo-router';
+import { useUserPermissions } from '../../src/hooks/useUserPermissions';
 import { useSourcesOptimized } from '../../src/hooks/useSourcesOptimized';
 import StyleFactory from '../../src/styles/StyleFactory';
 import { useAppTheme } from '../../src/contexts/ThemeContext';
@@ -20,8 +21,28 @@ import type { Source } from '../../src/types/source';
 
 export default function SourcesScreen() {
   const { activeTheme } = useAppTheme();
+  const userPermissions = useUserPermissions();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'SourcesScreen');
   const { sources, isLoading, actions } = useSourcesOptimized();
+
+  // Vérifier les permissions
+  useEffect(() => {
+    if (!userPermissions.canViewSources) {
+      router.replace('/(tabs)/stock');
+      return;
+    }
+  }, [userPermissions.canViewSources]);
+
+  // Si pas de permission, ne pas rendre le contenu
+  if (!userPermissions.canViewSources) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: activeTheme.text.primary, fontSize: 16 }}>
+          Accès non autorisé - Permission requise pour accéder aux sources
+        </Text>
+      </View>
+    );
+  }
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');

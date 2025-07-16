@@ -1,15 +1,31 @@
 // Utilitaire pour vérifier l'état offline sans passer par Redux
 // Accède directement aux APIs natives et au localStorage
 
+import { Platform } from 'react-native';
+
 export const isOfflineMode = (): boolean => {
   try {
-    // 1. Vérifier le réseau natif
+    // Sur mobile, pas de mode offline - toujours en ligne
+    if (Platform.OS !== 'web') {
+      return false;
+    }
+    
+    // 1. Vérifier le réseau natif (web seulement)
     const isNetworkOffline = typeof window !== 'undefined' && !navigator.onLine;
     
     // 2. Vérifier le mode offline forcé depuis localStorage (utilisé par NetworkContext)
     const offlineModeKey = '@offline_mode_forced';
-    const savedMode = localStorage.getItem(offlineModeKey);
-    const isOfflineModeForced = savedMode ? JSON.parse(savedMode) === true : false;
+    let isOfflineModeForced = false;
+    
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const savedMode = window.localStorage.getItem(offlineModeKey);
+        isOfflineModeForced = savedMode ? JSON.parse(savedMode) === true : false;
+      } catch (e) {
+        // Ignore localStorage errors
+        isOfflineModeForced = false;
+      }
+    }
     
     const isOffline = isNetworkOffline || isOfflineModeForced;
     

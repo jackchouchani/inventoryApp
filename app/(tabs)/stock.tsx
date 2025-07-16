@@ -14,6 +14,7 @@ import { useContainersOptimized as useContainers } from '../../src/hooks/useCont
 // Hooks optimisés pour Redux avec sélecteurs mémoïsés
 import { useFilteredItems, useGlobalSearch } from '../../src/hooks/useOptimizedSelectors';
 import { ItemFilters } from '../../src/store/selectors';
+import { useUserPermissions } from '../../src/hooks/useUserPermissions';
 
 // Hook Algolia optimisé pour la recherche économique
 import { useAlgoliaOptimizedSearch } from '../../src/hooks/useAlgoliaOptimizedSearch';
@@ -103,13 +104,32 @@ const SearchBox: React.FC<SearchBoxProps & {
   inputRef 
 }) => {
   const { activeTheme } = useAppTheme();
-  const styles = StyleFactory.getThemedStyles(activeTheme, 'FilterBar');
+  
+  const searchBoxStyles = {
+    container: {
+      backgroundColor: activeTheme.surface,
+      paddingHorizontal: 16,
+      paddingVertical: Platform.OS === 'ios' ? 8 : 12, // Moins de padding sur iOS
+      borderBottomWidth: 1,
+      borderBottomColor: activeTheme.border,
+    },
+    input: {
+      backgroundColor: activeTheme.background,
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 12,
+      fontSize: 16,
+      color: activeTheme.text.primary,
+      borderWidth: 1,
+      borderColor: activeTheme.border,
+    }
+  };
   
   return (
-    <View style={styles.container}>
+    <View style={searchBoxStyles.container}>
       <TextInput
         ref={inputRef}
-        style={[styles.filterButton, { flex: 1, marginRight: 0, color: activeTheme.text.primary }]}
+        style={searchBoxStyles.input}
         value={searchQuery}
         onChangeText={setSearchQuery}
         placeholder="Rechercher des articles..."
@@ -130,6 +150,7 @@ const SearchBox: React.FC<SearchBoxProps & {
 const StockScreenContent = () => {
   const { activeTheme } = useAppTheme();
   const router = useRouter();
+  const userPermissions = useUserPermissions();
   const styles = StyleFactory.getThemedStyles(activeTheme, 'ItemList');
   const [showFilters, setShowFilters] = useState(false);
   
@@ -562,7 +583,9 @@ const StockScreenContent = () => {
           styles.filterToggleButton,
           { 
             backgroundColor: activeTheme.surface,
-            borderColor: activeTheme.border 
+            borderColor: activeTheme.border,
+            marginHorizontal: 16,
+            marginVertical: Platform.OS === 'ios' ? 6 : 8, // Moins d'espacement sur iOS
           }
         ]}
         onPress={() => setShowFilters(!showFilters)}
@@ -619,6 +642,37 @@ const StockScreenContent = () => {
         </View>
       )}
 
+      {/* Debug indicator - Visible seulement en développement */}
+      {__DEV__ && (
+        <View style={{
+          backgroundColor: activeTheme.surface,
+          borderColor: activeTheme.border,
+          borderWidth: 1,
+          borderRadius: 6,
+          paddingHorizontal: 12,
+          paddingVertical: Platform.OS === 'ios' ? 4 : 6, // Moins de padding sur iOS
+          marginHorizontal: 12,
+          marginBottom: Platform.OS === 'ios' ? 4 : 8, // Moins de marge sur iOS
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Text style={{
+            color: activeTheme.text.primary,
+            fontSize: Platform.OS === 'ios' ? 11 : 12, // Plus petit sur iOS
+            fontWeight: '500'
+          }}>
+            🐛 Debug: {isLoading ? 'Loading...' : error ? `Error: ${error}` : `${filteredItems.length} items`}
+          </Text>
+          <Text style={{
+            color: activeTheme.text.secondary,
+            fontSize: Platform.OS === 'ios' ? 10 : 11 // Plus petit sur iOS
+          }}>
+            {itemsLoading && '📦 Items '} {categoriesLoading && '🏷️ Categories '} {containersLoading && '📦 Containers '} {algoliaSearch.isLoading && '🔍 Algolia '} {localSearch.isSearching && '🔍 Local'}
+          </Text>
+        </View>
+      )}
+
       {/* Liste virtualisée optimisée avec gestion iOS PWA */}
       <View 
         style={{ flex: 1 }}
@@ -646,6 +700,7 @@ const StockScreenContent = () => {
           refreshing={refreshing}
           onRefresh={refresh}
           estimatedItemSize={120}
+          canUpdateItems={userPermissions.canUpdateItems}
         />
       </View>
 

@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import type { DatabaseInterface } from './database';
 import type { Item, ItemInput, ItemUpdate } from '../types/item';
 import type { Category, CategoryInput, CategoryUpdate } from '../types/category';
@@ -6,6 +6,7 @@ import type { Container, ContainerInput, ContainerUpdate } from '../types/contai
 import type { Location, LocationInput, LocationUpdate } from '../types/location';
 import type { Source, SourceInput, SourceUpdate } from '../types/source';
 import type { ItemHistory } from '../types/itemHistory';
+import type { UserProfile, UserPermissionsUpdate, UserProfileUpdate, InviteUserRequest } from '../types/permissions';
 import { handleDatabaseError, handleValidationError } from '../utils/errorHandler';
 import { PostgrestError } from '@supabase/supabase-js';
 
@@ -1057,6 +1058,175 @@ export class SupabaseDatabase implements DatabaseInterface {
     } catch (error) {
       handleDatabaseError(error as PostgrestError);
       return { history: [], total: 0 };
+    }
+  }
+  
+  // ===== GESTION DES PERMISSIONS UTILISATEUR =====
+  
+  async getAllUsers(): Promise<UserProfile[]> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, role, permissions')
+        .order('id', { ascending: false });
+      
+      if (error) throw error;
+      
+      if (!data) return [];
+      
+      return data.map(profile => ({
+        id: profile.id,
+        email: profile.email,
+        role: profile.role,
+        permissions: profile.permissions
+      }));
+    } catch (error) {
+      console.error('[Database] Erreur getAllUsers:', error);
+      handleDatabaseError(error as PostgrestError);
+      return [];
+    }
+  }
+  
+  async getUserProfile(userId: string): Promise<UserProfile | null> {
+    try {
+      console.log('[Database] Getting user profile for:', userId);
+      
+      // Vérifier la session avant l'opération
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('[Database] Session error:', sessionError);
+        throw sessionError;
+      }
+      
+      if (!session) {
+        console.error('[Database] No active session');
+        throw new Error('No active session');
+      }
+      
+      console.log('[Database] Session is valid, fetching profile...');
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, role, permissions')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('[Database] Profile fetch error:', error);
+        throw error;
+      }
+      
+      console.log('[Database] Profile fetched successfully:', data);
+      
+      return {
+        id: data.id,
+        email: data.email,
+        role: data.role,
+        permissions: data.permissions
+      };
+    } catch (error) {
+      console.error('[Database] Erreur getUserProfile:', error);
+      handleDatabaseError(error as PostgrestError);
+      return null;
+    }
+  }
+  
+  async updateUserPermissions(userId: string, permissionsUpdate: UserPermissionsUpdate): Promise<void> {
+    try {
+      console.log('[Database] Starting updateUserPermissions for user:', userId);
+      
+      // Vérifier la session avant l'opération
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('[Database] Session error:', sessionError);
+        throw sessionError;
+      }
+      
+      if (!session) {
+        console.error('[Database] No active session');
+        throw new Error('No active session');
+      }
+      
+      console.log('[Database] Session is valid, updating permissions...');
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          permissions: permissionsUpdate.permissions
+        })
+        .eq('id', userId);
+      
+      if (error) {
+        console.error('[Database] Update error:', error);
+        throw error;
+      }
+      
+      console.log('[Database] Permissions updated successfully');
+    } catch (error) {
+      console.error('[Database] Erreur updateUserPermissions:', error);
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async updateUserProfile(userId: string, profileUpdate: UserProfileUpdate): Promise<void> {
+    try {
+      const updateData: any = {};
+      
+      if (profileUpdate.role !== undefined) {
+        updateData.role = profileUpdate.role;
+      }
+      
+      if (profileUpdate.permissions !== undefined) {
+        updateData.permissions = profileUpdate.permissions;
+      }
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', userId);
+      
+      if (error) throw error;
+    } catch (error) {
+      handleDatabaseError(error as PostgrestError);
+      throw error;
+    }
+  }
+
+  async inviteUser(inviteRequest: InviteUserRequest): Promise<{ success: boolean; message: string }> {
+    try {
+      // Vérifier que le client admin est disponible
+      if (!supabaseAdmin) {
+        throw new Error('Client admin Supabase non configuré. Veuillez configurer EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY.');
+      }
+      
+      // 1. Envoyer l'invitation via Supabase Auth Admin
+      const { data, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        inviteRequest.email,
+        {
+          data: {
+            role: inviteRequest.role, // Stocké dans user_metadata
+          }
+        }
+      );
+      
+      if (inviteError) {
+        console.error('[Database] Erreur invitation:', inviteError);
+        throw inviteError;
+      }
+      
+      console.log('[Database] Invitation envoyée avec succès:', data);
+      return {
+        success: true,
+        message: `Invitation envoyée à ${inviteRequest.email} avec le rôle ${inviteRequest.role}`
+      };
+    } catch (error) {
+      console.error('[Database] Erreur lors de l\'invitation:', error);
+      handleDatabaseError(error as PostgrestError);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Erreur lors de l\'envoi de l\'invitation'
+      };
     }
   }
 };

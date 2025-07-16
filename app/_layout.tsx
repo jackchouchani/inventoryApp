@@ -1,3 +1,7 @@
+// Polyfills pour React Native
+import 'react-native-get-random-values';
+import 'react-native-url-polyfill/auto';
+
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { View, ActivityIndicator, Platform, Text } from "react-native";
 import { Slot, SplashScreen, router, useSegments } from "expo-router";
@@ -14,7 +18,7 @@ import ConflictNotificationBanner from '../src/components/ConflictNotificationBa
 import * as Sentry from '@sentry/react-native';
 import { isOfflineDownloadInProgress, subscribeToDownloadState } from '../src/services/OfflinePreparationService';
 import { ThemeProvider, useAppTheme } from '../src/contexts/ThemeContext';
-import { usePWAServiceWorker } from '../src/hooks/usePWALifecycle';
+// import { usePWAServiceWorker } from '../src/hooks/usePWALifecycle'; // Désactivé pour éviter les reloads
 import { fetchItems } from '../src/store/itemsThunks';
 import { fetchCategories } from '../src/store/categoriesThunks';
 import { fetchContainers } from '../src/store/containersThunks';
@@ -47,31 +51,8 @@ const toastConfig = {
   )
 };
 
-// Hook pour gérer le cycle de vie PWA - VERSION SIMPLIFIÉE
-function usePWALifecycle() {
-  const { isAppReactivated, reactivationCount } = usePWAServiceWorker({
-    onDataRefreshNeeded: () => {
-      // Auto-refresh des données critiques après réactivation PWA
-      console.log('🔄 Refresh automatique des données après réactivation PWA');
-      try {
-        // ✅ OFFLINE - Charger TOUS les items après réactivation pour éviter la perte de données
-        store.dispatch(fetchItems({ page: 0, limit: 50000 })); // Grande limite pour restaurer tous les items
-        store.dispatch(fetchCategories());
-        store.dispatch(fetchContainers());
-        store.dispatch(fetchLocations());
-      } catch (error) {
-        console.error('Erreur lors du refresh automatique:', error);
-      }
-    }
-  });
-
-  // ✅ Plus besoin de logique complexe, le hook usePWAServiceWorker gère tout !
-  
-  return { 
-    appWasHidden: isAppReactivated, 
-    reactivationCount 
-  };
-}
+// Hook PWA désactivé pour éviter les problèmes de reload
+// function usePWALifecycle() { ... }
 
 // Root Layout avec providers essentiels
 export default function RootLayout() {
@@ -83,25 +64,29 @@ export default function RootLayout() {
     const timeout = setTimeout(() => {
       setAppIsReady(true);
       
-      // Initialiser le service de notification de conflits
-      conflictNotificationService.initialize({
-        enableToasts: true,
-        enablePersistentBanner: true,
-        autoDetectionInterval: 60000, // 1 minute
-        maxToastsPerSession: 5,
-        onConflictDetected: (conflicts) => {
-          console.log(`🔔 ${conflicts.length} conflits détectés`);
-        },
-        onConflictResolved: (conflictId) => {
-          console.log(`✅ Conflit ${conflictId} résolu`);
-        }
-      });
+      // Initialiser le service de notification de conflits seulement sur web
+      if (Platform.OS === 'web') {
+        conflictNotificationService.initialize({
+          enableToasts: true,
+          enablePersistentBanner: true,
+          autoDetectionInterval: 60000, // 1 minute
+          maxToastsPerSession: 5,
+          onConflictDetected: (conflicts) => {
+            console.log(`🔔 ${conflicts.length} conflits détectés`);
+          },
+          onConflictResolved: (conflictId) => {
+            console.log(`✅ Conflit ${conflictId} résolu`);
+          }
+        });
+      }
     }, 100);
     
     return () => {
       clearTimeout(timeout);
-      // Arrêter le service de notification au démontage
-      conflictNotificationService.shutdown();
+      // Arrêter le service de notification au démontage (seulement sur web)
+      if (Platform.OS === 'web') {
+        conflictNotificationService.shutdown();
+      }
     };
   }, []);
 
@@ -170,11 +155,12 @@ function RootLayoutContent() {
   const [isReady, setIsReady] = useState(false);
   const segments = useSegments();
   const { activeTheme } = useAppTheme();
-  const { appWasHidden, reactivationCount } = usePWALifecycle();
+  // PWA Lifecycle désactivé pour éviter les problèmes de reload
+  // const { appWasHidden, reactivationCount } = usePWALifecycle();
   
   
-  // Timeout de sécurité pour éviter les blocages infinis
-  const loadingTimeoutRef = useRef<NodeJS.Timeout>();
+  // Timeout de sécurité pour éviter les blocages infinis - Optimisé
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const [forceReady, setForceReady] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
@@ -262,22 +248,14 @@ function RootLayoutContent() {
     }
   }, []);
 
-  // Fonction de redirection SIMPLIFIÉE - moins de protection = moins de bugs
+  // Fonction de redirection ULTRA-SIMPLIFIÉE - Performance optimisée
   const safeNavigate = useCallback((route: string) => {
-    // Seulement une protection de base
-    if (!prevStateRef.current.mounted) {
-      console.log('Navigation avant montage, annulée');
-      return;
-    }
+    // Protection minimale pour performance
+    if (!prevStateRef.current.mounted || !router) return;
     
-    console.log('Navigation simple vers:', route);
-    try {
-      // Navigation directe sans timeouts complexes
-      router.replace(route);
-    } catch (error) {
-      console.error('Erreur de navigation:', error);
-    }
-  }, []);
+    // Navigation directe sans logs ni try/catch pour performance
+    router.replace(route);
+  }, [router]);
 
   // Masquer le splash screen une fois prêt
   useEffect(() => {
@@ -301,58 +279,36 @@ function RootLayoutContent() {
     }
   }, [isLoading, forceReady]);
 
-  // Navigation intelligente - MOINS AGRESSIVE
+  // Navigation intelligente - VERSION HYPER-OPTIMISÉE
   useEffect(() => {
-    // Ne rien faire si pas prêt
-    if ((isLoading && !forceReady) || !isReady || !prevStateRef.current.mounted) {
-      return;
-    }
+    // Guards optimisés
+    if ((isLoading && !forceReady) || !isReady || !prevStateRef.current.mounted) return;
     
-    // Seulement quand l'utilisateur change (connexion/déconnexion) OU vérification initiale
+    // Optimisation : éviter les calculs coûteux
     const userChanged = prevStateRef.current.user !== user;
     const initialCheck = !prevStateRef.current.initialCheckDone;
     
-    if (!userChanged && !initialCheck) {
-      // Si l'utilisateur n'a pas changé et qu'on a déjà fait la vérification initiale,
-      // NE PAS forcer de redirection - respecter la navigation de l'utilisateur
-      return;
-    }
+    if (!userChanged && !initialCheck) return;
     
-    // Mettre à jour l'état de référence
+    // Mise à jour de l'état de référence
     prevStateRef.current.user = user;
     prevStateRef.current.initialCheckDone = true;
     
+    // Optimisation : calculs simplifiés
     const currentSegment = segments[0];
     const inAuthGroup = currentSegment === '(auth)';
     const inRootRoute = !currentSegment || currentSegment === '';
     
-    console.log('Navigation check - Segment:', currentSegment, 'User:', !!user, 'UserChanged:', userChanged, 'InitialCheck:', initialCheck);
+    // Vérification offline optimisée
+    if (isOfflineDownloadInProgress()) return;
     
-    // EMPÊCHER la navigation pendant le téléchargement offline
-    if (isOfflineDownloadInProgress()) {
-      console.log('Téléchargement offline en cours, navigation bloquée');
-      return;
+    // Logique de navigation ultra-simplifiée
+    if (!user && !inAuthGroup) {
+      safeNavigate('/(auth)/login');
+    } else if (user && (inRootRoute || inAuthGroup)) {
+      safeNavigate('/(tabs)/stock');
     }
-    
-    // LOGIQUE ULTRA-SIMPLIFIÉE - respecter l'URL tapée par l'utilisateur
-    if (!user) {
-      // Non connecté - rediriger SEULEMENT si on est pas sur login
-      if (!inAuthGroup) {
-        console.log('Non connecté, redirection vers login');
-        safeNavigate('/(auth)/login');
-      }
-    } else {
-      // Connecté - rediriger SEULEMENT depuis root ou auth, PAS depuis les autres pages
-      if (inRootRoute) {
-        console.log('Connecté sur root, redirection vers stock');
-        safeNavigate('/(tabs)/stock');
-      } else if (inAuthGroup) {
-        console.log('Connecté sur auth, redirection vers stock');
-        safeNavigate('/(tabs)/stock');
-      }
-      // RESPECTER /settings, /stack, etc. - pas de redirection forcée
-    }
-  }, [user, isReady, forceReady, safeNavigate]); // MOINS de dépendances
+  }, [user, isReady, forceReady, safeNavigate]);
 
   // Afficher un loader pendant le chargement initial
   console.log('🔍 [Layout] État de chargement - isLoading:', isLoading, 'isReady:', isReady, 'forceReady:', forceReady, 'isOfflineDownloading:', isOfflineDownloading);
@@ -366,7 +322,7 @@ function RootLayoutContent() {
             {loadingTimeout ? 'Chargement en cours...' : 'Initialisation...'}
           </Text>
           
-          {appWasHidden ? (
+          {false ? ( // appWasHidden désactivé temporairement
             <>
               <Text style={{ color: activeTheme.text.secondary, fontSize: 14, textAlign: 'center' }}>
                 Synchronisation en cours...

@@ -15,6 +15,7 @@ import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../../src/store/store';
 import { updateItemStatus } from '../../../src/store/itemsThunks';
 import { useAppTheme, type AppThemeType } from '../../../src/contexts/ThemeContext';
+import { useUserPermissions } from '../../../src/hooks/useUserPermissions';
 import { SimilarItems } from '../../../src/components';
 import ItemHistoryList from '../../../src/components/ItemHistoryList';
 
@@ -23,6 +24,7 @@ export default function ItemInfoScreen() {
   const dispatch = useDispatch<AppDispatch>();
   const { id } = useLocalSearchParams();
   const { activeTheme } = useAppTheme();
+  const userPermissions = useUserPermissions();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -219,12 +221,15 @@ export default function ItemInfoScreen() {
 
           {activeTab === 'details' && (
             <>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Prix d'achat:</Text>
-                <Text style={styles.infoValue}>
-                  {formatCurrency(item.purchasePrice || 0)}
-                </Text>
-              </View>
+              {/* Prix d'achat - Permission stats.viewPurchasePrice */}
+              {userPermissions.canViewPurchasePrice && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Prix d'achat:</Text>
+                  <Text style={styles.infoValue}>
+                    {formatCurrency(item.purchasePrice || 0)}
+                  </Text>
+                </View>
+              )}
               
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Prix de vente:</Text>
@@ -293,44 +298,56 @@ export default function ItemInfoScreen() {
           )}
           
           <View style={styles.buttonsContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.editButton]}
-              onPress={handleEditPress}
-            >
-              <Icon name="edit" size={24} color="#ffffff" />
-              <Text style={styles.buttonText}>Modifier l'article</Text>
-            </TouchableOpacity>
+            {/* Modifier l'article - Permission items.update */}
+            {userPermissions.canUpdateItems && (
+              <TouchableOpacity
+                style={[styles.button, styles.editButton]}
+                onPress={handleEditPress}
+              >
+                <Icon name="edit" size={24} color="#ffffff" />
+                <Text style={styles.buttonText}>Modifier l'article</Text>
+              </TouchableOpacity>
+            )}
 
             {item.status === 'available' && (
               <>
-                <TouchableOpacity
-                  style={[styles.button, styles.sellButton]}
-                  onPress={() => {
-                    setSalePrice(item.sellingPrice || 0);
-                    setIsMarkSoldModalVisible(true);
-                  }}
-                >
-                  <Icon name="shopping_cart" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>Marquer comme vendu</Text>
-                </TouchableOpacity>
+                {/* Marquer comme vendu - Permission items.update */}
+                {userPermissions.canUpdateItems && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.sellButton]}
+                    onPress={() => {
+                      setSalePrice(item.sellingPrice || 0);
+                      setIsMarkSoldModalVisible(true);
+                    }}
+                  >
+                    <Icon name="shopping_cart" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Marquer comme vendu</Text>
+                  </TouchableOpacity>
+                )}
                 
-                <TouchableOpacity
-                  style={[styles.button, styles.receiptButton]}
-                  onPress={() => setIsReceiptGeneratorVisible(true)}
-                >
-                  <Icon name="receipt" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>Générer un ticket de caisse</Text>
-                </TouchableOpacity>
+                {/* Générer un ticket de caisse - Permission features.invoices */}
+                {userPermissions.canViewInvoices && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.receiptButton]}
+                    onPress={() => setIsReceiptGeneratorVisible(true)}
+                  >
+                    <Icon name="receipt" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Générer un ticket de caisse</Text>
+                  </TouchableOpacity>
+                )}
                 
-                <TouchableOpacity
-                  style={[styles.button, styles.labelButton]}
-                  onPress={() => setIsLabelGeneratorVisible(true)}
-                >
-                  <Icon name="label" size={24} color="#fff" />
-                  <Text style={styles.buttonText}>Générer une étiquette</Text>
-                </TouchableOpacity>
+                {/* Générer une étiquette - Permission features.labels */}
+                {userPermissions.canViewLabels && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.labelButton]}
+                    onPress={() => setIsLabelGeneratorVisible(true)}
+                  >
+                    <Icon name="label" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Générer une étiquette</Text>
+                  </TouchableOpacity>
+                )}
               </>
-                          )}
+            )}
             </View>
           </View>
 

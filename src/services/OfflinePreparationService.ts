@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { store } from '../store/store';
 import { fetchItems } from '../store/itemsThunks';
 import { fetchCategories } from '../store/categoriesThunks';
@@ -411,6 +412,19 @@ export class OfflinePreparationService {
     estimatedSize: string;
   }> {
     try {
+      // IndexedDB n'est disponible que sur web
+      if (Platform.OS !== 'web') {
+        return {
+          itemsCount: 0,
+          categoriesCount: 0,
+          containersCount: 0,
+          locationsCount: 0,
+          offlineEventsCount: 0,
+          imagesCount: 0,
+          estimatedSize: '0 KB'
+        };
+      }
+      
       // Import dynamique de localDB
       const { localDB } = await import('../database/localDatabase');
       
@@ -464,6 +478,12 @@ export class OfflinePreparationService {
   async clearAllOfflineData(): Promise<void> {
     try {
       console.log('[OfflinePreparation] Nettoyage de toutes les données offline...');
+      
+      // IndexedDB n'est disponible que sur web
+      if (Platform.OS !== 'web') {
+        console.log('[OfflinePreparation] Nettoyage ignoré sur mobile (pas d\'IndexedDB)');
+        return;
+      }
       
       // Import dynamique de localDB
       const { localDB } = await import('../database/localDatabase');

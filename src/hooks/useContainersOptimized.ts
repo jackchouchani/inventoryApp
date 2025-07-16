@@ -22,10 +22,10 @@ export const useContainersOptimized = () => {
 
   // Chargement automatique si nécessaire
   useEffect(() => {
-    if (status === 'idle' || containers.length === 0) {
+    if (status === 'idle') {
       dispatch(fetchContainers());
     }
-  }, [dispatch, status, containers.length]);
+  }, [dispatch, status]);
 
   // Actions optimisées
   const actions = {

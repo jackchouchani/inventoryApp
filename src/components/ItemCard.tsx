@@ -13,6 +13,7 @@ export interface ItemCardProps {
   onPress?: (item: Item) => void;
   onMarkAsSold?: (item: Item) => void;
   onMarkAsAvailable?: (item: Item) => void;
+  canUpdateItems?: boolean; // Permission pour modifier les articles
   fadeAnimation?: {
     opacity: SharedValue<number>;
     fadeIn: (config?: AnimationConfig) => void;
@@ -32,6 +33,7 @@ const ItemCard: React.FC<ItemCardProps> = ({
   onPress,
   onMarkAsSold,
   onMarkAsAvailable,
+  canUpdateItems = true, // Par défaut, autoriser les modifications pour la rétrocompatibilité
   fadeAnimation,
   scaleAnimation
 }) => {
@@ -194,19 +196,21 @@ const ItemCard: React.FC<ItemCardProps> = ({
                 {localStatus === 'sold' ? 'Vendu' : 'Disponible'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[
-                styles.statusToggleButton,
-                localStatus === 'sold' ? styles.restoreButton : styles.sellButton
-              ]}
-              onPress={localStatus === 'sold' ? handleMarkAsAvailable : handleMarkAsSold}
-            >
-              <Icon
-                name={localStatus === 'sold' ? 'restore' : 'shopping_cart'}
-                size={16}
-                color="#fff"
-              />
-            </TouchableOpacity>
+            {canUpdateItems && (
+              <TouchableOpacity
+                style={[
+                  styles.statusToggleButton,
+                  localStatus === 'sold' ? styles.restoreButton : styles.sellButton
+                ]}
+                onPress={localStatus === 'sold' ? handleMarkAsAvailable : handleMarkAsSold}
+              >
+                <Icon
+                  name={localStatus === 'sold' ? 'restore' : 'shopping_cart'}
+                  size={16}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -218,14 +222,14 @@ const getThemedStyles = (theme: AppThemeType) => StyleSheet.create({
   container: {
     backgroundColor: theme.surface,
     borderRadius: theme.borderRadius.md,
-    marginHorizontal: 16,
-    marginVertical: 8,
+    marginHorizontal: Platform.OS === 'ios' ? 12 : 16, // Réduire les marges sur iOS
+    marginVertical: Platform.OS === 'ios' ? 6 : 8, // Réduire l'espacement vertical sur iOS
     elevation: Platform.select({ android: theme.shadows.sm.elevation, default: 0 }),
     boxShadow: theme.shadows.sm.boxShadow,
   },
   cardContent: {
     flexDirection: 'row',
-    padding: 12,
+    padding: Platform.OS === 'ios' ? 10 : 12, // Réduire le padding sur iOS
   },
   imageContainer: {
     width: 80,

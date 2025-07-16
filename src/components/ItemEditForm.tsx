@@ -897,7 +897,7 @@ export const ItemEditForm = memo(({ item, containers: propContainers, categories
                                 )}
                                 {isPhotoProcessing && (
                                     <View style={styles.uploadingOverlay}>
-                                        <ActivityIndicator size="large" color="#FFFFFF" />
+                                        <ActivityIndicator size="large" color={activeTheme.text.onPrimary} />
                                         <Text style={styles.uploadingText}>Opération en cours...</Text>
                                     </View>
                                 )}
